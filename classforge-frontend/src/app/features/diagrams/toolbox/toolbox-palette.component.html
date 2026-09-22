@@ -1,0 +1,170 @@
+<div class="h-full w-full flex flex-col bg-[var(--surface-2)] text-[var(--text-primary)] overflow-hidden">
+  
+  <!-- Toolbox Header -->
+  <div class="h-11 flex items-center justify-between px-3 border-b border-[var(--border)] bg-[var(--surface-1)] shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
+        <span>🧰</span> Toolbox UML
+      </span>
+    </div>
+    <button (click)="close.emit()" class="text-[var(--text-secondary)] hover:text-white p-1 rounded hover:bg-[var(--surface-3)] transition-colors" title="Ocultar Toolbox">
+      ✕
+    </button>
+  </div>
+
+  <!-- Scrollable Sections List -->
+  <div class="flex-1 overflow-y-auto custom-scrollbar p-2 flex flex-col gap-2">
+
+    <!-- ═══ SECTION 1: CLASIFICADORES UML ═══ -->
+    <div class="border border-[var(--border)] rounded-md overflow-hidden bg-[var(--surface-1)]">
+      <!-- Section Header -->
+      <button
+        (click)="toggleSection('classifiers')"
+        class="w-full flex items-center justify-between px-2.5 py-2 bg-[var(--surface-3)]/80 hover:bg-[var(--surface-3)] text-[var(--text-primary)] font-semibold text-xs transition-colors border-b border-[var(--border)]"
+      >
+        <span class="flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-[var(--text-secondary)] font-bold">
+          <span>📦</span> CLASIFICADORES
+        </span>
+        <span class="text-[10px] transition-transform text-[var(--text-muted)]" [style.transform]="sections.classifiers ? 'rotate(0)' : 'rotate(-90deg)'">▼</span>
+      </button>
+
+      <!-- Section Items -->
+      <div *ngIf="sections.classifiers" class="p-1.5 flex flex-col gap-1">
+        <div
+          *ngFor="let item of classifiers"
+          draggable="true"
+          (dragstart)="onDragStart($event, item.id)"
+          (click)="onItemClick(item.id)"
+          class="flex items-center justify-between px-2.5 py-2 rounded border border-[var(--border)]/60 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] hover:border-[var(--primary)] cursor-pointer transition-all group select-none"
+          title="Clic para insertar en el centro o arrastra al lienzo"
+        >
+          <div class="flex items-center gap-2.5">
+            <div class="w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] text-white shadow-sm shrink-0"
+                 [style.backgroundColor]="item.color">
+              {{ item.badge }}
+            </div>
+            <span class="text-xs font-medium text-slate-200 group-hover:text-white">{{ item.name }}</span>
+          </div>
+          <span class="text-[10px] text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity font-mono">
+            + Añadir
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SECTION 2: RELACIONES UML 2.5 ═══ -->
+    <div class="border border-[var(--border)] rounded-md overflow-hidden bg-[var(--surface-1)]">
+      <!-- Section Header -->
+      <button
+        (click)="toggleSection('relationships')"
+        class="w-full flex items-center justify-between px-2.5 py-2 bg-[var(--surface-3)]/80 hover:bg-[var(--surface-3)] text-[var(--text-primary)] font-semibold text-xs transition-colors border-b border-[var(--border)]"
+      >
+        <span class="flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-[var(--text-secondary)] font-bold">
+          <span>🔗</span> RELACIONES UML
+        </span>
+        <span class="text-[10px] transition-transform text-[var(--text-muted)]" [style.transform]="sections.relationships ? 'rotate(0)' : 'rotate(-90deg)'">▼</span>
+      </button>
+
+      <!-- Section Items -->
+      <div *ngIf="sections.relationships" class="p-1.5 flex flex-col gap-1">
+        <button
+          *ngFor="let rel of relationships"
+          (click)="selectConnectionMode(rel.id)"
+          class="w-full flex items-center justify-between px-2.5 py-2 rounded border transition-all cursor-pointer text-left select-none"
+          [ngClass]="activeConnectionMode === rel.id 
+            ? 'bg-[var(--primary)]/20 border-[var(--primary)] text-white shadow-md' 
+            : 'bg-[var(--surface-2)] border-[var(--border)]/60 text-slate-200 hover:bg-[var(--surface-3)] hover:border-slate-500'"
+          [title]="'Activar modo ' + rel.name + ': conecta 2 clases arrastrando'"
+        >
+          <div class="flex items-center gap-2">
+            <!-- Visual SVG Preview -->
+            <div class="w-7 h-4 flex items-center justify-center shrink-0">
+              <svg width="28" height="12" viewBox="0 0 28 12">
+                <!-- Association: solid + open arrow -->
+                <ng-container *ngIf="rel.lineStyle === 'solid-arrow'">
+                  <line x1="0" y1="6" x2="20" y2="6" stroke="#94A3B8" stroke-width="1.5"/>
+                  <path d="M 18 2 L 26 6 L 18 10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+                <!-- Inheritance: solid + hollow triangle -->
+                <ng-container *ngIf="rel.lineStyle === 'solid-triangle'">
+                  <line x1="0" y1="6" x2="18" y2="6" stroke="#94A3B8" stroke-width="1.5"/>
+                  <path d="M 18 2 L 26 6 L 18 10 Z" fill="#1E293B" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+                <!-- Realization: dashed + hollow triangle -->
+                <ng-container *ngIf="rel.lineStyle === 'dashed-triangle'">
+                  <line x1="0" y1="6" x2="18" y2="6" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3,2"/>
+                  <path d="M 18 2 L 26 6 L 18 10 Z" fill="#1E293B" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+                <!-- Composition: solid + filled diamond -->
+                <ng-container *ngIf="rel.lineStyle === 'solid-diamond-filled'">
+                  <path d="M 1 6 L 6 2 L 11 6 L 6 10 Z" fill="#94A3B8" stroke="#94A3B8" stroke-width="1"/>
+                  <line x1="11" y1="6" x2="28" y2="6" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+                <!-- Aggregation: solid + hollow diamond -->
+                <ng-container *ngIf="rel.lineStyle === 'solid-diamond-hollow'">
+                  <path d="M 1 6 L 6 2 L 11 6 L 6 10 Z" fill="#1E293B" stroke="#94A3B8" stroke-width="1.5"/>
+                  <line x1="11" y1="6" x2="28" y2="6" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+                <!-- Dependency: dashed + open arrow -->
+                <ng-container *ngIf="rel.lineStyle === 'dashed-arrow'">
+                  <line x1="0" y1="6" x2="20" y2="6" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3,2"/>
+                  <path d="M 18 2 L 26 6 L 18 10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+                </ng-container>
+              </svg>
+            </div>
+            <span class="text-xs font-medium">{{ rel.name }}</span>
+          </div>
+
+          <span *ngIf="activeConnectionMode === rel.id" class="text-[10px] font-bold text-[var(--accent)] animate-pulse">
+            Activo ●
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ SECTION 3: HERRAMIENTAS RÁPIDAS ═══ -->
+    <div class="border border-[var(--border)] rounded-md overflow-hidden bg-[var(--surface-1)]">
+      <button
+        (click)="toggleSection('tools')"
+        class="w-full flex items-center justify-between px-2.5 py-2 bg-[var(--surface-3)]/80 hover:bg-[var(--surface-3)] text-[var(--text-primary)] font-semibold text-xs transition-colors border-b border-[var(--border)]"
+      >
+        <span class="flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-[var(--text-secondary)] font-bold">
+          <span>🛠️</span> HERRAMIENTAS
+        </span>
+        <span class="text-[10px] transition-transform text-[var(--text-muted)]" [style.transform]="sections.tools ? 'rotate(0)' : 'rotate(-90deg)'">▼</span>
+      </button>
+
+      <div *ngIf="sections.tools" class="p-1.5 grid grid-cols-1 gap-1">
+        <button
+          *ngFor="let tool of tools"
+          (click)="executeTool(tool.id)"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-[var(--border)]/40 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-xs text-slate-300 hover:text-white transition-colors cursor-pointer text-left"
+        >
+          <lucide-icon [name]="tool.icon" [size]="14" class="text-[var(--text-secondary)]"></lucide-icon>
+          <span>{{ tool.name }}</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Active Connection Mode Floating Banner -->
+  <div *ngIf="activeConnectionMode"
+       class="p-2.5 bg-[var(--primary)]/15 border-t border-[var(--primary)]/40 shrink-0">
+    <div class="flex flex-col gap-1 items-center">
+      <div class="flex items-center gap-1 text-xs font-bold text-blue-400">
+        <span>🔗 Modo Conexión Activo</span>
+      </div>
+      <span class="text-[10px] text-slate-300 text-center">
+        Arrastra una línea entre dos clases en el lienzo
+      </span>
+      <button
+        (click)="selectConnectionMode(activeConnectionMode)"
+        class="text-[10px] font-semibold text-red-400 hover:text-red-300 hover:underline mt-1"
+      >
+        ✕ Cancelar (Esc)
+      </button>
+    </div>
+  </div>
+
+</div>

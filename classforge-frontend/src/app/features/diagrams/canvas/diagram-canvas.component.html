@@ -1,0 +1,671 @@
+<div class="diagram-canvas-shell flex h-full w-full bg-[var(--surface-1)] overflow-hidden select-none">
+
+  <!-- ═══ LEFT PANEL: TOOLBOX (Enterprise Architect Palette) ═══ -->
+  <div *ngIf="isToolboxOpen"
+       data-tour="toolbar"
+       class="shrink-0 border-r border-[var(--border)] relative flex flex-col h-full bg-[var(--surface-2)] z-20"
+       [style.width.px]="toolboxWidth">
+    
+    <app-toolbox-palette
+      class="w-full h-full flex flex-col overflow-hidden"
+      [isOpen]="isToolboxOpen"
+      (close)="toggleToolbox()"
+      (nodeDropped)="onNodeDropped($event)"
+      (connectionModeChanged)="onConnectionModeChanged($event)">
+    </app-toolbox-palette>
+
+    <!-- Toolbox Resizer Bar -->
+    <div class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-[var(--primary)] active:bg-[var(--primary)] z-30 transition-colors"
+         title="Arrastra para ajustar ancho"
+         (mousedown)="startToolboxResize($event)">
+    </div>
+  </div>
+
+  <!-- Re-open Toolbox Button (when collapsed) -->
+  <button *ngIf="!isToolboxOpen"
+          (click)="toggleToolbox()"
+          class="absolute left-0 top-16 z-30 px-2 py-3 bg-[var(--surface-2)] border border-[var(--border)] border-l-0 rounded-r-md flex items-center justify-center text-xs font-bold text-[var(--primary-light)] hover:bg-[var(--surface-3)] shadow-lg transition-colors"
+          title="Abrir Toolbox">
+    🧰 ▶
+  </button>
+
+  <!-- ═══ CENTER: MAIN CANVAS WORKSPACE ═══ -->
+  <div class="flex-1 flex flex-col h-full overflow-hidden relative" #canvasWrapper>
+
+    <!-- Top Status & Navigation Bar -->
+    <div class="h-11 bg-[var(--surface-2)] border-b border-[var(--border)] flex items-center px-3 justify-between z-20 shrink-0">
+      
+      <!-- Left: Diagram Title, Enterprise Logo & Version -->
+      <div class="flex items-center gap-2.5">
+        <button (click)="goBack()" class="text-[var(--text-secondary)] hover:text-white transition-colors p-1.5 rounded hover:bg-[var(--surface-3)] text-xs flex items-center gap-1 cursor-pointer" title="Volver al repertorio de diagramas">
+          <span>←</span> <span>Volver</span>
+        </button>
+
+        <div class="w-px h-4 bg-[var(--border)]"></div>
+
+        <!-- Enterprise Logo Thumbnail -->
+        <div class="w-7 h-7 rounded-lg bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 shadow-xs"
+             [title]="diagram?.name || 'Logo Empresarial'">
+          <img *ngIf="diagram?.image_url" [src]="diagram?.image_url" class="w-full h-full object-contain p-0.5">
+          <span *ngIf="!diagram?.image_url" class="text-xs">🏢</span>
+        </div>
+
+        <!-- Title & Rename Button -->
+        <div class="flex items-center gap-1.5">
+          <span class="font-bold text-[var(--text-primary)] text-xs md:text-sm truncate max-w-[200px]" [title]="diagram?.name">
+            {{ diagram?.name || 'Diagrama UML' }}
+          </span>
+
+          <button *ngIf="canManage" (click)="openCanvasEditModal()" 
+                  class="p-1 rounded text-[11px] text-slate-400 hover:text-white hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
+                  title="Cambiar nombre y logo de empresa">
+            ✏️
+          </button>
+        </div>
+
+        <!-- Version Badge -->
+        <span *ngIf="diagram" class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-[var(--surface-3)] text-[var(--text-secondary)] border border-[var(--border)]">
+          v{{ diagram.version }}
+        </span>
+
+        <!-- Status Badge -->
+        <span *ngIf="diagram" class="px-2 py-0.5 text-[10px] rounded-full capitalize font-medium"
+          [ngClass]="{
+            'bg-blue-500/20 text-blue-400 border border-blue-500/30': diagram.status === 'draft',
+            'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30': diagram.status === 'in_progress',
+            'bg-green-500/20 text-green-400 border border-green-500/30': diagram.status === 'completed'
+          }">
+          {{ diagram.status }}
+        </span>
+
+        <!-- Manage Participants Quick Button -->
+        <button *ngIf="canManage" (click)="openCanvasParticipantsModal()"
+                class="flex items-center gap-1 px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                title="Gestionar miembros del equipo asignados a este diagrama">
+          <span>👥</span>
+          <span>Participantes</span>
+          <span *ngIf="diagram?.member_ids && diagram!.member_ids!.length > 0" class="bg-indigo-600 text-white text-[9px] px-1 rounded-full font-mono">
+            {{ diagram!.member_ids!.length }}
+          </span>
+        </button>
+      </div>
+
+      <!-- Right: Action Buttons & Saving Status -->
+      <div class="flex items-center gap-2">
+        <!-- Collaboration Presence Bar -->
+        <app-presence-bar data-tour="presence-bar"></app-presence-bar>
+
+        <div class="w-px h-5 bg-[var(--border)]"></div>
+
+        <!-- ☀️/🌙 Light/Dark Mode Toggle Button -->
+        <button (click)="canvasService.toggleTheme()"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors border font-medium cursor-pointer"
+                [ngClass]="canvasService.isLightMode() 
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25' 
+                  : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/25'"
+                [title]="canvasService.isLightMode() ? 'Cambiar a Modo Oscuro' : 'Cambiar a Modo Claro'">
+          <span>{{ canvasService.isLightMode() ? '☀️ Modo Claro' : '🌙 Modo Oscuro' }}</span>
+        </button>
+
+        <div class="w-px h-5 bg-[var(--border)]"></div>
+
+        <button (click)="toggleLiveCode()"
+                data-tour="live-code-btn"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded text-xs hover:bg-emerald-500/20 transition-colors font-medium relative"
+                title="Generar código Spring Boot 3 JPA en vivo">
+          <span>💻</span> Código Java
+          <span *ngIf="codegenService.generatedFiles() && (codegenService.generatedFiles() | keyvalue).length > 0"
+                class="bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded-full font-bold">
+            {{ (codegenService.generatedFiles() | keyvalue).length }}
+          </span>
+        </button>
+
+        <button (click)="togglePromptModal()"
+                data-tour="prompt-frontend-btn"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded text-xs hover:bg-cyan-500/20 transition-colors font-medium"
+                title="Generar meta-prompt para IA (React, Angular, Vue)">
+          🤖 Prompt IA
+        </button>
+
+        <button (click)="toggleAiDrawer()"
+                data-tour="ai-assistant-btn"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded text-xs hover:bg-purple-500/20 transition-colors font-medium"
+                title="Asistente por voz o texto NLU">
+          ✨ Asistente IA
+        </button>
+
+        <button (click)="toggleCollabPanel()"
+                data-tour="colab-btn"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] rounded text-xs hover:bg-[var(--surface-4)] transition-colors relative"
+                title="Colaboradores y chat">
+          💬 Chat
+          <span *ngIf="colabService.chatMessages().length > 0"
+                class="bg-[var(--primary)] text-white text-[9px] px-1 rounded-full font-bold">
+            {{ colabService.chatMessages().length }}
+          </span>
+        </button>
+
+        <button (click)="openPropertiesPanel()"
+                data-tour="properties-panel"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] rounded text-xs hover:bg-[var(--surface-4)] transition-colors cursor-pointer"
+                title="Panel de propiedades del elemento seleccionado">
+          ⚙️ Propiedades
+        </button>
+
+        <div class="w-px h-5 bg-[var(--border)]"></div>
+
+        <!-- Save Controls Container -->
+        <div class="flex items-center gap-2" data-tour="save-controls">
+          <div class="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] font-medium">
+            <ng-container [ngSwitch]="autoSave.saveStatus()">
+              <span *ngSwitchCase="'saved'" class="text-green-400 flex items-center gap-1">✓ Guardado</span>
+              <span *ngSwitchCase="'saving'" class="text-blue-400 flex items-center gap-1 animate-pulse">⟳ Guardando...</span>
+              <span *ngSwitchCase="'unsaved'" class="text-yellow-400 flex items-center gap-1">● Sin guardar</span>
+            </ng-container>
+          </div>
+
+          <button (click)="manualSave()" 
+                  [disabled]="autoSave.saveStatus() === 'saving' || autoSave.saveStatus() === 'saved'"
+                  class="px-3 py-1 bg-[var(--primary)] text-white rounded text-xs hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold shadow-sm">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Action Toolbar (Horizontal) -->
+    <canvas-toolbar data-tour="toolbar" class="z-10 shrink-0"></canvas-toolbar>
+
+    <!-- Canvas Graph Container -->
+    <div class="flex-1 relative overflow-hidden bg-[var(--surface-1)]">
+      
+      <!-- AntV X6 Canvas Element -->
+      <div #graphContainer class="w-full h-full"></div>
+
+      <!-- Real-time Multi-user Cursor Overlay -->
+      <app-cursor-overlay></app-cursor-overlay>
+
+      <!-- Active Connection Mode Indicator -->
+      <div *ngIf="canvasService.connectionMode()"
+           class="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-full shadow-2xl flex items-center gap-3 border border-blue-400 animate-bounce">
+        <span>🔗 Modo {{ canvasService.connectionMode() | uppercase }}: Conecta 2 clases arrastrando una línea</span>
+        <button (click)="onConnectionModeChanged(null)" class="bg-blue-800 hover:bg-blue-900 rounded-full px-2 py-0.5 text-[10px] font-bold cursor-pointer">
+          ✕ Cancelar
+        </button>
+      </div>
+
+      <!-- Minimap (Bottom Right) -->
+      <div #minimapContainer
+           class="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-[var(--border)] overflow-hidden shadow-2xl z-20 bg-[var(--surface-2)]/90 backdrop-blur-sm">
+      </div>
+
+      <!-- Zoom & View Controls (Bottom Left) -->
+      <div class="absolute bottom-4 left-4 z-20 flex items-center gap-1.5 bg-[var(--surface-2)]/95 backdrop-blur-sm border border-[var(--border)] rounded-lg p-1 shadow-xl text-xs text-[var(--text-secondary)]">
+        <button (click)="canvasService.zoomOut()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] font-bold cursor-pointer" title="Alejar (Ctrl + -)">−</button>
+        <span class="w-12 text-center font-mono font-bold text-white">{{ (canvasService.getZoom() * 100) | number:'1.0-0' }}%</span>
+        <button (click)="canvasService.zoomIn()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] font-bold cursor-pointer" title="Acercar (Ctrl + +)">+</button>
+        <div class="w-px h-4 bg-[var(--border)] mx-1"></div>
+        <button (click)="canvasService.fitView()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] cursor-pointer" title="Ajustar a pantalla">⛶ Ajustar</button>
+      </div>
+
+      <!-- ═══ FLOATING EDGE QUICK TOOLBAR (Fast Multiplicity & Relationship Editor) ═══ -->
+      <div *ngIf="selectedEdgeId && edgeToolbarPos"
+           class="absolute z-40 bg-[var(--surface-2)]/95 backdrop-blur-md border border-[var(--border)] rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-100"
+           [style.left.px]="edgeToolbarPos.x"
+           [style.top.px]="edgeToolbarPos.y">
+        
+        <!-- Header with Type Selector Pills -->
+        <div class="flex items-center justify-between gap-2 border-b border-[var(--border)]/60 pb-1.5">
+          <div class="flex items-center gap-1 overflow-x-auto custom-scrollbar">
+            <button (click)="quickChangeEdgeType('association')"
+                    [class.bg-blue-600]="quickEdgeType === 'association'"
+                    [class.text-white]="quickEdgeType === 'association'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ─▶ Asoc.
+            </button>
+            <button (click)="quickChangeEdgeType('inheritance')"
+                    [class.bg-blue-600]="quickEdgeType === 'inheritance'"
+                    [class.text-white]="quickEdgeType === 'inheritance'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ─▷ Herencia
+            </button>
+            <button (click)="quickChangeEdgeType('realization')"
+                    [class.bg-blue-600]="quickEdgeType === 'realization'"
+                    [class.text-white]="quickEdgeType === 'realization'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ┈▷ Realiz.
+            </button>
+            <button (click)="quickChangeEdgeType('composition')"
+                    [class.bg-blue-600]="quickEdgeType === 'composition'"
+                    [class.text-white]="quickEdgeType === 'composition'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ◆─ Comp.
+            </button>
+            <button (click)="quickChangeEdgeType('aggregation')"
+                    [class.bg-blue-600]="quickEdgeType === 'aggregation'"
+                    [class.text-white]="quickEdgeType === 'aggregation'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ◇─ Agreg.
+            </button>
+            <button (click)="quickChangeEdgeType('dependency')"
+                    [class.bg-blue-600]="quickEdgeType === 'dependency'"
+                    [class.text-white]="quickEdgeType === 'dependency'"
+                    class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0">
+              ┈▶ Dep.
+            </button>
+          </div>
+
+          <button (click)="closeEdgeQuickToolbar()" class="text-slate-400 hover:text-white text-xs p-1 rounded hover:bg-[var(--surface-3)] cursor-pointer">
+            ✕
+          </button>
+        </div>
+
+        <!-- Cardinalities & Message Inputs -->
+        <div class="flex items-center gap-2">
+          <!-- Mensaje / Etiqueta -->
+          <div class="flex flex-col">
+            <span class="text-[9px] font-bold text-[var(--text-secondary)] uppercase">Mensaje</span>
+            <input type="text" [(ngModel)]="quickEdgeLabel" (ngModelChange)="onQuickEdgeChange()"
+                   placeholder="ej. pertenece a"
+                   class="w-32 bg-[var(--surface-1)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white outline-none focus:border-blue-500 font-medium">
+          </div>
+
+          <!-- Cardinalidad Origen -->
+          <div class="flex flex-col">
+            <span class="text-[9px] font-bold text-sky-400 uppercase">Mult. Origen</span>
+            <select [(ngModel)]="quickEdgeSourceMult" (ngModelChange)="onQuickEdgeChange()"
+                    class="bg-[var(--surface-1)] border border-[var(--border)] rounded px-1.5 py-1 text-xs text-sky-400 font-mono font-bold outline-none focus:border-blue-500 cursor-pointer">
+              <option *ngFor="let opt of cardinalityOptions" [value]="opt">{{ opt || '— Ninguna —' }}</option>
+            </select>
+          </div>
+
+          <!-- Swap Button -->
+          <button (click)="swapMultiplicities()" title="Invertir multiplicidades"
+                  class="mt-3 p-1 rounded bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-slate-300 hover:text-white text-xs border border-[var(--border)] cursor-pointer">
+            ⇄
+          </button>
+
+          <!-- Cardinalidad Destino -->
+          <div class="flex flex-col">
+            <span class="text-[9px] font-bold text-sky-400 uppercase">Mult. Destino</span>
+            <select [(ngModel)]="quickEdgeTargetMult" (ngModelChange)="onQuickEdgeChange()"
+                    class="bg-[var(--surface-1)] border border-[var(--border)] rounded px-1.5 py-1 text-xs text-sky-400 font-mono font-bold outline-none focus:border-blue-500 cursor-pointer">
+              <option *ngFor="let opt of cardinalityOptions" [value]="opt">{{ opt || '— Ninguna —' }}</option>
+            </select>
+          </div>
+
+          <!-- Delete Edge -->
+          <button (click)="deleteSelectedEdge()" title="Eliminar relación"
+                  class="mt-3 p-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs cursor-pointer">
+            🗑️
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══ FLOATING NODE QUICK ACTION TOOLBAR ═══ -->
+      <div *ngIf="selectedNodeId && nodeToolbarPos && inlineEditingMode === 'none'"
+           class="absolute z-40 bg-[var(--surface-2)]/95 backdrop-blur-md border border-[var(--border)] rounded-lg shadow-xl px-2 py-1 flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-75"
+           [style.left.px]="nodeToolbarPos.x"
+           [style.top.px]="nodeToolbarPos.y">
+        <button (click)="quickAddAttributeToSelectedNode()"
+                class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 border border-blue-500/30 cursor-pointer"
+                title="Añadir atributo rápidamente a la clase">
+          <span>+ Atributo</span>
+        </button>
+        <button (click)="quickAddMethodToSelectedNode()"
+                class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-400 border border-emerald-500/30 cursor-pointer"
+                title="Añadir método rápidamente a la clase">
+          <span>+ Método</span>
+        </button>
+        <div class="w-px h-3.5 bg-[var(--border)] mx-0.5"></div>
+        <button (click)="openNodeEditModal(graph.getCellById(selectedNodeId))"
+                class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-slate-200 cursor-pointer"
+                title="Abrir editor modal completo">
+          <span>✏️ Modal</span>
+        </button>
+        <button (click)="deleteSelectedNode()"
+                class="p-1 rounded text-red-400 hover:bg-red-400/20 text-[11px] cursor-pointer"
+                title="Eliminar clase">
+          🗑️
+        </button>
+      </div>
+
+      <!-- ═══ IN-BOX DIRECT INLINE EDITING OVERLAY ═══ -->
+      <div *ngIf="inlineEditingMode !== 'none' && inlineEditorPos"
+           class="absolute z-50 bg-[var(--surface-2)] border-2 border-blue-500 rounded shadow-2xl p-1 flex flex-col gap-1"
+           [style.left.px]="inlineEditorPos.x"
+           [style.top.px]="inlineEditorPos.y"
+           [style.width.px]="inlineEditorPos.width"
+           [style.minHeight.px]="inlineEditorPos.height">
+        
+        <!-- Mode: Class Name -->
+        <div *ngIf="inlineEditingMode === 'name'" class="flex items-center gap-1 w-full h-full">
+          <input type="text" [(ngModel)]="inlineEditingText"
+                 (keydown.enter)="saveInlineEditing()"
+                 (keydown.escape)="cancelInlineEditing()"
+                 autofocus
+                 class="w-full bg-[var(--surface-1)] text-white text-xs font-bold px-2 py-1 rounded outline-none border border-blue-400">
+          <button (click)="saveInlineEditing()" class="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold cursor-pointer">✓</button>
+        </div>
+
+        <!-- Mode: Attributes / Methods Multiline Text -->
+        <div *ngIf="inlineEditingMode === 'attributes' || inlineEditingMode === 'methods'" class="flex flex-col gap-1 w-full">
+          <div class="flex items-center justify-between text-[10px] text-[var(--text-secondary)] font-semibold px-1">
+            <span>{{ inlineEditingMode === 'attributes' ? 'Editar Atributos (1 por línea)' : 'Editar Métodos (1 por línea)' }}</span>
+            <span class="text-[9px] text-slate-400">Enter = nueva línea • Ctrl+Enter = guardar</span>
+          </div>
+          <textarea [(ngModel)]="inlineEditingText"
+                    (keydown.control.enter)="saveInlineEditing()"
+                    (keydown.escape)="cancelInlineEditing()"
+                    rows="4"
+                    autofocus
+                    class="w-full bg-[var(--surface-1)] text-white font-mono text-xs p-1.5 rounded outline-none border border-blue-400 custom-scrollbar resize-y"></textarea>
+          <div class="flex items-center justify-end gap-1">
+            <button (click)="cancelInlineEditing()" class="px-2 py-0.5 text-[11px] text-slate-400 hover:text-white cursor-pointer">Cancelar</button>
+            <button (click)="saveInlineEditing()" class="px-3 py-0.5 bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold rounded cursor-pointer">✓ Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ IN-CANVAS INTEGRATED UML CLASS EDIT MODAL (No Browser Alerts!) ═══ -->
+      <div *ngIf="isNodeEditModalOpen"
+           class="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        
+        <div class="w-full max-w-lg bg-[var(--surface-2)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+          
+          <!-- Modal Header -->
+          <div class="h-12 px-4 border-b border-[var(--border)] bg-[var(--surface-1)] flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2 font-bold text-sm text-white">
+              <span>✏️</span>
+              <span>Editar Elemento UML: <span class="text-blue-400">{{ editingNodeData.name }}</span></span>
+            </div>
+            <button (click)="closeNodeEditModal()" class="text-[var(--text-secondary)] hover:text-white p-1 rounded hover:bg-[var(--surface-3)] transition-colors cursor-pointer">
+              ✕
+            </button>
+          </div>
+
+          <!-- Modal Body (Scrollable) -->
+          <div class="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-4">
+            
+            <!-- 1. Clasificador Info -->
+            <div class="grid grid-cols-2 gap-3 p-3 bg-[var(--surface-1)] rounded-lg border border-[var(--border)]">
+              <div>
+                <label class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Nombre de la Clase</label>
+                <input type="text" [(ngModel)]="editingNodeData.name" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none font-medium">
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Tipo de Elemento</label>
+                <select [(ngModel)]="editingNodeType" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none">
+                  <option value="class">Clase (Class)</option>
+                  <option value="interface">Interfaz («interface»)</option>
+                  <option value="abstract">Clase Abstracta (Abstract)</option>
+                  <option value="enum">Enumeración («enum»)</option>
+                  <option value="package">Paquete (Package)</option>
+                  <option value="note">Nota / Comentario</option>
+                </select>
+              </div>
+              <div class="col-span-2">
+                <label class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Estereotipo (opcional)</label>
+                <input type="text" [(ngModel)]="editingNodeData.stereotype" placeholder="ej. entity, service, repository, DTO" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none">
+              </div>
+            </div>
+
+            <!-- 2. Atributos UML 2.5 -->
+            <div *ngIf="editingNodeType !== 'note' && editingNodeType !== 'package'" class="border border-[var(--border)] rounded-lg bg-[var(--surface-1)] overflow-hidden">
+              <div class="px-3 py-2 bg-[var(--surface-3)]/60 border-b border-[var(--border)] flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  Atributos ({{ editingNodeData.attributes.length }})
+                </span>
+                <button (click)="addModalAttribute()" class="px-2 py-1 bg-blue-600/30 text-blue-400 hover:bg-blue-600/50 border border-blue-500/40 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer">
+                  + Añadir Atributo
+                </button>
+              </div>
+
+              <div class="p-2 flex flex-col gap-2">
+                <div *ngFor="let attr of editingNodeData.attributes; let i = index" class="p-2 bg-[var(--surface-2)] rounded border border-[var(--border)]/70 flex flex-col gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <!-- Visibility -->
+                    <select [(ngModel)]="attr.visibility" class="w-20 bg-[var(--surface-3)] border border-[var(--border)] rounded px-1 py-1 text-xs font-mono text-white">
+                      <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.label }}</option>
+                    </select>
+                    <!-- Name -->
+                    <input type="text" [(ngModel)]="attr.name" placeholder="nombreAtributo" class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white font-mono">
+                    <!-- Delete -->
+                    <button (click)="removeModalAttribute(i)" class="text-red-400 hover:text-red-300 p-1 hover:bg-red-400/10 rounded cursor-pointer" title="Eliminar atributo">
+                      ✕
+                    </button>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <!-- Type -->
+                    <input type="text" [(ngModel)]="attr.type" placeholder="Tipo (String, Long...)" class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-sky-400 font-mono">
+                    <!-- Default Value -->
+                    <input type="text" [(ngModel)]="attr.default_value" placeholder="Valor por defecto" class="w-32 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono">
+                    <!-- Static Check -->
+                    <label class="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
+                      <input type="checkbox" [(ngModel)]="attr.is_static" class="rounded"> Static
+                    </label>
+                  </div>
+                </div>
+
+                <div *ngIf="editingNodeData.attributes.length === 0" class="text-center py-3 text-xs text-[var(--text-muted)] italic">
+                  No hay atributos añadidos. Clic en "+ Añadir Atributo" para crear uno.
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Métodos / Operaciones UML 2.5 -->
+            <div *ngIf="editingNodeType !== 'note' && editingNodeType !== 'package'" class="border border-[var(--border)] rounded-lg bg-[var(--surface-1)] overflow-hidden">
+              <div class="px-3 py-2 bg-[var(--surface-3)]/60 border-b border-[var(--border)] flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  Métodos / Operaciones ({{ editingNodeData.methods.length }})
+                </span>
+                <button (click)="addModalMethod()" class="px-2 py-1 bg-blue-600/30 text-blue-400 hover:bg-blue-600/50 border border-blue-500/40 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer">
+                  + Añadir Método
+                </button>
+              </div>
+
+              <div class="p-2 flex flex-col gap-2">
+                <div *ngFor="let m of editingNodeData.methods; let i = index" class="p-2 bg-[var(--surface-2)] rounded border border-[var(--border)]/70 flex flex-col gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <!-- Visibility -->
+                    <select [(ngModel)]="m.visibility" class="w-20 bg-[var(--surface-3)] border border-[var(--border)] rounded px-1 py-1 text-xs font-mono text-white">
+                      <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.label }}</option>
+                    </select>
+                    <!-- Name -->
+                    <input type="text" [(ngModel)]="m.name" placeholder="nombreMetodo" class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white font-mono">
+                    <!-- Delete -->
+                    <button (click)="removeModalMethod(i)" class="text-red-400 hover:text-red-300 p-1 hover:bg-red-400/10 rounded cursor-pointer" title="Eliminar método">
+                      ✕
+                    </button>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <!-- Params -->
+                    <input type="text" [(ngModel)]="m.params" placeholder="parámetros ej: id: Long" class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-slate-300 font-mono">
+                    <!-- Return Type -->
+                    <input type="text" [(ngModel)]="m.return_type" placeholder="Retorno ej: void" class="w-28 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-sky-400 font-mono">
+                    <!-- Static / Abstract -->
+                    <label class="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
+                      <input type="checkbox" [(ngModel)]="m.is_static" class="rounded"> Static
+                    </label>
+                    <label class="flex items-center gap-1 text-[11px] text-purple-300 cursor-pointer">
+                      <input type="checkbox" [(ngModel)]="m.is_abstract" class="rounded"> Abstract
+                    </label>
+                  </div>
+                </div>
+
+                <div *ngIf="editingNodeData.methods.length === 0" class="text-center py-3 text-xs text-[var(--text-muted)] italic">
+                  No hay métodos añadidos. Clic en "+ Añadir Método" para crear uno.
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Notes (if note type) -->
+            <div *ngIf="editingNodeType === 'note'" class="p-3 bg-[var(--surface-1)] rounded-lg border border-[var(--border)]">
+              <label class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Contenido de la Nota</label>
+              <textarea [(ngModel)]="editingNodeData.notes" rows="4" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded p-2 text-xs text-white focus:border-[var(--primary)] outline-none"></textarea>
+            </div>
+
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="h-14 px-4 border-t border-[var(--border)] bg-[var(--surface-1)] flex items-center justify-end gap-2 shrink-0">
+            <button (click)="closeNodeEditModal()" class="px-4 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[var(--surface-3)] transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button (click)="saveNodeEdit()" class="px-5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-bold shadow-lg transition-colors cursor-pointer flex items-center gap-1.5">
+              <span>✓</span> Guardar Cambios
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+
+  <!-- ═══ POPUP MODALS & DRAWERS (Only rendered when opened!) ═══ -->
+  <app-collaborators-panel *ngIf="isCollabPanelOpen" [isOpen]="isCollabPanelOpen" (close)="toggleCollabPanel()"></app-collaborators-panel>
+  <app-ai-drawer *ngIf="isAiDrawerOpen" [isOpen]="isAiDrawerOpen" [diagramId]="diagramId" (close)="toggleAiDrawer()"></app-ai-drawer>
+  <app-live-code-drawer *ngIf="isLiveCodeOpen" [isOpen]="isLiveCodeOpen" (close)="toggleLiveCode()"></app-live-code-drawer>
+  <app-frontend-prompt-modal *ngIf="isPromptModalOpen" [isOpen]="isPromptModalOpen" [diagramId]="diagramId" [graphData]="canvasService.toGraphData()" (close)="togglePromptModal()"></app-frontend-prompt-modal>
+
+  <!-- ═══ IN-CANVAS RENAME & BRANDING MODAL ═══ -->
+  <div *ngIf="isCanvasEditModalOpen" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div class="w-full max-w-md bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      
+      <div class="px-5 py-4 bg-[var(--surface-1)] border-b border-[var(--border)] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">✏️</span>
+          <h2 class="font-bold text-sm text-white">Editar Nombre & Logo de la Empresa</h2>
+        </div>
+        <button (click)="closeCanvasEditModal()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-[var(--surface-3)]">✕</button>
+      </div>
+
+      <div class="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+        <!-- Name -->
+        <div>
+          <label class="text-xs font-bold text-slate-300 block mb-1">Nombre del Diagrama / Empresa <span class="text-red-400">*</span></label>
+          <input type="text" [(ngModel)]="canvasEditForm.name" placeholder="ej. Veterinaria PeloSuave"
+                 class="w-full bg-[var(--surface-1)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[var(--primary)] font-medium">
+        </div>
+
+        <!-- Logo Upload -->
+        <div class="p-3.5 bg-[var(--surface-1)] rounded-xl border border-[var(--border)]">
+          <label class="text-xs font-bold text-slate-300 block mb-2">Logo Corporativo</label>
+          
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 rounded-xl bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0">
+              <img *ngIf="canvasLogoPreview" [src]="canvasLogoPreview" class="w-full h-full object-contain p-1">
+              <span *ngIf="!canvasLogoPreview" class="text-xl text-slate-500">🏢</span>
+            </div>
+
+            <div class="flex-1 flex flex-col gap-2">
+              <label class="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors inline-flex items-center gap-1.5 shadow-xs w-fit">
+                <span>📁</span> Seleccionar Logo
+                <input type="file" (change)="onCanvasLogoFileSelected($event)" accept="image/*" class="hidden">
+              </label>
+
+              <button *ngIf="canvasLogoPreview" (click)="removeCanvasLogo()" 
+                      class="text-xs text-red-400 hover:text-red-300 w-fit">
+                Quitar logo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <label class="text-xs font-bold text-slate-300 block mb-1">Descripción</label>
+          <textarea [(ngModel)]="canvasEditForm.description" rows="2"
+                    class="w-full bg-[var(--surface-1)] border border-[var(--border)] rounded-lg p-2 text-xs text-white outline-none focus:border-[var(--primary)]"></textarea>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-[var(--surface-1)] border-t border-[var(--border)] flex items-center justify-end gap-2">
+        <button (click)="closeCanvasEditModal()" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:bg-[var(--surface-3)]">
+          Cancelar
+        </button>
+        <button (click)="saveCanvasEdit()" [disabled]="isSavingCanvasEdit"
+                class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-1.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer">
+          <span *ngIf="isSavingCanvasEdit" class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+          <span>Guardar Cambios</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ IN-CANVAS PARTICIPANTS MANAGEMENT MODAL ═══ -->
+  <div *ngIf="isCanvasParticipantsModalOpen" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div class="w-full max-w-md bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      
+      <div class="px-5 py-4 bg-[var(--surface-1)] border-b border-[var(--border)] flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="text-lg">👥</span>
+          <div>
+            <h2 class="font-bold text-sm text-white">Participantes / Editores</h2>
+            <p class="text-[11px] text-[var(--text-secondary)]">
+              {{ canvasParticipantsData?.team_name ? 'Equipo: ' + canvasParticipantsData?.team_name : 'Asigna desarrolladores para colaborar en tiempo real' }}
+            </p>
+          </div>
+        </div>
+        <button (click)="closeCanvasParticipantsModal()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-[var(--surface-3)]">✕</button>
+      </div>
+
+      <div class="p-5 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
+        <div *ngIf="canvasParticipantsLoading" class="flex flex-col items-center justify-center py-10 gap-2">
+          <div class="w-6 h-6 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-xs text-[var(--text-secondary)]">Cargando participantes...</span>
+        </div>
+
+        <div *ngIf="!canvasParticipantsLoading && (!canvasParticipantsData?.available_members || canvasParticipantsData?.available_members?.length === 0)" class="text-center py-8 text-xs text-slate-400">
+          No hay desarrolladores disponibles en este equipo.
+        </div>
+
+        <div *ngIf="!canvasParticipantsLoading && (canvasParticipantsData?.available_members?.length || 0) > 0" class="flex flex-col gap-2">
+          <div *ngFor="let m of canvasParticipantsData?.available_members"
+               (click)="toggleCanvasParticipant(m.id)"
+               class="p-2.5 bg-[var(--surface-1)] hover:bg-[var(--surface-3)] border border-[var(--border)] rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-colors"
+               [class.border-blue-500]="canvasSelectedParticipantIds.has(m.id)">
+            
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-full bg-blue-600/30 text-blue-300 border border-blue-500/40 flex items-center justify-center text-xs font-bold shrink-0">
+                {{ m.name.charAt(0).toUpperCase() }}
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>{{ m.name }}</span>
+                  <span class="text-[9px] px-1 py-0.2 rounded font-mono uppercase bg-slate-700/50 text-slate-300">{{ m.role }}</span>
+                </div>
+                <div class="text-[10px] text-slate-400">{{ m.email }}</div>
+              </div>
+            </div>
+
+            <input type="checkbox" [checked]="canvasSelectedParticipantIds.has(m.id)" (click)="$event.stopPropagation(); toggleCanvasParticipant(m.id)"
+                   class="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer">
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-[var(--surface-1)] border-t border-[var(--border)] flex items-center justify-between">
+        <span class="text-xs text-slate-400">{{ canvasSelectedParticipantIds.size }} seleccionados</span>
+        <div class="flex items-center gap-2">
+          <button (click)="closeCanvasParticipantsModal()" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:bg-[var(--surface-3)]">
+            Cancelar
+          </button>
+          <button (click)="saveCanvasParticipants()" [disabled]="isSavingCanvasParticipants"
+                  class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-1.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer">
+            <span *ngIf="isSavingCanvasParticipants" class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            <span>Guardar</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>

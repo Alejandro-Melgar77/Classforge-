@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #2D6BE4;
+  --primary-dark: #1A4FB0;
+  --primary-light: #4D8BFF;
+  --accent: #00C896;
+  --warning: #F5A623;
+  --danger: #E74C3C;
+  --surface-1: #0F172A;
+  --surface-2: #1E293B;
+  --surface-3: #334155;
+  --surface-4: #475569;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --border: #334155;
+  --border-subtle: #1E293B;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--surface-4);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ─── Toolbar Buttons ───────────────────────────────────────── */
+.toolbar-btn {
+  @apply h-7 px-1.5 flex items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors text-xs;
+}
+.toolbar-btn:active {
+  @apply bg-[var(--surface-4)];
+}
+
+/* ─── Properties Panel Field Styles ─────────────────────────── */
+.prop-section {
+  @apply border border-[var(--border)] rounded overflow-hidden mb-1;
+}
+.prop-section-header {
+  @apply w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-semibold text-[var(--text-secondary)] tracking-wider hover:bg-[var(--surface-3)] transition-colors cursor-pointer;
+  background-color: rgba(51, 65, 85, 0.6);
+}
+.prop-section-body {
+  @apply p-2 flex flex-col gap-2;
+}
+.prop-field {
+  @apply flex flex-col gap-0.5;
+}
+.prop-label {
+  @apply text-[9px] text-[var(--text-muted)] font-semibold uppercase tracking-wider;
+}
+.prop-input {
+  @apply w-full bg-[var(--surface-1)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--primary)] transition-colors;
+}
+.prop-input-sm {
+  @apply bg-[var(--surface-3)] border border-[var(--border)] rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-[var(--primary)] transition-colors;
+}
+
+/* ─── Toolbox Palette ───────────────────────────────────────── */
+.toolbox-item {
+  @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs text-[var(--text-secondary)] hover:text-white transition-colors select-none;
+}
+.toolbox-item:hover {
+  background-color: rgba(51, 65, 85, 0.5);
+}
+.toolbox-item:active {
+  @apply bg-[var(--surface-3)];
+}
+.toolbox-item-active {
+  background-color: rgba(45, 107, 228, 0.2);
+  color: var(--primary-light);
+  border: 1px solid rgba(45, 107, 228, 0.3);
+}
+
+/* ─── Resizer Handles ───────────────────────────────────────── */
+.cursor-col-resize {
+  cursor: col-resize;
+}
+
+/* ─── AntV X6 Graph Overrides ───────────────────────────────── */
+.x6-graph-scroller {
+  overflow: hidden !important;
+}
+.x6-graph-scroller-content {
+  cursor: default;
+}
+.x6-widget-selection-box {
+  border-color: var(--primary) !important;
+  border-radius: 4px;
+}
+.x6-widget-transform {
+  border-color: var(--primary) !important;
+}
+.x6-widget-snapline-horizontal,
+.x6-widget-snapline-vertical {
+  border-color: var(--accent) !important;
+}
+
+/* ─── Connection Mode Cursor ────────────────────────────────── */
+.connection-mode-active .x6-graph-scroller-content {
+  cursor: crosshair !important;
+}

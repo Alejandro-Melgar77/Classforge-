@@ -1,0 +1,61 @@
+﻿# Ignorar carpetas y archivos fuera del software solicitado
+docs/
+documentacion/
+documento/
+.agents/
+build_backend.py
+*.apk
+*.apk.zip
+*.exe
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+classforge-backend/venv/
+classforge-backend/.env
+venv/
+env/
+ENV/
+
+# Node / Angular / Frontend
+node_modules/
+.angular/
+dist/
+classforge-frontend/node_modules/
+classforge-frontend/.angular/
+classforge-frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Flutter / Dart / Mobile
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+classforge-mobile/.dart_tool/
+classforge-mobile/.flutter-plugins
+classforge-mobile/.flutter-plugins-dependencies
+classforge-mobile/.pub-cache/
+classforge-mobile/.pub/
+classforge-mobile/build/
+classforge-mobile/android/app/debug/
+classforge-mobile/android/app/profile/
+classforge-mobile/android/app/release/
+classforge-mobile/ClassForge.apk
+
+# IDEs y SO
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db

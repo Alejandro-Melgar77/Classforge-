@@ -1,0 +1,230 @@
+<div class="h-full w-full flex flex-col">
+  <!-- Header -->
+  <div class="h-11 border-b border-[var(--border)] flex items-center justify-between px-3 shrink-0">
+    <div class="flex items-center gap-2">
+      <lucide-icon name="settings-2" [size]="15" class="text-[var(--text-secondary)]"></lucide-icon>
+      <span class="font-semibold text-[var(--text-primary)] text-sm">Propiedades</span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
+
+    <!-- Empty state -->
+    <div *ngIf="!selectedCell" class="text-xs text-[var(--text-muted)] text-center mt-12 px-4">
+      <div class="text-2xl mb-2">🎯</div>
+      Selecciona un elemento en el lienzo para editar sus propiedades.
+    </div>
+
+    <!-- ═══ NODE PROPERTIES ═══ -->
+    <div *ngIf="cellType === 'node' && nodeData" class="flex flex-col gap-1">
+
+      <!-- Section: Basic Info -->
+      <div class="prop-section">
+        <button (click)="toggleSection('basic')" class="prop-section-header">
+          <span class="flex items-center gap-1.5">
+            <span class="text-[10px]">{{ sections.basic ? '▼' : '▶' }}</span>
+            INFORMACIÓN BÁSICA
+          </span>
+        </button>
+        <div *ngIf="sections.basic" class="prop-section-body">
+          <!-- Name -->
+          <div class="prop-field">
+            <label class="prop-label">Nombre</label>
+            <input type="text" [(ngModel)]="nodeData.name" (ngModelChange)="updateNode()"
+                   class="prop-input">
+          </div>
+
+          <!-- Type -->
+          <div class="prop-field">
+            <label class="prop-label">Tipo</label>
+            <select [ngModel]="nodeType" (ngModelChange)="changeNodeType($event)" class="prop-input">
+              <option value="class">Class</option>
+              <option value="abstract">Abstract</option>
+              <option value="interface">Interface</option>
+              <option value="enum">Enumeration</option>
+              <option value="package">Package</option>
+              <option value="note">Note</option>
+            </select>
+          </div>
+
+          <!-- Stereotype -->
+          <div class="prop-field">
+            <label class="prop-label">Estereotipo</label>
+            <input type="text" [(ngModel)]="nodeData.stereotype" (ngModelChange)="updateNode()"
+                   class="prop-input" placeholder="ej. entity, service">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Attributes -->
+      <div class="prop-section">
+        <button (click)="toggleSection('attributes')" class="prop-section-header">
+          <span class="flex items-center gap-1.5">
+            <span class="text-[10px]">{{ sections.attributes ? '▼' : '▶' }}</span>
+            ATRIBUTOS
+            <span class="text-[9px] text-[var(--text-muted)] font-normal">({{ nodeData.attributes.length }})</span>
+          </span>
+          <button (click)="addAttribute(); $event.stopPropagation()" class="text-[var(--primary)] hover:text-white p-0.5 rounded hover:bg-[var(--surface-3)]">
+            <lucide-icon name="plus" [size]="12"></lucide-icon>
+          </button>
+        </button>
+
+        <div *ngIf="sections.attributes" class="prop-section-body">
+          <div *ngFor="let attr of nodeData.attributes; let i = index"
+               class="bg-[var(--surface-1)] border border-[var(--border)] rounded p-2 flex flex-col gap-1.5 mb-1.5">
+            <div class="flex gap-1 items-center">
+              <select [(ngModel)]="attr.visibility" (ngModelChange)="updateNode()"
+                      class="w-10 bg-[var(--surface-3)] border border-[var(--border)] rounded px-0.5 py-0.5 text-[10px] text-center font-mono text-white">
+                <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.value }}</option>
+              </select>
+              <input type="text" [(ngModel)]="attr.name" (ngModelChange)="updateNode()"
+                     class="flex-1 min-w-0 prop-input-sm" placeholder="nombre">
+              <button (click)="removeAttribute(i)" class="text-red-400/60 hover:text-red-400 p-0.5 rounded hover:bg-red-400/10">
+                <lucide-icon name="x" [size]="12"></lucide-icon>
+              </button>
+            </div>
+            <div class="flex gap-1">
+              <input type="text" [(ngModel)]="attr.type" (ngModelChange)="updateNode()"
+                     class="flex-1 min-w-0 prop-input-sm" placeholder="Tipo">
+              <input type="text" [(ngModel)]="attr.default_value" (ngModelChange)="updateNode()"
+                     class="w-16 prop-input-sm" placeholder="Default">
+            </div>
+            <label class="flex items-center gap-1 text-[9px] text-[var(--text-muted)]">
+              <input type="checkbox" [(ngModel)]="attr.is_static" (ngModelChange)="updateNode()" class="w-3 h-3"> Static
+            </label>
+          </div>
+          <div *ngIf="!nodeData.attributes || nodeData.attributes.length === 0"
+               class="text-[10px] text-[var(--text-muted)] text-center py-2 italic">
+            Sin atributos — clic + para agregar
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Methods -->
+      <div class="prop-section">
+        <button (click)="toggleSection('methods')" class="prop-section-header">
+          <span class="flex items-center gap-1.5">
+            <span class="text-[10px]">{{ sections.methods ? '▼' : '▶' }}</span>
+            MÉTODOS
+            <span class="text-[9px] text-[var(--text-muted)] font-normal">({{ nodeData.methods.length }})</span>
+          </span>
+          <button (click)="addMethod(); $event.stopPropagation()" class="text-[var(--primary)] hover:text-white p-0.5 rounded hover:bg-[var(--surface-3)]">
+            <lucide-icon name="plus" [size]="12"></lucide-icon>
+          </button>
+        </button>
+
+        <div *ngIf="sections.methods" class="prop-section-body">
+          <div *ngFor="let m of nodeData.methods; let i = index"
+               class="bg-[var(--surface-1)] border border-[var(--border)] rounded p-2 flex flex-col gap-1.5 mb-1.5">
+            <div class="flex gap-1 items-center">
+              <select [(ngModel)]="m.visibility" (ngModelChange)="updateNode()"
+                      class="w-10 bg-[var(--surface-3)] border border-[var(--border)] rounded px-0.5 py-0.5 text-[10px] text-center font-mono">
+                <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.value }}</option>
+              </select>
+              <input type="text" [(ngModel)]="m.name" (ngModelChange)="updateNode()"
+                     class="flex-1 min-w-0 prop-input-sm" placeholder="nombre">
+              <button (click)="removeMethod(i)" class="text-red-400/60 hover:text-red-400 p-0.5 rounded hover:bg-red-400/10">
+                <lucide-icon name="x" [size]="12"></lucide-icon>
+              </button>
+            </div>
+            <div class="flex gap-1">
+              <input type="text" [(ngModel)]="m.params" (ngModelChange)="updateNode()"
+                     class="flex-1 min-w-0 prop-input-sm" placeholder="Parámetros">
+              <input type="text" [(ngModel)]="m.return_type" (ngModelChange)="updateNode()"
+                     class="w-14 prop-input-sm" placeholder="Ret.">
+            </div>
+            <div class="flex gap-3 items-center">
+              <label class="flex items-center gap-1 text-[9px] text-[var(--text-muted)]">
+                <input type="checkbox" [(ngModel)]="m.is_static" (ngModelChange)="updateNode()" class="w-3 h-3"> Static
+              </label>
+              <label class="flex items-center gap-1 text-[9px] text-[var(--text-muted)]">
+                <input type="checkbox" [(ngModel)]="m.is_abstract" (ngModelChange)="updateNode()" class="w-3 h-3"> Abstract
+              </label>
+            </div>
+          </div>
+          <div *ngIf="!nodeData.methods || nodeData.methods.length === 0"
+               class="text-[10px] text-[var(--text-muted)] text-center py-2 italic">
+            Sin métodos — clic + para agregar
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ EDGE PROPERTIES ═══ -->
+    <div *ngIf="cellType === 'edge' && edgeData" class="flex flex-col gap-1">
+
+      <div class="prop-section">
+        <button (click)="toggleSection('edgeDetails')" class="prop-section-header">
+          <span class="flex items-center gap-1.5">
+            <span class="text-[10px]">{{ sections.edgeDetails ? '▼' : '▶' }}</span>
+            RELACIÓN
+          </span>
+        </button>
+
+        <div *ngIf="sections.edgeDetails" class="prop-section-body">
+          <!-- Relationship Type -->
+          <div class="prop-field">
+            <label class="prop-label">Tipo de relación</label>
+            <select [ngModel]="edgeData.type" (ngModelChange)="changeEdgeType($event)" class="prop-input">
+              <option *ngFor="let et of edgeTypes" [value]="et.value">
+                {{ et.icon }} {{ et.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Label -->
+          <div class="prop-field">
+            <label class="prop-label">Etiqueta</label>
+            <input type="text" [(ngModel)]="edgeData.label" (ngModelChange)="updateEdge()"
+                   class="prop-input" placeholder="ej. extends, uses">
+          </div>
+
+          <!-- Multiplicities -->
+          <div class="flex gap-2">
+            <div class="prop-field flex-1">
+              <label class="prop-label">Mult. Origen</label>
+              <select [(ngModel)]="edgeData.source_multiplicity" (ngModelChange)="updateEdge()" class="prop-input">
+                <option *ngFor="let m of multiplicityOptions" [value]="m">{{ m || '—' }}</option>
+              </select>
+            </div>
+            <div class="prop-field flex-1">
+              <label class="prop-label">Mult. Destino</label>
+              <select [(ngModel)]="edgeData.target_multiplicity" (ngModelChange)="updateEdge()" class="prop-input">
+                <option *ngFor="let m of multiplicityOptions" [value]="m">{{ m || '—' }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Role names -->
+          <div class="flex gap-2">
+            <div class="prop-field flex-1">
+              <label class="prop-label">Rol Origen</label>
+              <input type="text" [(ngModel)]="edgeData.source_role" (ngModelChange)="updateEdge()"
+                     class="prop-input" placeholder="ej. owner">
+            </div>
+            <div class="prop-field flex-1">
+              <label class="prop-label">Rol Destino</label>
+              <input type="text" [(ngModel)]="edgeData.target_role" (ngModelChange)="updateEdge()"
+                     class="prop-input" placeholder="ej. items">
+            </div>
+          </div>
+
+          <!-- Visual legend -->
+          <div class="mt-2 p-2 bg-[var(--surface-1)] rounded border border-[var(--border)]">
+            <div class="text-[9px] text-[var(--text-muted)] mb-1">Convención UML 2.5:</div>
+            <div class="grid grid-cols-2 gap-1 text-[9px] text-[var(--text-secondary)]">
+              <span>─▷ Generalización</span>
+              <span>┈▷ Realización</span>
+              <span>◆─ Composición</span>
+              <span>◇─ Agregación</span>
+              <span>─▶ Asociación</span>
+              <span>┈▶ Dependencia</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,82 @@
+<div class="flex flex-col h-[calc(100vh-4rem)] md:flex-row bg-[var(--surface-1)]">
+  
+  <!-- Sidebar / Folder Tree -->
+  <div class="w-full md:w-64 border-b md:border-b-0 md:border-r border-[var(--border)] bg-[var(--surface-2)] flex flex-col shrink-0 overflow-y-auto">
+    <div class="p-4 border-b border-[var(--border)]">
+      <h2 class="text-white font-medium">Carpetas</h2>
+    </div>
+    
+    <div class="p-2 space-y-1">
+      <button (click)="selectFolder(null)" 
+              [class.bg-[var(--surface-3)]]="activeFolderId === null"
+              [class.text-white]="activeFolderId === null"
+              class="w-full text-left px-3 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors flex items-center gap-2">
+        <span>📁</span> Todos los proyectos
+      </button>
+
+      <div *ngIf="loadingFolders" class="px-3 py-2 text-sm text-[var(--text-muted)] animate-pulse">
+        Cargando carpetas...
+      </div>
+
+      <ng-container *ngFor="let folder of folders">
+        <button (click)="selectFolder(folder.id)" 
+                [class.bg-[var(--surface-3)]]="activeFolderId === folder.id"
+                [class.text-white]="activeFolderId === folder.id"
+                class="w-full text-left px-3 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors flex items-center gap-2">
+          <span>{{ folder.type === 'personal' ? '👤' : '👥' }}</span> {{ folder.name }}
+        </button>
+        <!-- In a real app we would have a recursive ng-template for subfolders -->
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-1 flex flex-col min-w-0">
+    
+    <!-- Header & Filters -->
+    <div class="p-4 md:p-6 border-b border-[var(--border)] flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center bg-[var(--surface-1)]">
+      <h1 class="text-2xl font-bold text-white">Repertorio de Proyectos</h1>
+      
+      <div class="flex flex-wrap gap-3 w-full sm:w-auto">
+        <input type="text" [(ngModel)]="searchQuery" (keyup.enter)="onSearch()" placeholder="Buscar proyecto..." 
+               class="bg-[var(--surface-2)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] flex-1 sm:flex-none">
+        
+        <select [(ngModel)]="statusFilter" (change)="onFilterChange()" 
+                class="bg-[var(--surface-2)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--primary)]">
+          <option value="">Todos los estados</option>
+          <option value="in_progress">En Proceso</option>
+          <option value="completed">Completados</option>
+          <option value="review">En Revisión</option>
+          <option value="archived">Archivados</option>
+        </select>
+
+        <button *ngIf="(user$ | async)?.role === 'admin'" class="px-4 py-1.5 bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
+          + Nuevo Proyecto
+        </button>
+      </div>
+    </div>
+
+    <!-- Project Grid -->
+    <div class="flex-1 overflow-y-auto p-4 md:p-6">
+      
+      <div *ngIf="loadingProjects" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div *ngFor="let i of [1,2,3,4,5,6]" class="bg-[var(--surface-2)] border border-[var(--border)] rounded-xl h-48 animate-pulse"></div>
+      </div>
+
+      <div *ngIf="!loadingProjects && projects.length === 0" class="flex flex-col items-center justify-center h-full text-[var(--text-muted)] py-12">
+        <div class="text-6xl mb-4">📭</div>
+        <h3 class="text-lg font-medium text-white mb-2">No se encontraron proyectos</h3>
+        <p class="text-sm text-center max-w-md">No hay proyectos que coincidan con los filtros seleccionados o la carpeta actual está vacía.</p>
+      </div>
+
+      <div *ngIf="!loadingProjects && projects.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <app-project-card *ngFor="let project of projects" 
+                          [project]="project"
+                          (view)="viewProject($event)"
+                          (edit)="editProject($event)">
+        </app-project-card>
+      </div>
+      
+    </div>
+  </div>
+</div>

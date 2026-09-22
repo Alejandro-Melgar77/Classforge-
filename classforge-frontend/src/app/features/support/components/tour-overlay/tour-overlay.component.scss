@@ -1,0 +1,15 @@
+.tour-glow-border {
+  filter: drop-shadow(0 0 8px rgba(45, 107, 228, 0.75));
+  animation: tour-pulse 2s infinite ease-in-out;
+}
+
+@keyframes tour-pulse {
+  0%, 100% {
+    stroke-opacity: 1;
+    stroke-width: 2.5;
+  }
+  50% {
+    stroke-opacity: 0.6;
+    stroke-width: 3.5;
+  }
+}

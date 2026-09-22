@@ -1,0 +1,24 @@
+:host {
+  display: block;
+}
+
+/* Animaciones suaves para el drawer de soporte */
+@keyframes supportSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-in {
+  animation: supportSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Micro-interacciones para botones */
+button:active {
+  transform: scale(0.96);
+}

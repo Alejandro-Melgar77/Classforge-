@@ -1,0 +1,80 @@
+<div class="h-9 bg-[var(--surface-2)]/80 border-b border-[var(--border)] flex items-center px-2 gap-0.5">
+
+  <!-- Edit Group -->
+  <div class="flex items-center gap-0.5">
+    <button (click)="undo()" class="toolbar-btn" title="Deshacer (Ctrl+Z)">
+      <lucide-icon name="undo" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="redo()" class="toolbar-btn" title="Rehacer (Ctrl+Y)">
+      <lucide-icon name="redo" [size]="15"></lucide-icon>
+    </button>
+  </div>
+
+  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+
+  <!-- Clipboard Group -->
+  <div class="flex items-center gap-0.5">
+    <button (click)="copy()" class="toolbar-btn" title="Copiar (Ctrl+C)">
+      <lucide-icon name="copy" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="paste()" class="toolbar-btn" title="Pegar (Ctrl+V)">
+      <lucide-icon name="clipboard-paste" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="deleteSelected()" class="toolbar-btn hover:!text-red-400" title="Eliminar seleccionado (Del)">
+      <lucide-icon name="trash-2" [size]="15"></lucide-icon>
+    </button>
+  </div>
+
+  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+
+  <!-- View Group -->
+  <div class="flex items-center gap-0.5">
+    <button (click)="zoomOut()" class="toolbar-btn" title="Alejar">
+      <lucide-icon name="zoom-out" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="zoomIn()" class="toolbar-btn" title="Acercar">
+      <lucide-icon name="zoom-in" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="fitView()" class="toolbar-btn" title="Ajustar vista (Ctrl+Shift+F)">
+      <lucide-icon name="maximize" [size]="15"></lucide-icon>
+    </button>
+    <button (click)="autoLayout()" class="toolbar-btn" title="Auto-distribuir">
+      <lucide-icon name="layout-grid" [size]="15"></lucide-icon>
+    </button>
+  </div>
+
+  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+
+  <!-- Export/Import Group -->
+  <div class="flex items-center gap-0.5 relative">
+    <div class="relative">
+      <button (click)="toggleExportMenu()" class="toolbar-btn flex items-center gap-1" title="Exportar">
+        <lucide-icon name="download" [size]="15"></lucide-icon>
+        <span class="text-[10px]">Exportar</span>
+        <span class="text-[8px] ml-0.5">▼</span>
+      </button>
+      <div *ngIf="exportMenuOpen" class="absolute left-0 top-full mt-1 w-36 bg-[var(--surface-3)] border border-[var(--border)] rounded-md shadow-xl overflow-hidden py-1 z-30">
+        <button (click)="exportPng()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
+          📷 Export PNG
+        </button>
+        <button (click)="exportPdf()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
+          📄 Export PDF
+        </button>
+        <div class="h-px bg-[var(--border)] my-0.5"></div>
+        <button (click)="exportXmi()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
+          📦 Export XMI
+        </button>
+        <button (click)="exportJson()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
+          📋 Export JSON
+        </button>
+      </div>
+    </div>
+
+    <!-- Import XMI -->
+    <label class="toolbar-btn flex items-center gap-1 cursor-pointer" title="Importar XMI">
+      <lucide-icon name="upload" [size]="15"></lucide-icon>
+      <span class="text-[10px]">Importar</span>
+      <input type="file" accept=".xmi,.xml" (change)="importXmi($event)" class="hidden">
+    </label>
+  </div>
+</div>

@@ -1,0 +1,102 @@
+<div *ngIf="tourService.isTourActive()" class="tour-overlay-container fixed inset-0 z-[9999] pointer-events-auto">
+  
+  <!-- SVG Mask para oscurecer y recortar el elemento objetivo (Efecto Canva) -->
+  <svg class="w-full h-full absolute inset-0 pointer-events-none">
+    <defs>
+      <mask id="tour-spotlight-mask">
+        <!-- Fondo blanco opaco (se oscurece) -->
+        <rect x="0" y="0" width="100%" height="100%" fill="white" />
+        <!-- Recorte transparente sobre el elemento objetivo -->
+        <rect *ngIf="rect" 
+              [attr.x]="rect.x - padding" 
+              [attr.y]="rect.y - padding" 
+              [attr.width]="rect.width + (padding * 2)" 
+              [attr.height]="rect.height + (padding * 2)" 
+              rx="12" 
+              fill="black" />
+      </mask>
+    </defs>
+
+    <!-- Fondo oscuro con máscara aplicada -->
+    <rect x="0" y="0" width="100%" height="100%" fill="rgba(15, 23, 42, 0.82)" mask="url(#tour-spotlight-mask)" />
+
+    <!-- Borde luminoso de neón alrededor del elemento enfocado -->
+    <rect *ngIf="rect" 
+          class="tour-glow-border"
+          [attr.x]="rect.x - padding" 
+          [attr.y]="rect.y - padding" 
+          [attr.width]="rect.width + (padding * 2)" 
+          [attr.height]="rect.height + (padding * 2)" 
+          rx="12" 
+          fill="none" 
+          stroke="#2D6BE4" 
+          stroke-width="2.5" />
+  </svg>
+
+  <!-- Popover Flotante de Explicación (Canva / UserGuiding Style) -->
+  <div class="tour-popover bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200"
+       [ngStyle]="popoverStyle">
+    
+    <!-- Barra de progreso superior -->
+    <div class="w-full bg-[var(--surface-3)] h-1.5">
+      <div class="bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] h-full transition-all duration-300 rounded-r"
+           [style.width.%]="progress"></div>
+    </div>
+
+    <!-- Encabezado del Popover -->
+    <div class="p-4 pb-2 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-[var(--primary)]/20 text-[var(--primary-light)] border border-[var(--primary)]/30">
+          {{ stepIndex + 1 }} / {{ totalSteps }}
+        </span>
+        <span class="text-xs text-[var(--text-secondary)] font-medium truncate max-w-[170px]">
+          {{ tour?.title }}
+        </span>
+      </div>
+
+      <button (click)="skip()" 
+              class="text-[var(--text-muted)] hover:text-white transition-colors p-1 rounded-lg hover:bg-[var(--surface-3)]" 
+              title="Cerrar tutorial (Esc)">
+        ✕
+      </button>
+    </div>
+
+    <!-- Cuerpo con Título y Descripción -->
+    <div class="px-5 py-3">
+      <h3 class="font-bold text-[var(--text-primary)] text-base mb-1.5 flex items-center gap-2">
+        <span>💡</span> {{ step?.title }}
+      </h3>
+      <p class="text-sm text-[var(--text-secondary)] leading-relaxed">
+        {{ step?.content }}
+      </p>
+
+      <!-- Pista de acción sugerida -->
+      <div *ngIf="step?.actionHint" class="mt-3 p-2 rounded-lg bg-[var(--surface-3)]/60 border border-[var(--border)] text-xs text-[var(--accent)] flex items-center gap-2">
+        <span>👉</span> <span>{{ step?.actionHint }}</span>
+      </div>
+    </div>
+
+    <!-- Pie con Botones de Navegación -->
+    <div class="p-4 pt-2 border-t border-[var(--border)] bg-[var(--surface-3)]/30 flex items-center justify-between">
+      <button (click)="skip()" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] font-medium transition-colors">
+        Saltar
+      </button>
+
+      <div class="flex items-center gap-2">
+        <button *ngIf="stepIndex > 0" 
+                (click)="prev()" 
+                class="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-4)] transition-colors">
+          Anterior
+        </button>
+
+        <button (click)="next()" 
+                class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--primary)] hover:bg-blue-600 text-white transition-all shadow-md flex items-center gap-1">
+          <span>{{ isLastStep ? '¡Entendido!' : 'Siguiente' }}</span>
+          <span *ngIf="!isLastStep">→</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</div>

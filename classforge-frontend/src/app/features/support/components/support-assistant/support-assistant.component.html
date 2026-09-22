@@ -1,0 +1,221 @@
+<!-- Botón Flotante de Soporte (Estilo Canva / UserGuiding) -->
+<div class="fixed bottom-6 right-6 z-40">
+  <button (click)="toggleOpen()" 
+          class="relative w-13 h-13 p-3.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-xl shadow-purple-900/40 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group"
+          title="Asistencia y Tutoriales en Tiempo Real">
+    
+    <!-- Ícono interactivo: Cambia a 'X' si está abierto, o '?' con destellos si está cerrado -->
+    <ng-container *ngIf="isOpen(); else closedIcon">
+      <span class="text-lg font-bold">✕</span>
+    </ng-container>
+    <ng-template #closedIcon>
+      <div class="relative flex items-center justify-center">
+        <!-- Ícono de interrogación / asistencia -->
+        <span class="text-xl font-black tracking-tight">?</span>
+        <!-- Pequeño punto pulsante de estado en vivo -->
+        <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+      </div>
+    </ng-template>
+
+    <!-- Tooltip Flotante on hover -->
+    <div class="absolute right-full mr-3 px-3 py-1.5 rounded-lg bg-[var(--surface-3)] text-xs text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-[var(--border)]">
+      ¿Necesitas ayuda? Pregúntame por texto o voz
+    </div>
+  </button>
+</div>
+
+<!-- Ventana / Drawer de Asistencia en Tiempo Real -->
+<div *ngIf="isOpen()" 
+     class="fixed bottom-22 right-6 w-96 max-w-[calc(100vw-2rem)] h-[580px] max-h-[82vh] z-50 bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
+
+  <!-- Encabezado de la Ventana de Soporte -->
+  <div class="p-4 bg-gradient-to-r from-[var(--surface-3)]/90 via-[var(--surface-2)] to-purple-950/40 border-b border-[var(--border)] flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white text-base shadow-sm">
+        🛡️
+      </div>
+      <div>
+        <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+          Soporte Interactivo
+          <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            En Vivo
+          </span>
+        </h2>
+        <p class="text-[11px] text-[var(--text-secondary)]">
+          Tutoriales en vivo, consultas por voz y texto
+        </p>
+      </div>
+    </div>
+
+    <button (click)="toggleOpen()" 
+            class="text-[var(--text-muted)] hover:text-white p-1 rounded-lg hover:bg-[var(--surface-3)] transition-colors">
+      ✕
+    </button>
+  </div>
+
+  <!-- Pestañas de Navegación del Asistente -->
+  <div class="flex border-b border-[var(--border)] bg-[var(--surface-1)] text-xs">
+    <button (click)="setTab('chat')" 
+            [class.border-b-2]="activeTab() === 'chat'"
+            [class.border-purple-500]="activeTab() === 'chat'"
+            [class.text-white]="activeTab() === 'chat'"
+            [class.text-[var(--text-secondary)]]="activeTab() !== 'chat'"
+            class="flex-1 py-2.5 font-medium text-center hover:text-white transition-colors flex items-center justify-center gap-1.5">
+      <span>💬</span> Chat & Voz
+    </button>
+    <button (click)="setTab('tours')" 
+            [class.border-b-2]="activeTab() === 'tours'"
+            [class.border-purple-500]="activeTab() === 'tours'"
+            [class.text-white]="activeTab() === 'tours'"
+            [class.text-[var(--text-secondary)]]="activeTab() !== 'tours'"
+            class="flex-1 py-2.5 font-medium text-center hover:text-white transition-colors flex items-center justify-center gap-1.5">
+      <span>📚</span> Tours ({{ tours.length }})
+    </button>
+    <button (click)="setTab('shortcuts')" 
+            [class.border-b-2]="activeTab() === 'shortcuts'"
+            [class.border-purple-500]="activeTab() === 'shortcuts'"
+            [class.text-white]="activeTab() === 'shortcuts'"
+            [class.text-[var(--text-secondary)]]="activeTab() !== 'shortcuts'"
+            class="flex-1 py-2.5 font-medium text-center hover:text-white transition-colors flex items-center justify-center gap-1.5">
+      <span>⌨️</span> Atajos
+    </button>
+  </div>
+
+  <!-- PESTAÑA 1: Chat & Voz con Asistente NLU y Disparador de Tours -->
+  <div *ngIf="activeTab() === 'chat'" class="flex-1 flex flex-col overflow-hidden">
+    
+    <!-- Mensajes de Conversación -->
+    <div id="support-chat-messages" class="flex-1 p-3.5 overflow-y-auto custom-scrollbar space-y-3">
+      <div *ngFor="let msg of messages" 
+           [ngClass]="{'items-end': msg.sender === 'user', 'items-start': msg.sender === 'assistant'}"
+           class="flex flex-col">
+        
+        <div class="flex items-start gap-2 max-w-[90%]"
+             [ngClass]="{'flex-row-reverse': msg.sender === 'user'}">
+          
+          <!-- Avatar -->
+          <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold"
+               [ngClass]="msg.sender === 'user' ? 'bg-[var(--primary)] text-white' : 'bg-gradient-to-tr from-purple-600 to-indigo-600 text-white'">
+            {{ msg.sender === 'user' ? 'Tú' : 'IA' }}
+          </div>
+
+          <!-- Burbuja de Mensaje -->
+          <div [ngClass]="msg.sender === 'user' ? 'bg-[var(--primary)] text-white rounded-br-none' : 'bg-[var(--surface-3)] text-[var(--text-primary)] rounded-bl-none border border-[var(--border)]'"
+               class="p-2.5 rounded-xl text-xs leading-relaxed shadow-sm">
+            <p>{{ msg.text }}</p>
+
+            <!-- Disparador de Tour Spotlight Interactivo (Efecto Canva) -->
+            <div *ngIf="msg.suggestedTourId" class="mt-2.5 pt-2 border-t border-[var(--border)]">
+              <button (click)="launchTour(msg.suggestedTourId)"
+                      class="w-full py-1.5 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow transition-all hover:scale-[1.02] active:scale-[0.98]">
+                <span>▶️</span>
+                <span>Mostrarme cómo hacerlo en vivo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <span class="text-[9px] text-[var(--text-muted)] mt-1 px-8">
+          {{ msg.timestamp | date:'HH:mm' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Sugerencias Rápidas en Chips -->
+    <div class="p-2 border-t border-[var(--border)] bg-[var(--surface-1)]/60">
+      <div class="text-[10px] font-semibold text-[var(--text-muted)] mb-1 px-1">Consultas frecuentes:</div>
+      <div class="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+        <button *ngFor="let s of quickSuggestions" 
+                (click)="askQuery(s)"
+                class="px-2 py-1 rounded-md bg-[var(--surface-3)]/60 hover:bg-[var(--surface-3)] text-[10px] text-[var(--text-secondary)] hover:text-white border border-[var(--border)] whitespace-nowrap transition-colors">
+          {{ s }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Indicador de Grabación de Voz -->
+    <div *ngIf="isRecording" class="px-3 py-1.5 bg-red-950/40 border-t border-red-500/30 flex items-center justify-between text-xs text-red-300 animate-pulse">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+        <span>Escuchando tu voz en español...</span>
+      </div>
+      <button (click)="toggleVoiceRecognition()" class="text-red-400 font-bold hover:underline">
+        Detener
+      </button>
+    </div>
+
+    <!-- Barra de Entrada (Texto y Micrófono) -->
+    <div class="p-2.5 border-t border-[var(--border)] bg-[var(--surface-2)] flex items-center gap-2">
+      <!-- Botón de Reconocimiento de Voz -->
+      <button (click)="toggleVoiceRecognition()" 
+              [ngClass]="isRecording ? 'bg-red-600 text-white animate-bounce' : 'bg-[var(--surface-3)] text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-4)]'"
+              class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors border border-[var(--border)]"
+              title="Dictar consulta por voz (Web Speech API)">
+        <span>🎤</span>
+      </button>
+
+      <!-- Input de Texto -->
+      <input [(ngModel)]="queryText" 
+             (keyup.enter)="askQuery()"
+             type="text" 
+             placeholder="Pregunta algo o di 'cómo creo un diagrama'..."
+             class="flex-1 bg-[var(--surface-1)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs text-white placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500 transition-colors" />
+
+      <!-- Botón Enviar -->
+      <button (click)="askQuery()" 
+              [disabled]="!queryText.trim()"
+              class="w-9 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:hover:bg-purple-600 text-white flex items-center justify-center shrink-0 transition-colors shadow">
+        <span>➤</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- PESTAÑA 2: Catálogo de Tours Guiados Interactivos -->
+  <div *ngIf="activeTab() === 'tours'" class="flex-1 p-3.5 overflow-y-auto custom-scrollbar space-y-2.5">
+    <div *ngFor="let t of tours" 
+         class="p-3 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] hover:border-purple-500/50 transition-all flex flex-col justify-between group">
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-purple-500/15 text-purple-300 border border-purple-500/25">
+            {{ t.category }}
+          </span>
+          <span class="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+            ⏱️ {{ t.estimatedTime }} • {{ t.steps.length }} pasos
+          </span>
+        </div>
+        <h4 class="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">
+          {{ t.title }}
+        </h4>
+        <p class="text-[11px] text-[var(--text-secondary)] mt-1 leading-relaxed">
+          {{ t.description }}
+        </p>
+      </div>
+
+      <div class="mt-3 pt-2.5 border-t border-[var(--border)]/60 flex items-center justify-end">
+        <button (click)="launchTour(t.id)" 
+                class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow transition-all hover:scale-105 active:scale-95">
+          <span>▶️</span> Iniciar Tour
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PESTAÑA 3: Atajos de Teclado Rápidos -->
+  <div *ngIf="activeTab() === 'shortcuts'" class="flex-1 p-3.5 overflow-y-auto custom-scrollbar">
+    <div class="text-xs font-bold text-white mb-2">Comandos de teclado del lienzo:</div>
+    <div class="space-y-2">
+      <div *ngFor="let k of keyboardShortcuts" 
+           class="p-2 rounded-lg bg-[var(--surface-1)] border border-[var(--border)] flex items-center justify-between text-xs">
+        <span class="text-[var(--text-secondary)]">{{ k.description }}</span>
+        <kbd class="px-2 py-0.5 rounded bg-[var(--surface-3)] border border-[var(--border)] text-[var(--primary-light)] font-mono font-bold text-[11px]">
+          {{ k.key }}
+        </kbd>
+      </div>
+    </div>
+  </div>
+
+</div>
