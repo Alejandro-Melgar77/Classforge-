@@ -10,6 +10,7 @@ router = APIRouter()
 def get_folder_service(db = Depends(get_db)):
     return FolderService(db)
 
+@router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
 async def create_folder(
     data: FolderCreate,
@@ -19,6 +20,7 @@ async def create_folder(
     folder = await service.create_folder(data, current_user)
     return StandardResponse(success=True, message="Folder created", data=FolderResponse.from_mongo(folder))
 
+@router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_folders(
     current_user = Depends(get_current_user),

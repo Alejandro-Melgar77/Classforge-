@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../core/services/api_service.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/project_model.dart';
+import '../../models/team_model.dart';
+import '../../models/user_model.dart';
 import '../diagrams/diagram_viewer_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  final Function(int)? onNavigateTab;
+
+  const DashboardScreen({Key? key, this.onNavigateTab}) : super(key: key);
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -16,6 +22,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   DashboardStatsModel? _stats;
   List<ProjectModel> _recentProjects = [];
+  List<TeamModel> _teams = [];
+  List<UserModel> _users = [];
   bool _isLoading = true;
 
   @override
@@ -28,11 +36,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoading = true);
     final stats = await _apiService.getDashboardStats();
     final projects = await _apiService.getProjects();
+    final teams = await _apiService.getTeams();
+    final users = await _apiService.getUsers();
 
     if (mounted) {
       setState(() {
         _stats = stats;
-        _recentProjects = projects.take(5).toList();
+        _recentProjects = projects.take(4).toList();
+        _teams = teams;
+        _users = users;
         _isLoading = false;
       });
     }
@@ -48,7 +60,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _apiService.currentUser;
-    final userName = user?.fullName ?? user?.name ?? 'Usuario';
+    final userName = user?.fullName ?? user?.name ?? 'Ing. Alejandro Melgar';
+    final push = Provider.of<PushNotificationService>(context, listen: false);
 
     return Scaffold(
       backgroundColor: AppTheme.surface1,
@@ -59,113 +72,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
             : ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 children: [
-                  // Greeting and Profile Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_getGreeting()},',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: AppTheme.textSecondary,
+                  // Encabezado Formal Ejecutivo
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface2,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_getGreeting()},',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  userName,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          Text(
-                            userName,
-                            style: GoogleFonts.inter(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textPrimary,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.primary.withOpacity(0.35)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    user?.role.toUpperCase() ?? 'ADMIN',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryLight,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                          ],
                         ),
-                        child: Text(
-                          user?.role.toUpperCase() ?? 'DEV',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryLight,
-                          ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(Icons.security, size: 14, color: Color(0xFF10B981)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Sesión Corporativa Activa • ClassForge Studio',
+                              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  // Metrics Grid
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 1.45,
-                    children: [
-                      _buildMetricCard(
-                        title: 'Total Proyectos',
-                        value: (_stats?.totalProjects ?? _recentProjects.length).toString(),
-                        icon: Icons.folder_outlined,
-                        color: AppTheme.primary,
-                      ),
-                      _buildMetricCard(
-                        title: 'Activos',
-                        value: (_stats?.activeProjects ?? 2).toString(),
-                        icon: Icons.trending_up,
-                        color: AppTheme.accent,
-                      ),
-                      _buildMetricCard(
-                        title: 'Completados',
-                        value: (_stats?.completedProjects ?? 1).toString(),
-                        icon: Icons.check_circle_outline,
-                        color: const Color(0xFF10B981),
-                      ),
-                      _buildMetricCard(
-                        title: 'Equipos',
-                        value: (_stats?.totalTeams ?? 1).toString(),
-                        icon: Icons.people_outline,
-                        color: AppTheme.warning,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Quick Offline NLU Banner
+                  // Acceso Directo al Lienzo Conceptual UML
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          AppTheme.primary.withOpacity(0.2),
-                          AppTheme.surface2,
+                          AppTheme.primary.withOpacity(0.25),
+                          const Color(0xFF0F172A),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.primary.withOpacity(0.4)),
                     ),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppTheme.primary.withOpacity(0.25),
-                            shape: BoxShape.circle,
+                            color: AppTheme.primary,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.bolt, color: AppTheme.primaryLight, size: 24),
+                          child: const Icon(Icons.account_tree_outlined, color: Colors.white, size: 28),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -173,287 +188,322 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'NLU On-Device Offline',
+                                'Lienzo Conceptual Bancario',
                                 style: GoogleFonts.inter(
-                                  fontSize: 14,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: AppTheme.textPrimary,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Motor ultraligero <1ms sin internet listo para consultas.',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondary,
-                                ),
+                                'Visor interactivo 60 FPS con zoom, clases y relaciones.',
+                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textSecondary),
                               ),
                             ],
                           ),
                         ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DiagramViewerScreen(
+                                  diagramId: 'diag-01',
+                                  initialName: 'Diagrama Conceptual Bancario',
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text('Abrir', style: TextStyle(fontSize: 12)),
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
-                  // Recent Projects Header
+                  // Métricas KPIs (4 Tarjetas)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Proyectos Recientes',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
+                      Expanded(
+                        child: _buildKpiCard(
+                          title: 'Proyectos',
+                          count: '${_stats?.totalProjects ?? 8}',
+                          subtitle: '${_stats?.activeProjects ?? 5} en progreso',
+                          icon: Icons.folder_outlined,
+                          color: AppTheme.primaryLight,
+                          onTap: () => widget.onNavigateTab?.call(1),
                         ),
                       ),
-                      Text(
-                        '${_recentProjects.length} proyectos',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppTheme.textMuted,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildKpiCard(
+                          title: 'Diagramas UML',
+                          count: '14',
+                          subtitle: 'Sincronizados',
+                          icon: Icons.schema_outlined,
+                          color: AppTheme.accent,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DiagramViewerScreen(diagramId: 'diag-01'),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
-                  // Project List
-                  if (_recentProjects.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'No hay proyectos recientes disponibles.',
-                        style: GoogleFonts.inter(color: AppTheme.textMuted),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildKpiCard(
+                          title: 'Equipos Scrum',
+                          count: '${_teams.length}',
+                          subtitle: 'Asignados',
+                          icon: Icons.groups_outlined,
+                          color: const Color(0xFF10B981),
+                          onTap: () => widget.onNavigateTab?.call(2),
+                        ),
                       ),
-                    )
-                  else
-                    ..._recentProjects.map((project) => _buildProjectCard(project)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildKpiCard(
+                          title: 'Ingenieros',
+                          count: '${_users.length}',
+                          subtitle: 'Activos',
+                          icon: Icons.person_outline,
+                          color: const Color(0xFFF59E0B),
+                          onTap: () => widget.onNavigateTab?.call(3),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Sección: Proyectos Recientes
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Repertorio de Proyectos Recientes',
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => widget.onNavigateTab?.call(1),
+                        child: const Text('Ver Todos →', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ..._recentProjects.map((project) => _buildProjectCard(project)),
+                  const SizedBox(height: 20),
+
+                  // Sección: Notificación en Barra del Teléfono
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface2,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.notifications_active_outlined, color: AppTheme.accent, size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Probar Alerta en Barra de Android',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Genera un evento push directamente en la barra superior del celular.',
+                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.surface3,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          onPressed: () {
+                            push.triggerInstantPush(
+                              title: '🚀 ClassForge • Notificación de Sistema',
+                              message: 'Código Spring Boot 3 generado y sincronizado con éxito.',
+                              type: 'backend_generated',
+                              diagramId: 'diag-01',
+                            );
+                          },
+                          child: const Text('Probar', style: TextStyle(fontSize: 11, color: AppTheme.primaryLight)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
       ),
     );
   }
 
-  Widget _buildMetricCard({
+  Widget _buildKpiCard({
     required String title,
-    required String value,
+    required String count,
+    required String subtitle,
     required IconData icon,
     required Color color,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
                 ),
-              ),
-              Icon(icon, color: color, size: 20),
-            ],
-          ),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
+                Icon(icon, color: color, size: 18),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              count,
+              style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildProjectCard(ProjectModel project) {
-    Color statusColor;
-    switch (project.status) {
-      case 'completed':
-        statusColor = const Color(0xFF10B981);
-        break;
-      case 'review':
-        statusColor = AppTheme.warning;
-        break;
-      case 'in_progress':
-      default:
-        statusColor = AppTheme.primary;
-        break;
+    Color statusColor = const Color(0xFF10B981);
+    String statusLabel = 'En Progreso';
+    if (project.status == 'completed') {
+      statusColor = AppTheme.primaryLight;
+      statusLabel = 'Completado';
+    } else if (project.status == 'review') {
+      statusColor = const Color(0xFFF59E0B);
+      statusLabel = 'En Revisión';
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: AppTheme.surface2,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _openProjectDiagrams(project),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      project.name,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: statusColor.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      project.status.toUpperCase(),
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: statusColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                project.description.isNotEmpty ? project.description : 'Sin descripción',
-                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    project.teamName ?? 'Personal',
+        side: const BorderSide(color: AppTheme.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    project.name,
                     style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppTheme.textMuted,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
                     ),
                   ),
-                  Row(
-                    children: [
-                      Text(
-                        'Ver Diagramas',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppTheme.primaryLight,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_forward, size: 14, color: AppTheme.primaryLight),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openProjectDiagrams(ProjectModel project) async {
-    final diagrams = await _apiService.getDiagrams(projectId: project.id);
-    if (!mounted) return;
-
-    if (diagrams.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Este proyecto aún no tiene diagramas creados.'),
-          backgroundColor: AppTheme.surface3,
-        ),
-      );
-      return;
-    }
-
-    if (diagrams.length == 1) {
-      Navigator.push(
-        context,
-        _buildPageRoute(diagrams.first.id, diagrams.first.name),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surface2,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Diagramas de ${project.name}',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
                 ),
-              ),
-              const SizedBox(height: 12),
-              ...diagrams.map((d) {
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.account_tree_outlined, color: AppTheme.primary),
-                  title: Text(d.name, style: GoogleFonts.inter(color: AppTheme.textPrimary)),
-                  subtitle: Text('v${d.version} • ${d.status}',
-                      style: GoogleFonts.inter(color: AppTheme.textMuted, fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
-                  onTap: () {
-                    Navigator.pop(context);
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              project.description,
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  project.teamName ?? 'Equipo Core',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                  icon: const Icon(Icons.remove_red_eye, size: 14, color: AppTheme.primaryLight),
+                  label: const Text('Ver Diagrama', style: TextStyle(fontSize: 11, color: AppTheme.primaryLight)),
+                  onPressed: () {
                     Navigator.push(
                       context,
-                      _buildPageRoute(d.id, d.name),
+                      MaterialPageRoute(
+                        builder: (context) => const DiagramViewerScreen(
+                          diagramId: 'diag-01',
+                          initialName: 'Diagrama Conceptual Bancario',
+                        ),
+                      ),
                     );
                   },
-                );
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  MaterialPageRoute _buildPageRoute(String diagramId, String name) {
-    return MaterialPageRoute(
-      builder: (context) => DiagramViewerScreen(
-        diagramId: diagramId,
-        initialName: name,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

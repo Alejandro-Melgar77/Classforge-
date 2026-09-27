@@ -7,6 +7,7 @@ from typing import List
 
 router = APIRouter()
 
+@router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
 async def create_user(
     data: UserCreateAdmin,
@@ -31,6 +32,7 @@ async def create_user(
     await user_repo.log_audit(str(current_user["_id"]), "CREATE_USER", "users", user_id, metadata={"role": user_data["role"]}, ip=request.client.host)
     return StandardResponse(success=True, message="Usuario creado exitosamente", data={"id": user_id})
 
+@router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_users(current_user = Depends(get_current_user), user_repo: UserRepository = Depends(get_user_repository)):
     users = await user_repo.get_all()

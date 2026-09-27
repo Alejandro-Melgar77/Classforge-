@@ -10,6 +10,7 @@ router = APIRouter()
 def get_team_service(db = Depends(get_db)):
     return TeamService(db)
 
+@router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
 async def create_team(
     data: TeamCreate,
@@ -19,6 +20,7 @@ async def create_team(
     team = await service.create_team(data, str(current_user["_id"]))
     return StandardResponse(success=True, message="Team created successfully", data=TeamResponse.from_mongo(team))
 
+@router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_teams(
     current_user = Depends(get_current_user),

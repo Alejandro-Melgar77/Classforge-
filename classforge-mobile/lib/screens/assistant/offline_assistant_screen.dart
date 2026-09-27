@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../../core/services/api_service.dart';
 import '../../core/services/offline_nlu_service.dart';
+import '../../core/services/voice_recognition_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../diagrams/diagram_viewer_screen.dart';
 
 class OfflineAssistantScreen extends StatefulWidget {
   const OfflineAssistantScreen({Key? key}) : super(key: key);
@@ -10,23 +15,44 @@ class OfflineAssistantScreen extends StatefulWidget {
   State<OfflineAssistantScreen> createState() => _OfflineAssistantScreenState();
 }
 
-class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
+class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final OfflineNluService _nluService = OfflineNluService();
+  final VoiceRecognitionService _voiceService = VoiceRecognitionService();
 
   final List<Map<String, dynamic>> _history = [];
   bool _isListening = false;
+  String _liveTranscription = '';
+  late AnimationController _waveController;
 
   final List<String> _quickSuggestions = [
-    'crear clase Usuario con atributos id:int, email:string',
+    'crear clase Factura con id:long, monto:double',
     'crear clase Pedido con atributos total:double',
-    'relacionar Usuario con Pedido por composicion',
-    'hacer que Cliente herede de Persona',
-    'agregar atributo activo:boolean a la clase Usuario',
-    'agregar metodo login(email, pass):boolean a la clase Usuario',
+    'relacionar Usuario con CuentaBancaria por composicion',
+    'hacer que Administrador herede de Usuario',
+    'agregar atributo saldo:double a CuentaBancaria',
+    'agregar metodo pagar(monto):boolean a Factura',
     'buscar clase Usuario',
     'resumen del diagrama',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _voiceService.initialize();
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _textController.dispose();
+    _voiceService.cancelListening();
+    super.dispose();
+  }
 
   void _executeCommand(String text) {
     if (text.trim().isEmpty) return;
@@ -37,25 +63,103 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
         'input': text.trim(),
         'result': result,
         'timestamp': DateTime.now(),
+        'applied': false,
       });
       _textController.clear();
+      _liveTranscription = '';
     });
+
+    try {
+      HapticFeedback.selectionClick();
+    } catch (_) {}
   }
 
-  void _toggleVoiceSimulation() {
-    setState(() => _isListening = !_isListening);
-
+  Future<void> _toggleMicListening() async {
     if (_isListening) {
-      // Simula captura de voz en dispositivo móvil
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted && _isListening) {
+      await _voiceService.stopListening();
+      setState(() => _isListening = false);
+      if (_liveTranscription.trim().isNotEmpty) {
+        _executeCommand(_liveTranscription);
+      }
+      return;
+    }
+
+    setState(() {
+      _isListening = true;
+      _liveTranscription = 'Escuchando tu voz...';
+    });
+
+    final success = await _voiceService.startListening(
+      onResult: (words, isFinal) {
+        if (mounted) {
           setState(() {
-            _isListening = false;
-            _textController.text = 'crear clase Factura con atributos id:long, monto:double';
+            _liveTranscription = words.isNotEmpty ? words : 'Escuchando...';
+            _textController.text = words;
           });
-          _executeCommand(_textController.text);
+          if (isFinal && words.trim().isNotEmpty) {
+            setState(() => _isListening = false);
+            _executeCommand(words);
+          }
         }
+      },
+    );
+
+    if (!success) {
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _liveTranscription = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _voiceService.lastError != null
+                  ? 'Micrófono: ${_voiceService.lastError}. Puedes escribir o seleccionar un comando rápido.'
+                  : 'Reconocimiento de voz no disponible en este dispositivo. Puedes usar los comandos rápidos o escribir.',
+              style: GoogleFonts.inter(fontSize: 12),
+            ),
+            backgroundColor: AppTheme.danger,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  void _applyResultToDiagram(int index, NluResult res) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final success = apiService.applyNluResultToDiagram('diag-01', res);
+
+    if (success) {
+      setState(() {
+        _history[index]['applied'] = true;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✓ ¡Cambios aplicados al lienzo conceptual!',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Ver en Lienzo',
+            textColor: Colors.white,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DiagramViewerScreen(
+                    diagramId: 'diag-01',
+                    initialName: 'Diagrama Conceptual Bancario',
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -69,7 +173,7 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
             const Icon(Icons.bolt, color: AppTheme.accent, size: 22),
             const SizedBox(width: 8),
             Text(
-              'Asistente IA Offline',
+              'Asistente de Modelado IA',
               style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
@@ -96,7 +200,7 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '0MB • <1ms',
+                  '<0.5ms • On-Device',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -156,11 +260,11 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                               color: AppTheme.primary.withOpacity(0.1),
                               border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
                             ),
-                            child: const Icon(Icons.mic_none, size: 48, color: AppTheme.primaryLight),
+                            child: const Icon(Icons.mic, size: 48, color: AppTheme.primaryLight),
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Motor NLU On-Device',
+                            'Modelado UML por Voz y Texto',
                             style: GoogleFonts.inter(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -169,7 +273,7 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Comandos en lenguaje natural por texto o voz procesados 100% en tu dispositivo sin necesidad de conexión ni descargas pesadas.',
+                            'Presiona el micrófono inferior y dicta comandos en lenguaje natural para generar clases, métodos, atributos y relaciones UML.',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: AppTheme.textSecondary,
@@ -188,29 +292,69 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                       final item = _history[index];
                       final input = item['input'] as String;
                       final NluResult res = item['result'] as NluResult;
-                      return _buildHistoryItem(input, res);
+                      final isApplied = item['applied'] as bool? ?? false;
+                      return _buildHistoryItem(index, input, res, isApplied);
                     },
                   ),
           ),
 
-          // Voice active indicator
+          // Voice active indicator with real-time waveform equalizer
           if (_isListening)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: AppTheme.danger.withOpacity(0.15),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              color: AppTheme.danger.withOpacity(0.18),
+              child: Column(
                 children: [
-                  const Icon(Icons.mic, color: AppTheme.danger, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Escuchando comando de voz offline...',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppTheme.danger,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.mic, color: AppTheme.danger, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Grabando audio del micrófono...',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: AppTheme.danger,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Animated sound wave bars
+                      Row(
+                        children: List.generate(6, (i) {
+                          return AnimatedBuilder(
+                            animation: _waveController,
+                            builder: (context, _) {
+                              final height = 6.0 +
+                                  ((i % 2 == 0 ? _waveController.value : 1.0 - _waveController.value) *
+                                      18.0);
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                width: 3.5,
+                                height: height,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              );
+                            },
+                          );
+                        }),
+                      ),
+                    ],
                   ),
+                  if (_liveTranscription.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _liveTranscription,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -223,18 +367,19 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
               children: [
                 IconButton(
                   icon: Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
+                    _isListening ? Icons.stop_circle : Icons.mic,
                     color: _isListening ? AppTheme.danger : AppTheme.accent,
+                    size: 28,
                   ),
-                  tooltip: 'Comando por voz offline',
-                  onPressed: _toggleVoiceSimulation,
+                  tooltip: _isListening ? 'Detener grabación' : 'Hablar por micrófono',
+                  onPressed: _toggleMicListening,
                 ),
                 Expanded(
                   child: TextField(
                     controller: _textController,
                     style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: 'Comando UML ej: crear clase Cuenta...',
+                      hintText: 'Comando UML ej: crear clase Factura...',
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       border: OutlineInputBorder(
@@ -258,7 +403,7 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
     );
   }
 
-  Widget _buildHistoryItem(String input, NluResult res) {
+  Widget _buildHistoryItem(int index, String input, NluResult res, bool isApplied) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -326,7 +471,8 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                           '⚡ ${res.latencyMs}ms',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
-                            color: AppTheme.textSecondary,
+                            color: const Color(0xFF10B981),
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -390,6 +536,29 @@ class _OfflineAssistantScreenState extends State<OfflineAssistantScreen> {
                                 fontSize: 11, color: AppTheme.accent),
                           ),
                         )),
+                  ],
+
+                  // Botón de aplicación directa al diagrama UML
+                  if (res.classes.isNotEmpty || res.relations.isNotEmpty || res.deletedElements.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isApplied ? const Color(0xFF10B981) : AppTheme.primary,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            icon: Icon(isApplied ? Icons.check : Icons.auto_awesome, size: 16),
+                            label: Text(
+                              isApplied ? '¡Aplicado al Diagrama!' : 'Aplicar al Diagrama en Vivo',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => _applyResultToDiagram(index, res),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ],
               ),

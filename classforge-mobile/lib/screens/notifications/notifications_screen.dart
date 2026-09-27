@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/websocket_service.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/notification_model.dart';
 import '../diagrams/diagram_viewer_screen.dart';
@@ -17,9 +18,45 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _filterUnreadOnly = false;
 
+  void _sendTestSystemNotification() {
+    final push = Provider.of<PushNotificationService>(context, listen: false);
+    push.triggerInstantPush(
+      title: '⚡ ClassForge • Evento en Vivo',
+      message: 'Ana Torres modificó la clase CuentaBancaria en el lienzo UML.',
+      type: 'diagram_modified',
+      diagramId: 'diag-01',
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✓ Notificación enviada a la barra de estado del teléfono'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _scheduleSystemNotification() {
+    final push = Provider.of<PushNotificationService>(context, listen: false);
+    push.schedulePush(
+      delay: const Duration(seconds: 4),
+      title: '👥 Colaborador Conectado',
+      message: 'David Rojas se ha unido a la sala del proyecto.',
+      type: 'team_member_added',
+      diagramId: 'diag-01',
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⏱️ Alerta programada: aparecerá en la barra del teléfono en 4 segundos.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ws = Provider.of<WebSocketService>(context);
+    final push = Provider.of<PushNotificationService>(context);
     final allNotifications = ws.notifications;
     final displayNotifications = _filterUnreadOnly
         ? allNotifications.where((n) => !n.isRead).toList()
@@ -29,10 +66,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: AppTheme.surface1,
       appBar: AppBar(
         title: Text(
-          'Notificaciones en Tiempo Real',
+          'Centro de Notificaciones Push',
           style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_alert_outlined, size: 20, color: AppTheme.accent),
+            tooltip: 'Probar Notificación en Barra',
+            onPressed: _sendTestSystemNotification,
+          ),
           if (allNotifications.isNotEmpty) ...[
             IconButton(
               icon: const Icon(Icons.done_all, size: 20),
@@ -49,10 +91,61 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       body: Column(
         children: [
+          // Banner de prueba en barra de notificaciones del teléfono
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: AppTheme.surface2,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.phone_android, size: 16, color: AppTheme.accent),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Barra de Notificaciones del Teléfono',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Prueba la llegada de notificaciones al sistema Android',
+                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppTheme.primary.withOpacity(0.2),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  ),
+                  icon: const Icon(Icons.send, size: 14, color: AppTheme.primaryLight),
+                  label: const Text('Disparar', style: TextStyle(fontSize: 11, color: AppTheme.primaryLight)),
+                  onPressed: _sendTestSystemNotification,
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: const Icon(Icons.timer_outlined, size: 18, color: AppTheme.accent),
+                  tooltip: 'Disparar en 4 seg',
+                  onPressed: _scheduleSystemNotification,
+                ),
+              ],
+            ),
+          ),
+
           // Filter Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppTheme.surface2,
+            color: AppTheme.surface1,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -64,7 +157,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       selectedColor: AppTheme.primary,
                       backgroundColor: AppTheme.surface3,
                       labelStyle: GoogleFonts.inter(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: !_filterUnreadOnly ? FontWeight.bold : FontWeight.normal,
                         color: !_filterUnreadOnly ? Colors.white : AppTheme.textSecondary,
                       ),
@@ -79,7 +172,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       selectedColor: AppTheme.primary,
                       backgroundColor: AppTheme.surface3,
                       labelStyle: GoogleFonts.inter(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: _filterUnreadOnly ? FontWeight.bold : FontWeight.normal,
                         color: _filterUnreadOnly ? Colors.white : AppTheme.textSecondary,
                       ),
@@ -94,14 +187,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: ws.isConnected ? AppTheme.accent : AppTheme.danger,
+                        color: Color(0xFF10B981),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      ws.isConnected ? 'WebSocket Activo' : 'Sin conexión WS',
+                      'Push Activo',
                       style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
                     ),
                   ],
@@ -131,7 +224,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Los eventos colaborativos del lienzo aparecerán aquí.',
+                          'Los eventos colaborativos del sistema se reflejan aquí y en la barra de Android.',
                           style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
                         ),
                       ],

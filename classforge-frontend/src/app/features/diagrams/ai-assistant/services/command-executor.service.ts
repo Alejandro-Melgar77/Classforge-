@@ -5,6 +5,15 @@ import { AutoSaveService } from '../../services/auto-save.service';
 import { UMLCommandResponse, UMLClassCommand, UMLRelationCommand } from '../models/ai-command.model';
 import { NodeType, EdgeType, UMLNodeData, UMLAttribute, UMLMethod, Visibility } from '../../models/diagram.model';
 
+export interface ExecutionResult {
+  success: boolean;
+  createdClasses: number;
+  updatedClasses: number;
+  createdRelations: number;
+  deletedElements: number;
+  message: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -13,11 +22,25 @@ export class CommandExecutorService {
   private collaborationService = inject(CollaborationService);
   private autoSaveService = inject(AutoSaveService);
 
-  public execute(command: UMLCommandResponse): void {
+  public execute(command: UMLCommandResponse): ExecutionResult {
     const graph = this.canvasService.getGraph();
-    if (!graph) return;
+    if (!graph) {
+      return {
+        success: false,
+        createdClasses: 0,
+        updatedClasses: 0,
+        createdRelations: 0,
+        deletedElements: 0,
+        message: 'Lienzo no inicializado.'
+      };
+    }
 
     const createdNodeMap = new Map<string, any>();
+    const affectedNodes: any[] = [];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let relCount = 0;
+    let delCount = 0;
 
     // 1. Process classes (create, update, or generate_system)
     if (command.classes && command.classes.length > 0) {
@@ -85,21 +108,25 @@ export class CommandExecutorService {
             data: updatedData
           });
           createdNodeMap.set(clsNameNorm, existingNode);
+          affectedNodes.push(existingNode);
+          updatedCount++;
         } else {
-          // Calculate grid position
+          // Dynamic non-overlapping grid layout
           const totalExisting = existingNodes.length + idx;
-          const col = totalExisting % 3;
-          const row = Math.floor(totalExisting / 3);
+          const cols = 3;
+          const col = totalExisting % cols;
+          const row = Math.floor(totalExisting / cols);
           const pos = {
-            x: 100 + (col * 270),
-            y: 80 + (row * 190)
+            x: 80 + (col * 280),
+            y: 80 + (row * 210)
           };
 
           const initialData: UMLNodeData = {
             name: cls.name,
             stereotype: cls.stereotype || null,
             attributes: attributesFormatted.length > 0 ? attributesFormatted : [
-              { name: 'id', type: 'Long', visibility: '+', default_value: null, is_static: false }
+              { name: 'id', type: 'Long', visibility: '+', default_value: null, is_static: false },
+              { name: 'nombre', type: 'String', visibility: '+', default_value: null, is_static: false }
             ],
             methods: methodsFormatted,
             notes: null
@@ -108,6 +135,8 @@ export class CommandExecutorService {
           const newNode = this.canvasService.addNode(nodeType, pos, undefined, initialData, undefined, false);
           if (newNode) {
             createdNodeMap.set(clsNameNorm, newNode);
+            affectedNodes.push(newNode);
+            createdCount++;
             this.collaborationService.sendNodeOperation('add', newNode.id, {
               nodeType,
               position: pos,
@@ -121,7 +150,7 @@ export class CommandExecutorService {
 
     // 2. Process relations
     if (command.relations && command.relations.length > 0) {
-      command.relations.forEach(rel => {
+      command.relations.forEach((rel, rIdx) => {
         const srcNorm = rel.source.trim().toLowerCase();
         const tgtNorm = rel.target.trim().toLowerCase();
 
@@ -130,7 +159,7 @@ export class CommandExecutorService {
 
         // If target or source doesn't exist yet, create them dynamically
         if (!sourceNode) {
-          const pos = { x: 100, y: 100 };
+          const pos = { x: 80 + (rIdx * 280), y: 80 };
           sourceNode = this.canvasService.addNode('class', pos, undefined, {
             name: rel.source,
             stereotype: null,
@@ -139,6 +168,9 @@ export class CommandExecutorService {
             methods: []
           }, undefined, false);
           if (sourceNode) {
+            createdNodeMap.set(srcNorm, sourceNode);
+            affectedNodes.push(sourceNode);
+            createdCount++;
             this.collaborationService.sendNodeOperation('add', sourceNode.id, {
               nodeType: 'class',
               position: pos,
@@ -149,7 +181,7 @@ export class CommandExecutorService {
         }
 
         if (!targetNode) {
-          const pos = { x: 380, y: 100 };
+          const pos = { x: 380 + (rIdx * 280), y: 80 };
           targetNode = this.canvasService.addNode('class', pos, undefined, {
             name: rel.target,
             stereotype: null,
@@ -158,6 +190,9 @@ export class CommandExecutorService {
             methods: []
           }, undefined, false);
           if (targetNode) {
+            createdNodeMap.set(tgtNorm, targetNode);
+            affectedNodes.push(targetNode);
+            createdCount++;
             this.collaborationService.sendNodeOperation('add', targetNode.id, {
               nodeType: 'class',
               position: pos,
@@ -182,6 +217,7 @@ export class CommandExecutorService {
           );
 
           if (newEdge) {
+            relCount++;
             this.collaborationService.sendEdgeOperation('add', edgeId, {
               type: edgeType,
               source: { cell: sourceNode.id },
@@ -203,12 +239,34 @@ export class CommandExecutorService {
         if (node) {
           const id = node.id;
           graph.removeCell(node);
+          delCount++;
           this.collaborationService.sendNodeOperation('delete', id, null);
         }
       });
     }
 
+    // 4. Select newly created/updated elements and adjust canvas view
+    if (affectedNodes.length > 0) {
+      graph.cleanSelection();
+      graph.select(affectedNodes);
+      this.canvasService.fitView();
+    }
+
     this.autoSaveService.markDirty();
+
+    const summaryParts: string[] = [];
+    if (createdCount > 0) summaryParts.push(`${createdCount} clase(s) creada(s)`);
+    if (updatedCount > 0) summaryParts.push(`${updatedCount} clase(s) modificada(s)`);
+    if (relCount > 0) summaryParts.push(`${relCount} relacion(es)`);
+    if (delCount > 0) summaryParts.push(`${delCount} elemento(s) eliminado(s)`);
+
+    return {
+      success: true,
+      createdClasses: createdCount,
+      updatedClasses: updatedCount,
+      createdRelations: relCount,
+      deletedElements: delCount,
+      message: summaryParts.length > 0 ? summaryParts.join(', ') : 'Comando ejecutado en el lienzo.'
+    };
   }
 }
-

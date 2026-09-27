@@ -11,6 +11,7 @@ router = APIRouter()
 def get_project_service(db = Depends(get_db)):
     return ProjectService(db)
 
+@router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
 async def create_project(
     data: ProjectCreate,
@@ -20,6 +21,7 @@ async def create_project(
     project = await service.create_project(data, current_user)
     return StandardResponse(success=True, message="Project created", data=ProjectResponse.from_mongo(project))
 
+@router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_projects(
     team_id: Optional[str] = Query(None),

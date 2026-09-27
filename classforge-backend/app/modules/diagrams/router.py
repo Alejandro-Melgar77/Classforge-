@@ -16,6 +16,7 @@ router = APIRouter()
 def get_diagram_service(db = Depends(get_db)):
     return DiagramService(db)
 
+@router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
 async def create_diagram(
     data: CreateDiagram,
@@ -28,6 +29,7 @@ async def create_diagram(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_diagrams(
     project_id: Optional[str] = Query(None),

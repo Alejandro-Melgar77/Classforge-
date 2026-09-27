@@ -1,0 +1,58 @@
+﻿version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: classforge-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: classforge
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - classforge-net
+
+  backend:
+    build:
+      context: ./classforge-backend
+      dockerfile: Dockerfile
+    container_name: classforge-backend
+    restart: always
+    environment:
+      - PROJECT_NAME=ClassForge
+      - API_V1_STR=/api/v1
+      - SECRET_KEY=super-secret-key-change-me-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - MONGODB_URL=mongodb://mongodb:27017
+      - DATABASE_NAME=classforge
+      - INACTIVITY_TIMEOUT_MINUTES=30
+      - CORS_ORIGINS=http://localhost,http://localhost:80,http://localhost:4200
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongodb
+    networks:
+      - classforge-net
+
+  frontend:
+    build:
+      context: ./classforge-frontend
+      dockerfile: Dockerfile
+    container_name: classforge-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - classforge-net
+
+volumes:
+  mongo_data:
+
+networks:
+  classforge-net:
+    driver: bridge
