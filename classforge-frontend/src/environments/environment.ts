@@ -1,5 +1,5 @@
 export const environment = {
-  production: false,
-  apiUrl: '/api/v1',
-  wsUrl: '/api/v1/ws'
+  production: true,
+  apiUrl: 'https://classforge-backend-8a14.onrender.com/api/v1',
+  wsUrl: 'wss://classforge-backend-8a14.onrender.com/api/v1/ws'
 };
