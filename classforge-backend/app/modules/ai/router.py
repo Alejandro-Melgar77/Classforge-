@@ -14,7 +14,12 @@ router = APIRouter()
 @router.post("/generate", response_model=StandardResponse)
 async def generate_uml(request: PromptRequest, current_user = Depends(get_current_user)):
     try:
-        result = await process_prompt(request.prompt, request.diagram_context)
+        result = await process_prompt(
+            prompt=request.prompt,
+            diagram_context=request.diagram_context,
+            api_key=request.api_key,
+            model=request.model
+        )
         return StandardResponse(
             success=True,
             data=result.model_dump(),

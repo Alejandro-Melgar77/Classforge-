@@ -38,8 +38,8 @@ import { CommandPreviewCardComponent } from './command-preview-card.component';
           <div>
             <h3 class="text-sm font-bold text-white flex items-center gap-1.5 leading-tight">
               Asistente IA UML
-              <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium">
-                100% Offline
+              <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold flex items-center gap-1">
+                <span>🧠</span> Gemini 3.7 Flash + NLU
               </span>
             </h3>
             <span class="text-[10px] text-slate-400">
@@ -497,14 +497,13 @@ export class AiDrawerComponent implements OnInit, OnDestroy {
   public audioWaveBars = [0, 1, 2, 3, 4, 5, 6];
 
   public quickSuggestions = [
-    'Crear clase Factura con total, fecha, nroFactura',
+    'Crear tienda e-commerce completa con Cliente, Pedido, DetallePedido, Producto, Categoria',
+    'Crear sistema hospitalario con Medico, Paciente, CitaMedica, Receta y Medicamento',
+    'Crear sistema bancario con Cliente, CuentaBancaria, CuentaAhorro, Transaccion',
     'Crear tabla Producto con precio, stock, codigo y asociar a Categoria 1..*',
-    'Crear clases Usuario, Rol, Permiso',
-    'Hacer que Admin herede de Usuario',
-    'Diseñar tienda e-commerce',
-    'Diseñar sistema bancario',
-    'Diseñar sistema universitario',
-    'Diseñar sistema de delivery'
+    'Hacer que Administrador herede de Usuario',
+    'Crear sistema universitario con Estudiante, Docente, Materia, Inscripcion',
+    'Crear sistema de delivery con Restaurante, Plato, PedidoDelivery, Repartidor'
   ];
 
   public offlineVoiceOptions = [
@@ -513,16 +512,35 @@ export class AiDrawerComponent implements OnInit, OnDestroy {
     'Crear clases Usuario, Rol, Permiso, Perfil',
     'Hacer que Administrador herede de Usuario',
     'Crear composicion entre Factura y DetalleFactura 1 a muchos',
-    'Diseñar tienda e-commerce completa',
-    'Diseñar sistema bancario con cuentas y transacciones',
-    'Diseñar sistema universitario con estudiantes y materias',
-    'Diseñar sistema hospitalario con medicos y citas',
-    'Diseñar sistema de delivery con restaurantes y pedidos',
-    'Diseñar sistema de inventario con proveedores y almacenes',
-    'Diseñar sistema de red social con publicaciones y comentarios'
+    'Diseñar tienda e-commerce completa con Cliente, Pedido, DetallePedido, Producto, Categoria',
+    'Diseñar sistema bancario con Cliente, CuentaBancaria, CuentaAhorro, Transaccion',
+    'Diseñar sistema universitario con Estudiante, Docente, Materia, Inscripcion',
+    'Diseñar sistema hospitalario con Medico, Paciente, CitaMedica, Receta',
+    'Diseñar sistema de delivery con Restaurante, Plato, PedidoDelivery, Repartidor',
+    'Diseñar sistema de inventario con Proveedor, Producto, Almacen, Movimiento'
   ];
 
   public complexExamples = [
+    {
+      title: 'Sistema E-Commerce Completo (1 solo Prompt)',
+      prompt: 'Diseñar tienda e-commerce con Cliente (id, nombre, email, direccion), Pedido (id, codigo, fecha, total, estado), DetallePedido (id, cantidad, precioUnitario), Producto (id, nombre, precio, stock) y Categoria (id, nombre, descripcion). Composición de Pedido a DetallePedido 1 a 1..*, asociación de DetallePedido a Producto * a 1, agregación de Producto a Categoria * a 1, y asociación de Cliente a Pedido 1 a 0..*'
+    },
+    {
+      title: 'Sistema Hospitalario / Clínica Médica (1 solo Prompt)',
+      prompt: 'Diseñar sistema de hospital con Medico (id, nombre, especialidad, nroColegiado), Paciente (id, nombre, ci, historialClinico), CitaMedica (id, fecha, hora, estado, motivo), Receta (id, fechaEmision, indicaciones) y Medicamento (id, nombreComercial, dosis). Medico se asocia 1 a 0..* con CitaMedica, Paciente se asocia 1 a 0..* con CitaMedica, CitaMedica tiene composición 1 a 0..1 con Receta, y Receta tiene agregación 1 a 1..* con Medicamento'
+    },
+    {
+      title: 'Sistema Bancario y Financiero con Herencia (1 solo Prompt)',
+      prompt: 'Diseñar sistema bancario con Cliente (id, ci, nombre, telefono), CuentaBancaria (id, numeroCuenta, saldo, tipoMoneda), CuentaAhorro (tasaInteres), CuentaCorriente (limiteSobregiro), Transaccion (id, fecha, monto, tipo). CuentaAhorro y CuentaCorriente heredan de CuentaBancaria. Cliente tiene asociación 1 a 1..* con CuentaBancaria, y CuentaBancaria tiene composición 1 a 0..* con Transaccion'
+    },
+    {
+      title: 'Sistema Universitario / Académico (1 solo Prompt)',
+      prompt: 'Diseñar sistema universitario con Estudiante (id, matricula, nombre, semestre), Docente (id, codigoDocente, nombre, especialidad), Materia (id, sigla, nombre, creditos), e Inscripcion (id, fecha, notaFinal, estado). Estudiante se asocia 1 a 0..* con Inscripcion, Materia se asocia 1 a 0..* con Inscripcion, y Docente se asocia 1 a 1..* con Materia'
+    },
+    {
+      title: 'Sistema de Delivery / Restaurante (1 solo Prompt)',
+      prompt: 'Crear sistema de delivery con Restaurante (id, nombre, direccion), Plato (id, nombre, precio, categoria), PedidoDelivery (id, nroPedido, direccionEntrega, total), Repartidor (id, nombre, vehiculo, telefono) y Cliente (id, nombre, telefono). Restaurante tiene composición 1 a 1..* con Plato, Cliente se asocia 1 a 0..* con PedidoDelivery, PedidoDelivery tiene agregación * a 1 con Repartidor, y PedidoDelivery tiene asociación * a 1 con Restaurante'
+    },
     {
       title: 'Crear tabla con atributos y cardinalidad',
       prompt: 'crea una tabla con el nombre Producto con 3 atributos de nombres precio, stock, codigo y que se asocie a Categoria con la cardinalidad 1..*'
@@ -550,26 +568,6 @@ export class AiDrawerComponent implements OnInit, OnDestroy {
     {
       title: 'Agregar método con parámetros y retorno',
       prompt: 'agregar metodo calcularTotal(descuento: float): double a Factura'
-    },
-    {
-      title: 'Sistema Bancario completo',
-      prompt: 'diseñar sistema bancario con Cliente, CuentaBancaria, CuentaAhorro, Transaccion'
-    },
-    {
-      title: 'Sistema E-Commerce completo',
-      prompt: 'diseñar tienda e-commerce con Usuario, Cliente, Producto, Categoria, Pedido, DetallePedido'
-    },
-    {
-      title: 'Sistema Académico / Universidad',
-      prompt: 'diseñar sistema universitario con Estudiante, Docente, Materia, Inscripcion'
-    },
-    {
-      title: 'Sistema Hospitalario / Clínica',
-      prompt: 'diseñar sistema de hospital con Medico, Paciente, CitaMedica'
-    },
-    {
-      title: 'Sistema de Delivery / Restaurante',
-      prompt: 'diseñar sistema de delivery con Restaurante, Plato, PedidoDelivery, Repartidor'
     },
     {
       title: 'Sistema de Inventario / Almacén',

@@ -113,12 +113,12 @@ export class CommandExecutorService {
         } else {
           // Dynamic non-overlapping grid layout
           const totalExisting = existingNodes.length + idx;
-          const cols = 3;
+          const cols = Math.max(3, Math.ceil(Math.sqrt((command.classes?.length || 1) + existingNodes.length)));
           const col = totalExisting % cols;
           const row = Math.floor(totalExisting / cols);
           const pos = {
-            x: 80 + (col * 280),
-            y: 80 + (row * 210)
+            x: 80 + (col * 320),
+            y: 80 + (row * 240)
           };
 
           const initialData: UMLNodeData = {
@@ -159,7 +159,7 @@ export class CommandExecutorService {
 
         // If target or source doesn't exist yet, create them dynamically
         if (!sourceNode) {
-          const pos = { x: 80 + (rIdx * 280), y: 80 };
+          const pos = { x: 80 + (rIdx * 320), y: 80 };
           sourceNode = this.canvasService.addNode('class', pos, undefined, {
             name: rel.source,
             stereotype: null,
@@ -181,7 +181,7 @@ export class CommandExecutorService {
         }
 
         if (!targetNode) {
-          const pos = { x: 380 + (rIdx * 280), y: 80 };
+          const pos = { x: 400 + (rIdx * 320), y: 80 };
           targetNode = this.canvasService.addNode('class', pos, undefined, {
             name: rel.target,
             stereotype: null,
@@ -203,7 +203,17 @@ export class CommandExecutorService {
         }
 
         if (sourceNode && targetNode) {
-          const edgeType: EdgeType = (rel.type as EdgeType) || 'association';
+          const rawType = (rel.type || 'association').toLowerCase().trim();
+          const edgeType: EdgeType = 
+            rawType.includes('her') || rawType.includes('inher') || rawType.includes('gen') ? 'inheritance' :
+            rawType.includes('comp') ? 'composition' :
+            rawType.includes('agreg') || rawType.includes('aggreg') ? 'aggregation' :
+            rawType.includes('dep') ? 'dependency' :
+            rawType.includes('real') || rawType.includes('impl') ? 'realization' :
+            'association';
+
+          const srcMult = rel.sourceMultiplicity || (rel as any).source_multiplicity || null;
+          const tgtMult = rel.targetMultiplicity || (rel as any).target_multiplicity || null;
           const edgeId = `edge_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
           const newEdge = this.canvasService.addRemoteEdge(
@@ -212,8 +222,8 @@ export class CommandExecutorService {
             sourceNode.id,
             targetNode.id,
             rel.label,
-            rel.sourceMultiplicity,
-            rel.targetMultiplicity
+            srcMult,
+            tgtMult
           );
 
           if (newEdge) {
@@ -223,8 +233,8 @@ export class CommandExecutorService {
               source: { cell: sourceNode.id },
               target: { cell: targetNode.id },
               label: rel.label,
-              source_multiplicity: rel.sourceMultiplicity,
-              target_multiplicity: rel.targetMultiplicity
+              source_multiplicity: srcMult,
+              target_multiplicity: tgtMult
             });
           }
         }
