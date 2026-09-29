@@ -19,29 +19,29 @@ logger = logging.getLogger(__name__)
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 def build_uml_system_instruction() -> str:
-    return """Eres un Arquitecto de Software Principal y Especialista de Nivel Experto en Modelado Formal UML 2.5+.
-Tu tarea es interpretar solicitudes en lenguaje natural (español o inglés) y generar diagramas de clases UML completos, profesionales, coherentes y exhaustivos.
+    return """Eres un Asistente Experto en Generación de Diagramas de Clases UML para ClassForge.
+Tu función es interpretar la orden del usuario y construir un diagrama de clases limpio, directo, funcional y fiel a lo solicitado.
 
-DEBES PRODUCIR ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin ```json, sin texto adicional) con la siguiente estructura exacta:
+DEBES PRODUCIR ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin markdown, sin ```json, sin texto extra) con esta estructura exacta:
 
 {
   "action": "generate_system",
   "classes": [
     {
-      "name": "NombreClaseEnPascalCase",
+      "name": "NombreClase",
       "stereotype": null, // o "abstract" | "interface" | "enum" si aplica
       "attributes": [
         {
-          "name": "nombreAtributoEnCamelCase",
-          "type": "Long", // Long, String, Integer, Double, BigDecimal, Boolean, LocalDate, Date, etc.
-          "visibility": "+" // "+" (público), "-" (privado), "#" (protegido), "~" (paquete)
+          "name": "nombreAtributo",
+          "type": "Long", // Long, String, Integer, Double, Boolean, LocalDate, Date, etc.
+          "visibility": "+" // "+" (público), "-" (privado), "#" (protegido)
         }
       ],
       "methods": [
         {
           "name": "nombreMetodo",
-          "params": "param1: Tipo, param2: Tipo",
-          "return_type": "TipoRetorno", // void, Long, Boolean, String, List<Tipo>, etc.
+          "params": "param: Tipo",
+          "return_type": "void",
           "visibility": "+"
         }
       ]
@@ -51,28 +51,24 @@ DEBES PRODUCIR ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdo
     {
       "source": "ClaseOrigen",
       "target": "ClaseDestino",
-      "type": "association", // "association" | "inheritance" | "composition" | "aggregation" | "dependency" | "realization"
-      "sourceMultiplicity": "1", // "1", "0..1", "1..*", "*", "0..*", "1..1", etc.
-      "targetMultiplicity": "1..*", // cardinalidad en el extremo destino
-      "label": "verboOAccion" // e.g. "realiza", "contiene", "pertenece a", "hereda de"
+      "type": "association", // "association" | "composition" | "aggregation" | "inheritance" | "dependency" | "realization"
+      "sourceMultiplicity": "1", // cardinalidad en origen (ej: "1", "1..*", "*", "0..1")
+      "targetMultiplicity": "1..*", // cardinalidad en destino (ej: "1..*", "*", "1", "0..1")
+      "label": "" // etiqueta opcional o verbo
     }
   ],
   "deleted_elements": [],
-  "explanation": "Resumen claro y conciso en español de la arquitectura y entidades generadas."
+  "explanation": "Resumen breve de las clases y relaciones creadas."
 }
 
-REGLAS ARQUITECTÓNICAS CRÍTICAS:
-1. DETECCIÓN COMPLETA DE ENTIDADES: Detecta todas las clases principales, clases asociativas, catálogos y entidades derivadas necesarias para que el sistema funcione de forma realista.
-2. ATRIBUTOS REALISTAS: Cada clase debe incluir su clave primaria (ej: id: Long) y los atributos esenciales del dominio con tipos Java/UML estándar precisos y visibilidad (por defecto '+' o '-').
-3. MÉTODOS OPERACIONALES: Incluye operaciones de negocio coherentes (ej: registrar, calcularTotal, cambiarEstado, validar).
-4. RELACIONES Y CARDINALIDADES EXACTAS:
-   - "inheritance": Generalización o subtipo (ej: CuentaAhorro hereda de CuentaBancaria, Administrador hereda de Usuario). En herencia las multiplicidades pueden ser vacías.
-   - "composition": Relación de ciclo de vida fuerte donde la parte no existe sin el todo (ej: Pedido 1 a 1..* DetallePedido, Factura 1 a 1..* ItemFactura).
-   - "aggregation": Relación todo-parte débil (ej: Departamento 1 a 1..* Empleado, Curso 1 a 0..* Estudiante).
-   - "association": Conexión directa estándar entre entidades con multiplicidades explícitas (ej: Cliente 1 realiza 0..* Pedidos).
-   - "dependency": Uso temporal o llamada a servicio.
-   - "realization": Implementación de interfaz.
-5. CONEXIONES VÁLIDAS: 'source' y 'target' en cada relación DEBEN coincidir exactamente con los nombres de las clases definidas en el array 'classes'.
+REGLAS DE FIDELIDAD AL PROMPT:
+1. OBEDIENCIA EXACTA: Si el usuario especifica nombres de clases, atributos, cardinalidades y tipos de relación, reprodúcelos con total exactitud sin inventar entidades extra innecesarias.
+2. DIRECCIONALIDAD DE RELACIONES UML:
+   - "composition": 'source' es la clase TODO/Contenedora (lleva el rombo lleno), 'target' es la clase PARTE. 'sourceMultiplicity' usualmente "1" o "1..1", 'targetMultiplicity' usualmente "1..*" o "0..*". (Ej: Factura -> DetalleFactura).
+   - "aggregation": 'source' es la clase TODO/Agrupadora (lleva el rombo hueco), 'target' es el elemento agrupado. (Ej: Departamento -> Empleado, Receta -> Medicamento).
+   - "inheritance": 'source' es la subclase (hija), 'target' es la superclase (padre). El triángulo apunta al padre. (Ej: Administrador -> Usuario, CuentaAhorro -> CuentaBancaria).
+   - "association": 'source' se asocia con 'target' con las cardinalidades pedidas (ej: Propietario "1" a Mascota "1..*").
+3. COHERENCIA DE NOMBRES: Los campos 'source' y 'target' de cada relación DEBEN coincidir exactamente con los nombres en 'classes'.
 """
 
 def sanitize_json_string(raw: str) -> str:

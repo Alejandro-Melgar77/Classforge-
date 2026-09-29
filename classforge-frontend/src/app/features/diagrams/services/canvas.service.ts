@@ -103,10 +103,15 @@ export class CanvasService {
         args: { color: this.isLightMode() ? '#94A3B8' : '#334155', thickness: 1.5 }
       },
       connecting: {
-        router: 'manhattan',
+        router: {
+          name: 'manhattan',
+          args: {
+            padding: 20
+          }
+        },
         connector: { name: 'rounded', args: { radius: 8 } },
         anchor: 'center',
-        connectionPoint: 'anchor',
+        connectionPoint: 'boundary',
         allowBlank: false,
         highlight: true,
         snap: { radius: 30 },
@@ -401,19 +406,19 @@ export class CanvasService {
       }
       if (sourceMult) {
         edgeLabels.push({
-          position: { distance: 35, offset: { x: 0, y: -14 } },
+          position: { distance: 24, offset: { x: 0, y: -12 } },
           attrs: {
             label: { text: sourceMult, fill: isLight ? '#0284C7' : '#38BDF8', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 'bold' },
-            body: { fill: 'transparent', stroke: 'none' }
+            body: { fill: isLight ? '#FFFFFF' : '#0F172A', stroke: isLight ? '#CBD5E1' : '#334155', strokeWidth: 1, rx: 3, ry: 3 }
           }
         });
       }
       if (targetMult) {
         edgeLabels.push({
-          position: { distance: -35, offset: { x: 0, y: -14 } },
+          position: { distance: -24, offset: { x: 0, y: -12 } },
           attrs: {
             label: { text: targetMult, fill: isLight ? '#0284C7' : '#38BDF8', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 'bold' },
-            body: { fill: 'transparent', stroke: 'none' }
+            body: { fill: isLight ? '#FFFFFF' : '#0F172A', stroke: isLight ? '#CBD5E1' : '#334155', strokeWidth: 1, rx: 3, ry: 3 }
           }
         });
       }

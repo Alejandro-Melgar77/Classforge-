@@ -429,14 +429,14 @@ export function registerUMLNodesAndEdges() {
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         sourceMarker: null,
         targetMarker: {
           name: 'path',
-          d: 'M 0 -8 L 16 0 L 0 8 Z',
+          d: 'M 0 -7 L 14 0 L 0 7 Z',
           fill: '#FFFFFF',
-          stroke: '#475569',
+          stroke: '#64748B',
           strokeWidth: 1.5
         }
       }
@@ -449,34 +449,34 @@ export function registerUMLNodesAndEdges() {
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         strokeDasharray: '6,4',
         sourceMarker: null,
         targetMarker: {
           name: 'path',
-          d: 'M 0 -8 L 16 0 L 0 8 Z',
+          d: 'M 0 -7 L 14 0 L 0 7 Z',
           fill: '#FFFFFF',
-          stroke: '#475569',
+          stroke: '#64748B',
           strokeWidth: 1.5
         }
       }
     }
   }, true);
 
-  // 3. Composition (Solid line, filled black diamond at source, NO target arrow)
+  // 3. Composition (Solid line, filled diamond at source, NO target arrow)
   Graph.registerEdge('uml-composition', {
     inherit: 'edge',
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         sourceMarker: {
           name: 'path',
-          d: 'M 0 0 L 9 -6 L 18 0 L 9 6 Z',
-          fill: '#0F172A',
-          stroke: '#0F172A',
+          d: 'M 0 0 L 8 -5 L 16 0 L 8 5 Z',
+          fill: '#0284C7',
+          stroke: '#0284C7',
           strokeWidth: 1.5
         },
         targetMarker: null
@@ -484,19 +484,19 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 4. Aggregation (Solid line, hollow diamond with white fill at source, NO target arrow)
+  // 4. Aggregation (Solid line, hollow diamond at source, NO target arrow)
   Graph.registerEdge('uml-aggregation', {
     inherit: 'edge',
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         sourceMarker: {
           name: 'path',
-          d: 'M 0 0 L 9 -6 L 18 0 L 9 6 Z',
+          d: 'M 0 0 L 8 -5 L 16 0 L 8 5 Z',
           fill: '#FFFFFF',
-          stroke: '#475569',
+          stroke: '#0284C7',
           strokeWidth: 1.5
         },
         targetMarker: null
@@ -510,14 +510,14 @@ export function registerUMLNodesAndEdges() {
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         sourceMarker: null,
         targetMarker: {
           name: 'classic',
-          size: 11,
+          size: 10,
           fill: 'none',
-          stroke: '#475569',
+          stroke: '#64748B',
           strokeWidth: 1.5
         }
       }
@@ -530,15 +530,15 @@ export function registerUMLNodesAndEdges() {
     defaultLabel,
     attrs: {
       line: {
-        stroke: '#475569',
+        stroke: '#64748B',
         strokeWidth: 1.5,
         strokeDasharray: '6,4',
         sourceMarker: null,
         targetMarker: {
           name: 'classic',
-          size: 11,
+          size: 10,
           fill: 'none',
-          stroke: '#475569',
+          stroke: '#64748B',
           strokeWidth: 1.5
         }
       }
