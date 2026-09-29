@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, inject, HostListener } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, HostListener, OnInit, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CodegenService } from '../services/codegen.service';
@@ -102,7 +102,7 @@ import { CodegenEngine } from '../models/codegen.model';
         
         <!-- Left: Engine Selector Toggle -->
         <div class="flex items-center gap-2">
-          <span class="text-[11px] font-semibold text-slate-400">Motor:</span>
+          <span class="text-[11px] font-semibold text-slate-400">Motor de Generación:</span>
           <div class="flex items-center bg-[var(--surface-2)] p-0.5 rounded-lg border border-[var(--border)]">
             <button 
               (click)="setEngine('gemini')"
@@ -274,7 +274,7 @@ import { CodegenEngine } from '../models/codegen.model';
             </div>
 
             <div class="flex items-center gap-2 text-slate-400">
-              <span class="hover:text-white cursor-pointer" (click)="copyFilePath()" title="Copiar ruta absoluta del archivo">
+              <span class="hover:text-white cursor-pointer" (click)="copyFilePath()" title="Copiar ruta del archivo">
                 {{ codegen.selectedFilePath() }} 📋
               </span>
             </div>
@@ -313,7 +313,7 @@ import { CodegenEngine } from '../models/codegen.model';
                   {{ showApiKey ? '🙈' : '👁️' }}
                 </button>
               </div>
-              <span class="text-[10px] text-slate-400">Tu clave se guarda de forma segura en tu navegador y en el servidor local.</span>
+              <span class="text-[10px] text-slate-400">Tu clave se guarda de forma segura en tu navegador y en el backend local.</span>
             </div>
 
             <!-- Model Selector -->
@@ -322,7 +322,7 @@ import { CodegenEngine } from '../models/codegen.model';
               <select 
                 [(ngModel)]="tempModel"
                 class="w-full bg-[var(--surface-1)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-purple-400">
-                <option value="gemini-3.8-flash">gemini-3.8-flash (Recomendado - Razonamiento de última generación y alta velocidad)</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Recomendado - Razonamiento profundo y alta velocidad)</option>
                 <option value="gemini-flash-latest">gemini-flash-latest (Alta velocidad)</option>
                 <option value="gemini-3.5-flash">gemini-3.5-flash (Flash multimodal)</option>
                 <option value="gemini-3.7-flash">gemini-3.7-flash (Flash híbrido)</option>
@@ -348,7 +348,7 @@ import { CodegenEngine } from '../models/codegen.model';
     </div>
   `
 })
-export class LiveCodeDrawerComponent {
+export class LiveCodeDrawerComponent implements OnInit, OnChanges {
   @Input() isOpen = false;
   @Input() diagramId = '';
   @Input() graphData: any = null;
@@ -356,6 +356,7 @@ export class LiveCodeDrawerComponent {
 
   public codegen = inject(CodegenService);
   private route = inject(ActivatedRoute);
+  private cdr = inject(ChangeDetectorRef);
 
   copied = false;
   isMaximized = false;
@@ -378,6 +379,31 @@ export class LiveCodeDrawerComponent {
   private resizeStartX = 0;
   private startDrawerWidth = 0;
   private startTreeWidth = 0;
+
+  ngOnInit() {
+    this.ensureSelectedFile();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['isOpen'] && this.isOpen) {
+      this.ensureSelectedFile();
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    }
+  }
+
+  ensureSelectedFile() {
+    const current = this.codegen.selectedFilePath();
+    const files = this.codegen.generatedFiles() || {};
+    const paths = Object.keys(files);
+    if (!current || !files[current]) {
+      if (files['pom.xml']) {
+        this.codegen.selectedFilePath.set('pom.xml');
+      } else if (paths.length > 0) {
+        this.codegen.selectedFilePath.set(paths[0]);
+      }
+    }
+  }
 
   get filePaths(): string[] {
     return Object.keys(this.codegen.generatedFiles() || {});
@@ -407,25 +433,78 @@ export class LiveCodeDrawerComponent {
     if (path.endsWith('.xml')) return 'Maven POM XML';
     if (path.endsWith('.yml') || path.endsWith('.yaml')) return 'YAML Config';
     if (path.endsWith('.md')) return 'Markdown Documentation';
+    if (path.endsWith('.bat')) return 'Windows Batch Script';
+    if (path.endsWith('.sh')) return 'Shell Script';
+    if (path.endsWith('.json')) return 'JSON Config';
     return 'Plain Text';
+  }
+
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   get highlightedCode(): string {
     const code = this.activeContent;
-    const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    
-    // Clean Code syntax highlighting
-    return escaped
-      .replace(/(\/\/[^\n]*)/g, '<span class="text-[#6a9955] italic">$1</span>') // Comments
-      .replace(/\b(package|import|public|private|protected|class|interface|enum|extends|implements|return|if|else|for|while|new|this|super|static|final|void|default|throw|throws|try|catch|finally)\b/g, '<span class="text-[#569cd6] font-semibold">$1</span>')
-      .replace(/\b(String|Integer|Long|Boolean|Double|Float|List|Set|Map|Optional|ResponseEntity|HttpStatus|LocalDateTime|LocalDate|LocalTime)\b/g, '<span class="text-[#4ec9b0]">$1</span>')
-      .replace(/(@[A-Za-z0-9_]+)/g, '<span class="text-[#dcdcaa]">$1</span>') // Annotations
-      .replace(/("[^"]*")/g, '<span class="text-[#ce9178]">$1</span>') // Strings
-      .replace(/\b([0-9]+)\b/g, '<span class="text-[#b5cea8]">$1</span>'); // Numbers
+    const filePath = this.codegen.selectedFilePath();
+    if (!code) return '';
+
+    const ext = (filePath || '').split('.').pop()?.toLowerCase() || '';
+    if (ext === 'md' || ext === 'txt') {
+      return this.escapeHtml(code);
+    }
+
+    // Single-pass tokenizer: matches strings, comments, annotations, xml tags, keywords, types, numbers
+    const tokenRegex = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->|^\s*#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|@[A-Za-z0-9_]+|<\/?[a-zA-Z0-9_:-]+|\b(?:package|import|public|private|protected|class|interface|enum|extends|implements|return|if|else|for|while|new|this|super|static|final|void|default|throw|throws|try|catch|finally|boolean|int|long|double|float|char|byte|short|record|sealed|permits|var|yield)\b|\b(?:String|Integer|Long|Boolean|Double|Float|List|Set|Map|Optional|ResponseEntity|HttpStatus|LocalDateTime|LocalDate|LocalTime|Object|System|Exception|RuntimeException|BigDecimal)\b|\b\d+(?:\.\d+)?\b)/gm;
+
+    let lastIndex = 0;
+    let result = '';
+    let match: RegExpExecArray | null;
+
+    while ((match = tokenRegex.exec(code)) !== null) {
+      if (match.index > lastIndex) {
+        result += this.escapeHtml(code.slice(lastIndex, match.index));
+      }
+      
+      const token = match[0];
+      const escaped = this.escapeHtml(token);
+
+      if (token.startsWith('//') || token.startsWith('/*') || token.startsWith('<!--') || token.trim().startsWith('#')) {
+        result += `<span class="text-[#6a9955] italic">${escaped}</span>`;
+      } else if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+        result += `<span class="text-[#ce9178]">${escaped}</span>`;
+      } else if (token.startsWith('@')) {
+        result += `<span class="text-[#dcdcaa] font-semibold">${escaped}</span>`;
+      } else if (token.startsWith('<')) {
+        result += `<span class="text-[#569cd6]">${escaped}</span>`;
+      } else if (/^\d+(?:\.\d+)?$/.test(token)) {
+        result += `<span class="text-[#b5cea8]">${escaped}</span>`;
+      } else if (/^(package|import|public|private|protected|class|interface|enum|extends|implements|return|if|else|for|while|new|this|super|static|final|void|default|throw|throws|try|catch|finally|boolean|int|long|double|float|char|byte|short|record|sealed|permits|var|yield)$/.test(token)) {
+        result += `<span class="text-[#569cd6] font-semibold">${escaped}</span>`;
+      } else if (/^(String|Integer|Long|Boolean|Double|Float|List|Set|Map|Optional|ResponseEntity|HttpStatus|LocalDateTime|LocalDate|LocalTime|Object|System|Exception|RuntimeException|BigDecimal)$/.test(token)) {
+        result += `<span class="text-[#4ec9b0] font-semibold">${escaped}</span>`;
+      } else {
+        result += escaped;
+      }
+
+      lastIndex = tokenRegex.lastIndex;
+    }
+
+    if (lastIndex < code.length) {
+      result += this.escapeHtml(code.slice(lastIndex));
+    }
+
+    return result;
   }
 
   onFileSelected(path: string) {
     this.codegen.selectedFilePath.set(path);
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   toggleMaximize() {
@@ -476,7 +555,7 @@ export class LiveCodeDrawerComponent {
   // ─── Actions ───────────────────────────────────────────────────
 
   downloadProject() {
-    const diagramId = this.route.snapshot.paramMap.get('id');
+    const diagramId = this.diagramId || this.route.snapshot.paramMap.get('id');
     if (diagramId) {
       this.isDownloadingZip = true;
       this.codegen.downloadZip(diagramId, 'classforge-springboot-backend.zip');
@@ -504,7 +583,11 @@ export class LiveCodeDrawerComponent {
     if (code) {
       navigator.clipboard.writeText(code).then(() => {
         this.copied = true;
-        setTimeout(() => this.copied = false, 2000);
+        this.cdr.markForCheck();
+        setTimeout(() => {
+          this.copied = false;
+          this.cdr.markForCheck();
+        }, 2000);
       });
     }
   }
@@ -520,6 +603,7 @@ export class LiveCodeDrawerComponent {
 
   setEngine(engine: CodegenEngine) {
     this.codegen.setEngine(engine);
+    this.cdr.markForCheck();
     this.regenerate();
   }
 
@@ -527,16 +611,19 @@ export class LiveCodeDrawerComponent {
     this.tempApiKey = this.codegen.geminiApiKey();
     this.tempModel = this.codegen.geminiModel();
     this.isSettingsOpen = true;
+    this.cdr.markForCheck();
   }
 
   closeSettingsModal() {
     this.isSettingsOpen = false;
+    this.cdr.markForCheck();
   }
 
   saveSettingsAndRegenerate() {
     this.codegen.setGeminiApiKey(this.tempApiKey.trim());
     this.codegen.setGeminiModel(this.tempModel);
     this.isSettingsOpen = false;
+    this.cdr.markForCheck();
     this.regenerate();
   }
 
@@ -545,15 +632,20 @@ export class LiveCodeDrawerComponent {
     if (!targetId) return;
 
     this.codegen.isLoading.set(true);
+    this.cdr.markForCheck();
     this.codegen.getPreview(targetId, this.graphData).subscribe({
       next: (res) => {
         if (res.success && res.data) {
           this.codegen.generatedFiles.set(res.data.files);
+          this.ensureSelectedFile();
         }
         this.codegen.isLoading.set(false);
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
       },
       error: () => {
         this.codegen.isLoading.set(false);
+        this.cdr.markForCheck();
       }
     });
   }

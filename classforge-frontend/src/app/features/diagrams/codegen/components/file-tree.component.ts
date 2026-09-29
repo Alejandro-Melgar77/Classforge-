@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileTreeNode } from '../models/codegen.model';
@@ -69,8 +69,8 @@ import { FileTreeNode } from '../models/codegen.model';
               <div 
                 class="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-all group overflow-hidden"
                 [ngClass]="(!node.isDirectory && selectedPath === node.path) 
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40' 
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'"
+                  ? 'bg-blue-600/30 text-blue-300 font-semibold border border-blue-500/50 shadow-xs' 
+                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'"
                 [title]="node.path"
                 (click)="onNodeClick(node)">
                 
@@ -115,6 +115,8 @@ export class FileTreeComponent implements OnChanges {
   @Input() selectedPath: string = '';
   @Output() fileSelected = new EventEmitter<string>();
 
+  private cdr = inject(ChangeDetectorRef);
+
   searchQuery = '';
   filteredPaths: string[] = [];
   rootNodes: FileTreeNode[] = [];
@@ -122,6 +124,9 @@ export class FileTreeComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges) {
     if (changes['paths']) {
       this.filterPaths();
+    }
+    if (changes['selectedPath']) {
+      this.cdr.markForCheck();
     }
   }
 
@@ -136,10 +141,12 @@ export class FileTreeComponent implements OnChanges {
 
   expandAll() {
     this.setExpansionState(this.rootNodes, true);
+    this.cdr.markForCheck();
   }
 
   collapseAll() {
     this.setExpansionState(this.rootNodes, false);
+    this.cdr.markForCheck();
   }
 
   private setExpansionState(nodes: FileTreeNode[], expanded: boolean) {
@@ -157,8 +164,10 @@ export class FileTreeComponent implements OnChanges {
     if (node.isDirectory) {
       node.isExpanded = !node.isExpanded;
     } else {
+      this.selectedPath = node.path;
       this.fileSelected.emit(node.path);
     }
+    this.cdr.markForCheck();
   }
 
   getNodeIcon(node: FileTreeNode): string {
