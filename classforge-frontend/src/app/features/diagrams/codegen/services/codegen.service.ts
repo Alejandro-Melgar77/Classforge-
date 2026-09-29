@@ -52,6 +52,9 @@ export class CodegenService {
     ).pipe(
       tap(res => {
         if (res.success && res.data) {
+          if (res.data.files) {
+            this.generatedFiles.set(res.data.files);
+          }
           if (res.data.engine_used) {
             this.engineUsed.set(res.data.engine_used);
           }

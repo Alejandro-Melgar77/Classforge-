@@ -568,6 +568,25 @@ export class CanvasService {
     this.fitView();
   }
 
+  /** Focus, select and center a node in the diagram by class/entity name */
+  focusNodeByName(name: string): boolean {
+    if (!this.graph || !name) return false;
+    const clean = name.toLowerCase().replace(/\.(java|ts|js|json|xml|yml|yaml|md|txt)$/, '').replace(/(controller|service|dto|mapper|repository|requestdto|responsedto|serviceimpl)$/i, '').trim();
+    const nodes = this.graph.getNodes();
+    const target = nodes.find(n => {
+      const data = n.getData() as any;
+      const nodeName = (data?.name || '').toLowerCase().trim();
+      return nodeName === clean || (nodeName.length > 2 && (clean.includes(nodeName) || nodeName.includes(clean)));
+    });
+    if (target) {
+      this.graph.cleanSelection();
+      this.graph.select(target);
+      this.graph.centerCell(target);
+      return true;
+    }
+    return false;
+  }
+
   /** Resize graph to fit its container after panel resize */
   resizeGraphToContainer() {
     if (!this.graph) return;
