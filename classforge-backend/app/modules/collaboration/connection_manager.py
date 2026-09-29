@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
 
 class ConnectionManager:
@@ -85,8 +86,8 @@ class ConnectionManager:
                 released_elements.append(el_id)
         return released_elements
 
-    def add_chat_message(self, diagram_id: str, user_id: str, user_name: str, user_color: str, content: str) -> dict:
-        import datetime
+    def add_chat_message(self, diagram_id: str, user_id: str, user_name: str, user_color: str, content: str) -> Dict[str, Any]:
+        """Record a chat message in the ephemeral diagram chat history."""
         if diagram_id not in self.chat_history:
             self.chat_history[diagram_id] = []
             
@@ -96,7 +97,7 @@ class ConnectionManager:
             "user_id": user_id,
             "user_name": user_name,
             "user_color": user_color,
-            "timestamp": datetime.datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         self.chat_history[diagram_id].append(message)

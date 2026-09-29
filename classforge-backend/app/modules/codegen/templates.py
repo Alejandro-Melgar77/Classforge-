@@ -710,7 +710,7 @@ public class {class_name}Controller {{
 
 PROJECT_README_MD = """# 🚀 {project_name} - Backend Spring Boot 3
 
-Proyecto backend generado automáticamente por **ClassForge** siguiendo las normas de **Clean Code**, **Clean Architecture** y las mejores prácticas oficiales de **Spring Boot 3**.
+Proyecto backend generado automáticamente por **ClassForge** siguiendo las normas y estándares de la industria para **Java 17 / Spring Boot 3** (Google Java Style Guide y Spring Framework Conventions), Clean Architecture y Clean Code.
 
 ---
 
@@ -719,46 +719,71 @@ Proyecto backend generado automáticamente por **ClassForge** siguiendo las norm
 ```
 src/main/java/{base_path}/
 ├── config/                  # Configuraciones globales (OpenAPI 3 Swagger, CORS)
-├── controllers/             # Controladores RESTful (/api/v1/...) con Swagger Tags
-├── domain/ / entities/      # Entidades JPA con auditoría (createdAt, updatedAt)
-├── dto/                     # DTOs de Petición (con validaciones Jakarta) y Respuesta
+├── controllers/             # Controladores RESTful (/api/v1/...) con Swagger Tags y Códigos HTTP
+├── domain/ / entities/      # Entidades JPA con auditoría (createdAt, updatedAt) y llaves foráneas
+├── dto/                     # DTOs de Petición (validaciones Jakarta) y Respuesta (@Schema)
 ├── exceptions/              # Manejador Global (@RestControllerAdvice) y Excepciones
 ├── mappers/                 # Mappers dedicados (Single Responsibility Principle)
 ├── repositories/            # Interfaces Spring Data JPA
-├── services/                # Interfaces y Lógica de Negocio Transaccional (@Slf4j)
+├── services/                # Interfaces y Lógica de Negocio Transaccional (@Transactional, @Slf4j)
 └── MainApplication.java     # Punto de entrada de la aplicación Spring Boot
 ```
 
 ---
 
-## ⚙️ Requisitos Previos
+## 💻 Ejecución Inmediata en Visual Studio Code (VS Code)
 
-- **Java Development Kit (JDK)**: 17 o superior.
-- **Maven**: 3.8+ (o utilizar el wrapper incluido).
+Este proyecto está pre-configurado para abrirse y ejecutarse sin fricción en **VS Code**:
+
+1. **Abre la carpeta en VS Code**:
+   Abre VS Code y selecciona `Archivo > Abrir Carpeta...` eligiendo esta carpeta descomprimida.
+2. **Extensiones Recomendadas**:
+   VS Code detectará automáticamente el archivo `.vscode/extensions.json` y te sugerirá instalar:
+   - *Extension Pack for Java* (Microsoft)
+   - *Spring Boot Extension Pack* (VMware)
+   - *Lombok Annotations Support for VS Code*
+3. **Ejecutar el Proyecto**:
+   - **Opción A (Terminal con 1 solo comando)**:
+     Abre la terminal integrada (Ctrl + ~ o Terminal > Nueva Terminal) y ejecuta:
+     ```cmd
+     .\\run.bat
+     ```
+     *(En Linux o macOS ejecuta `./run.sh`)*. El script auto-detectará tu entorno Java y Maven e iniciará el servidor.
+   - **Opción B (Depurador VS Code)**:
+     Presiona `F5` o abre `MainApplication.java` y haz clic en el botón `Run` que aparece sobre el método `main`.
 
 ---
 
-## 🏃 Cómo Ejecutar el Proyecto
+## ⚙️ Requisitos Previos
 
-### 1. Ejecutar localmente con Maven
+- **Java Development Kit (JDK)**: 17 o 21+.
+- **Maven**: 3.8+ (incluido Maven Wrapper `mvnw.cmd` / `mvnw`).
+
+---
+
+## 🏃 Cómo Ejecutar con Maven en Terminal
+
 ```bash
 # En Windows (PowerShell o CMD)
 mvn spring-boot:run
+# O usando el wrapper:
+.\\mvnw.cmd spring-boot:run
 
 # En Linux o macOS
 ./mvnw spring-boot:run
 ```
 
-### 2. Acceso a la Documentación Interactiva (Swagger UI)
-Una vez iniciada la aplicación, accede en tu navegador a:
-- **Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
-- **OpenAPI Schema JSON**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+---
 
-### 3. Consola de Base de Datos en Memoria (H2 Console)
-- **URL**: [http://localhost:8080/h2-console](http://localhost:8080/h2-console)
-- **JDBC URL**: `jdbc:h2:mem:classforgedb`
-- **Usuario**: `sa`
-- **Contraseña**: *(dejar en blanco)*
+## 📡 Documentación Interactiva (Swagger UI) y Consola H2
+
+Una vez iniciada la aplicación en el puerto `8080`:
+- **Swagger UI (Pruebas Interactivas)**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- **OpenAPI Schema JSON**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+- **Consola de Base de Datos H2**: [http://localhost:8080/h2-console](http://localhost:8080/h2-console)
+  - JDBC URL: `jdbc:h2:mem:classforgedb`
+  - Usuario: `sa`
+  - Contraseña: *(en blanco)*
 
 ---
 
@@ -769,12 +794,166 @@ Todos los endpoints base están prefijados bajo `/api/v1/`:
 
 ---
 
-## 📱 Integración con Clientes Móviles y Web
+## 📱 Integración con Clientes Móviles (Flutter / React Native) y Web
 
-Este backend incluye configuración de **CORS** pre-habilitada para conectarse directamente con aplicaciones en **Flutter**, **React Native**, **React**, **Angular** o **Vue**.
-
+Este backend incluye configuración de **CORS** pre-habilitada:
 - Para **Emulador Android**: Usa `http://10.0.2.2:8080/api/v1/...`
 - Para **Simulador iOS / Navegador Web**: Usa `http://localhost:8080/api/v1/...`
 - Para **Dispositivos Físicos (LAN)**: Usa `http://TU_IP_LOCAL:8080/api/v1/...`
 """
+
+VSCODE_LAUNCH_JSON = """{{
+    "version": "0.2.0",
+    "configurations": [
+        {{
+            "type": "java",
+            "name": "Spring Boot - MainApplication",
+            "request": "launch",
+            "mainClass": "{package_name}.MainApplication",
+            "projectName": "classforge-generated-backend",
+            "env": {{
+                "SPRING_PROFILES_ACTIVE": "dev"
+            }}
+        }}
+    ]
+}}
+"""
+
+VSCODE_SETTINGS_JSON = """{{
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.compile.nullAnalysis.mode": "automatic",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 4,
+    "files.exclude": {{
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true
+    }}
+}}
+"""
+
+VSCODE_EXTENSIONS_JSON = """{{
+    "recommendations": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-spring-boot",
+        "vmware.vscode-boot-dev-pack",
+        "vscjava.vscode-lombok"
+    ]
+}}
+"""
+
+RUN_BAT = """@echo off
+setlocal enabledelayedexpansion
+
+echo ===================================================
+echo   ClassForge Spring Boot 3 - Runner para VS Code / Windows
+echo ===================================================
+
+:: 1. Verificacion de Java
+where java >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Java encontrado en el sistema.
+) else (
+    echo [INFO] Java no encontrado en PATH global. Buscando JDK local...
+    if exist "C:\\Program Files\\Android\\Android Studio\\jbr\\bin\\java.exe" (
+        set "JAVA_HOME=C:\\Program Files\\Android\\Android Studio\\jbr"
+        set "PATH=!JAVA_HOME!\\bin;!PATH!"
+        echo [INFO] Utilizando OpenJDK de Android Studio JBR.
+    ) else if exist "%ProgramFiles%\\Java" (
+        for /d %%D in ("%ProgramFiles%\\Java\\*") do (
+            if exist "%%D\\bin\\java.exe" (
+                set "JAVA_HOME=%%D"
+                set "PATH=!JAVA_HOME!\\bin;!PATH!"
+                echo [INFO] JDK detectado en %%D.
+            )
+        )
+    )
+)
+
+where java >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] No se pudo encontrar Java JDK 17 o superior.
+    echo Por favor instala Java o abre la carpeta en VS Code con la extension "Extension Pack for Java".
+    pause
+    exit /b 1
+)
+
+:: 2. Ejecucion con Maven o Wrapper
+where mvn >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Iniciando aplicacion Spring Boot con Maven local...
+    call mvn spring-boot:run
+) else if exist "mvnw.cmd" (
+    echo [INFO] Iniciando aplicacion Spring Boot con Maven Wrapper...
+    call mvnw.cmd spring-boot:run
+) else (
+    echo [INFO] Maven no detectado en PATH.
+    echo [TIP] Puedes abrir este proyecto en VS Code y presionar F5 (o hacer clic en Run sobre MainApplication.java).
+    pause
+)
+"""
+
+RUN_SH = """#!/bin/bash
+echo "==================================================="
+echo "  ClassForge Spring Boot 3 - Runner Linux / macOS  "
+echo "==================================================="
+
+if command -v mvn &> /dev/null; then
+    echo "[INFO] Ejecutando con Maven..."
+    mvn spring-boot:run
+elif [ -f "./mvnw" ]; then
+    echo "[INFO] Ejecutando con Maven Wrapper..."
+    chmod +x ./mvnw
+    ./mvnw spring-boot:run
+else
+    echo "[INFO] Maven no encontrado. Instala Maven o abre el proyecto en VS Code con la extension Java."
+    exit 1
+fi
+"""
+
+MVNW_CMD = """@echo off
+setlocal
+where mvn >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    mvn %*
+    exit /b %ERRORLEVEL%
+)
+
+set "MAVEN_DIR=%USERPROFILE%\\.classforge\\maven\\apache-maven-3.9.6"
+if not exist "%MAVEN_DIR%\\bin\\mvn.cmd" (
+    echo [ClassForge Maven Wrapper] Preparando Maven portable para ejecucion inmediata...
+    powershell -Command "New-Item -ItemType Directory -Force -Path '%USERPROFILE%\\.classforge\\maven' | Out-Null; Invoke-WebRequest -Uri 'https://archive.apache.org/dist/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.zip' -OutFile '%USERPROFILE%\\.classforge\\maven\\mvn.zip'; Expand-Archive -Path '%USERPROFILE%\\.classforge\\maven\\mvn.zip' -DestinationPath '%USERPROFILE%\\.classforge\\maven' -Force"
+)
+
+if exist "%MAVEN_DIR%\\bin\\mvn.cmd" (
+    "%MAVEN_DIR%\\bin\\mvn.cmd" %*
+) else (
+    echo [ERROR] No se pudo inicializar Maven. Ejecuta desde VS Code o instala Maven.
+)
+"""
+
+MVNW_SH = """#!/bin/bash
+if command -v mvn &> /dev/null; then
+    exec mvn "$@"
+fi
+
+MAVEN_DIR="$HOME/.classforge/maven/apache-maven-3.9.6"
+if [ ! -f "$MAVEN_DIR/bin/mvn" ]; then
+    echo "[ClassForge Maven Wrapper] Descargando Maven portátil..."
+    mkdir -p "$HOME/.classforge/maven"
+    curl -sS -L -o "$HOME/.classforge/maven/mvn.tar.gz" "https://archive.apache.org/dist/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.tar.gz"
+    tar -xzf "$HOME/.classforge/maven/mvn.tar.gz" -C "$HOME/.classforge/maven/"
+fi
+
+if [ -f "$MAVEN_DIR/bin/mvn" ]; then
+    exec "$MAVEN_DIR/bin/mvn" "$@"
+else
+    echo "Error ejecutando Maven. Por favor instala Maven en tu sistema."
+    exit 1
+fi
+"""
+
 

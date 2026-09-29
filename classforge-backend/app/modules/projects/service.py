@@ -1,10 +1,12 @@
-from fastapi import HTTPException
-from app.modules.projects.repository import ProjectRepository
-from app.modules.users.repository import UserRepository
-from app.modules.teams.repository import TeamRepository
-from app.modules.projects.schemas import ProjectCreate, ProjectUpdate, ProjectStatusUpdate
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from bson import ObjectId
-from datetime import datetime
+from fastapi import HTTPException
+
+from app.modules.projects.repository import ProjectRepository
+from app.modules.projects.schemas import ProjectCreate, ProjectStatusUpdate, ProjectUpdate
+from app.modules.teams.repository import TeamRepository
+from app.modules.users.repository import UserRepository
 
 class ProjectService:
     def __init__(self, db):
@@ -101,7 +103,7 @@ class ProjectService:
         
         update_dict = {"status": data.status}
         if data.status == "completed":
-            update_dict["completed_at"] = datetime.utcnow()
+            update_dict["completed_at"] = datetime.now(timezone.utc)
             
         await self.repo.update(project_id, update_dict)
         await self.user_repo.log_audit(str(current_user["_id"]), "PROJECT_STATUS_UPDATED", f"Updated status of project {project_id} to {data.status}")

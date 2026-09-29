@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../core/services/websocket_service.dart';
+import '../../core/services/api_service.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/notification_model.dart';
@@ -16,335 +15,336 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  bool _filterUnreadOnly = false;
+  final ApiService _apiService = ApiService();
+  List<InAppNotificationModel> _notifications = [];
+  bool _isLoading = true;
+  String _activeTab = 'all'; // all | unread | project | ai
 
-  void _sendTestSystemNotification() {
-    final push = Provider.of<PushNotificationService>(context, listen: false);
-    push.triggerInstantPush(
-      title: '⚡ ClassForge • Evento en Vivo',
-      message: 'Ana Torres modificó la clase CuentaBancaria en el lienzo UML.',
-      type: 'diagram_modified',
-      diagramId: 'diag-01',
-    );
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
 
+  Future<void> _loadNotifications() async {
+    setState(() => _isLoading = true);
+    final list = await _apiService.getNotifications();
+    if (mounted) {
+      setState(() {
+        _notifications = list;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _markRead(String id) async {
+    await _apiService.markNotificationAsRead(id);
+    setState(() {
+      final idx = _notifications.indexWhere((n) => n.id == id);
+      if (idx != -1) _notifications[idx].isRead = true;
+    });
+  }
+
+  Future<void> _markAllRead() async {
+    await _apiService.markAllNotificationsAsRead();
+    setState(() {
+      for (var n in _notifications) {
+        n.isRead = true;
+      }
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('✓ Notificación enviada a la barra de estado del teléfono'),
-        duration: Duration(seconds: 2),
+        content: Text('Todas las notificaciones marcadas como leídas'),
+        backgroundColor: Color(0xFF10B981),
       ),
     );
   }
 
-  void _scheduleSystemNotification() {
-    final push = Provider.of<PushNotificationService>(context, listen: false);
-    push.schedulePush(
-      delay: const Duration(seconds: 4),
-      title: '👥 Colaborador Conectado',
-      message: 'David Rojas se ha unido a la sala del proyecto.',
-      type: 'team_member_added',
+  void _sendTestPushAlert() {
+    PushNotificationService().triggerInstantPush(
+      title: '⚡ Modificación en Proyecto Core Banking',
+      message: 'Ing. Alejandro Melgar actualizó el esquema de microservicios y generó el backend.',
+      type: 'project_update',
       diagramId: 'diag-01',
     );
+    _loadNotifications();
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('⏱️ Alerta programada: aparecerá en la barra del teléfono en 4 segundos.'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+  List<InAppNotificationModel> _getFilteredList() {
+    switch (_activeTab) {
+      case 'unread':
+        return _notifications.where((n) => !n.isRead).toList();
+      case 'project':
+        return _notifications.where((n) => n.type == 'project_update' || n.type == 'team_update').toList();
+      case 'ai':
+        return _notifications.where((n) => n.type == 'ai_update' || n.type == 'diagram_update' || n.type == 'codegen').toList();
+      case 'all':
+      default:
+        return _notifications;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final ws = Provider.of<WebSocketService>(context);
-    final push = Provider.of<PushNotificationService>(context);
-    final allNotifications = ws.notifications;
-    final displayNotifications = _filterUnreadOnly
-        ? allNotifications.where((n) => !n.isRead).toList()
-        : allNotifications;
+    final filtered = _getFilteredList();
+    final unreadCount = _notifications.where((n) => !n.isRead).length;
 
     return Scaffold(
-      backgroundColor: AppTheme.surface1,
+      backgroundColor: AppTheme.primaryDark,
       appBar: AppBar(
         title: Text(
-          'Centro de Notificaciones Push',
-          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold),
+          'Buzón de Notificaciones',
+          style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold),
         ),
+        backgroundColor: AppTheme.cardDark,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_alert_outlined, size: 20, color: AppTheme.accent),
-            tooltip: 'Probar Notificación en Barra',
-            onPressed: _sendTestSystemNotification,
+            icon: const Icon(Icons.notifications_active_outlined, color: AppTheme.accentBlue),
+            tooltip: 'Probar Notificación Push en Teléfono',
+            onPressed: _sendTestPushAlert,
           ),
-          if (allNotifications.isNotEmpty) ...[
+          if (_notifications.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.done_all, size: 20),
+              icon: const Icon(Icons.done_all, color: Colors.white70),
               tooltip: 'Marcar todas como leídas',
-              onPressed: () => ws.markAllAsRead(),
+              onPressed: _markAllRead,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-              tooltip: 'Limpiar notificaciones',
-              onPressed: () => ws.clearNotifications(),
-            ),
-          ],
         ],
       ),
       body: Column(
         children: [
-          // Banner de prueba en barra de notificaciones del teléfono
+          // Banner Informativo
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: AppTheme.surface2,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: AppTheme.cardDark,
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.phone_android, size: 16, color: AppTheme.accent),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Barra de Notificaciones del Teléfono',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
                       Text(
-                        'Prueba la llegada de notificaciones al sistema Android',
-                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                        'Alertas de Proyectos y Colaboración',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        unreadCount > 0 ? '$unreadCount notificaciones sin leer' : 'Estás al día con todos tus proyectos',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: unreadCount > 0 ? AppTheme.accentBlue : AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppTheme.primary.withOpacity(0.2),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentBlue.withOpacity(0.18),
+                    foregroundColor: AppTheme.accentBlue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(color: AppTheme.accentBlue),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   ),
-                  icon: const Icon(Icons.send, size: 14, color: AppTheme.primaryLight),
-                  label: const Text('Disparar', style: TextStyle(fontSize: 11, color: AppTheme.primaryLight)),
-                  onPressed: _sendTestSystemNotification,
-                ),
-                const SizedBox(width: 6),
-                IconButton(
-                  icon: const Icon(Icons.timer_outlined, size: 18, color: AppTheme.accent),
-                  tooltip: 'Disparar en 4 seg',
-                  onPressed: _scheduleSystemNotification,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text('Refrescar', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: _loadNotifications,
                 ),
               ],
             ),
           ),
 
-          // Filter Bar
+          // Pestañas de Filtro
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppTheme.surface1,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    FilterChip(
-                      label: Text('Todas (${allNotifications.length})'),
-                      selected: !_filterUnreadOnly,
-                      selectedColor: AppTheme.primary,
-                      backgroundColor: AppTheme.surface3,
-                      labelStyle: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: !_filterUnreadOnly ? FontWeight.bold : FontWeight.normal,
-                        color: !_filterUnreadOnly ? Colors.white : AppTheme.textSecondary,
-                      ),
-                      onSelected: (val) {
-                        setState(() => _filterUnreadOnly = false);
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      label: Text('No leídas (${ws.unreadNotificationsCount})'),
-                      selected: _filterUnreadOnly,
-                      selectedColor: AppTheme.primary,
-                      backgroundColor: AppTheme.surface3,
-                      labelStyle: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: _filterUnreadOnly ? FontWeight.bold : FontWeight.normal,
-                        color: _filterUnreadOnly ? Colors.white : AppTheme.textSecondary,
-                      ),
-                      onSelected: (val) {
-                        setState(() => _filterUnreadOnly = true);
-                      },
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF10B981),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Push Activo',
-                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
-                    ),
-                  ],
-                ),
+                _buildFilterChip('all', 'Todas (${_notifications.length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip('unread', 'No Leídas ($unreadCount)'),
+                const SizedBox(width: 8),
+                _buildFilterChip('project', 'Proyectos'),
+                const SizedBox(width: 8),
+                _buildFilterChip('ai', 'IA & Código'),
               ],
             ),
           ),
 
-          // Notifications List
+          // Lista de Notificaciones
           Expanded(
-            child: displayNotifications.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.notifications_none, size: 54, color: AppTheme.textMuted),
-                        const SizedBox(height: 12),
-                        Text(
-                          _filterUnreadOnly
-                              ? 'No tienes notificaciones pendientes'
-                              : 'No hay notificaciones recientes',
-                          style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textSecondary,
-                          ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.accentBlue))
+                : filtered.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.notifications_none, size: 54, color: Colors.white24),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No hay notificaciones en esta categoría',
+                              style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Los eventos colaborativos del sistema se reflejan aquí y en la barra de Android.',
-                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadNotifications,
+                        color: AppTheme.accentBlue,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final notif = filtered[index];
+                            return _buildNotificationCard(notif);
+                          },
                         ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: displayNotifications.length,
-                    itemBuilder: (context, index) {
-                      final item = displayNotifications[index];
-                      return _buildNotificationCard(item, ws);
-                    },
-                  ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNotificationCard(InAppNotificationModel item, WebSocketService ws) {
-    final timeStr = DateFormat('HH:mm - dd/MM/yyyy').format(item.timestamp);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: item.isRead ? AppTheme.surface2 : AppTheme.surface3.withOpacity(0.6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(
-          color: item.isRead ? AppTheme.border : AppTheme.primaryLight.withOpacity(0.5),
-          width: item.isRead ? 1 : 1.5,
+  Widget _buildFilterChip(String key, String label) {
+    final isSelected = _activeTab == key;
+    return InkWell(
+      onTap: () => setState(() => _activeTab = key),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.accentBlue : AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isSelected ? AppTheme.accentBlue : Colors.white10),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : Colors.white70,
+          ),
         ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () {
-          ws.markAsRead(item.id);
-          if (item.diagramId != null) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DiagramViewerScreen(diagramId: item.diagramId!),
+    );
+  }
+
+  Widget _buildNotificationCard(InAppNotificationModel notif) {
+    return InkWell(
+      onTap: () async {
+        if (!notif.isRead) {
+          await _markRead(notif.id);
+        }
+
+        if (notif.diagramId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DiagramViewerScreen(
+                diagramId: notif.diagramId!,
+                initialName: notif.title,
               ),
-            );
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface1,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Text(item.typeIcon, style: const TextStyle(fontSize: 18)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                        if (!item.isRead)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppTheme.primaryLight,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.message,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          timeStr,
-                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
-                        ),
-                        if (item.diagramId != null)
-                          Text(
-                            'Ver Diagrama →',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryLight,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: notif.isRead ? AppTheme.cardDark : AppTheme.cardDark.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: notif.isRead ? Colors.white.withOpacity(0.04) : AppTheme.accentBlue.withOpacity(0.4),
+            width: notif.isRead ? 1 : 1.5,
           ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: notif.isRead ? Colors.white.withOpacity(0.05) : AppTheme.accentBlue.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(notif.typeIcon, style: const TextStyle(fontSize: 18)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          notif.title,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.bold,
+                            color: notif.isRead ? Colors.white70 : Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (!notif.isRead)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.accentBlue,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    notif.message,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: notif.isRead ? AppTheme.textSecondary : Colors.white70,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        DateFormat('dd/MM • HH:mm').format(notif.timestamp),
+                        style: GoogleFonts.inter(fontSize: 10, color: Colors.white30),
+                      ),
+                      if (notif.diagramId != null)
+                        Row(
+                          children: [
+                            Text(
+                              'Ver Diagrama',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: AppTheme.accentBlue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, size: 14, color: AppTheme.accentBlue),
+                          ],
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

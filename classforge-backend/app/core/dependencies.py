@@ -1,21 +1,27 @@
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
 from app.core.config import settings
 from app.core.database import get_db
 from app.modules.users.repository import UserRepository
-from datetime import datetime, timedelta
 
 security = HTTPBearer()
 
-def get_user_repository(db = Depends(get_db)):
+
+def get_user_repository(db: Any = Depends(get_db)) -> UserRepository:
+    """Dependency provider for UserRepository instance."""
     return UserRepository(db)
+
 
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     user_repo: UserRepository = Depends(get_user_repository)
-):
+) -> Dict[str, Any]:
+    """Validate JWT access token and retrieve current active user."""
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
@@ -37,17 +43,23 @@ async def get_current_user(
     last_activity = user.get("last_activity")
     if last_activity:
         if isinstance(last_activity, str):
-            last_activity = datetime.fromisoformat(last_activity.replace('Z', '+00:00'))
-        if datetime.utcnow() - last_activity > timedelta(minutes=settings.INACTIVITY_TIMEOUT_MINUTES):
+            last_activity = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=timezone.utc)
+        if now - last_activity > timedelta(minutes=settings.INACTIVITY_TIMEOUT_MINUTES):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired due to inactivity")
 
     await user_repo.update_last_activity(user_id)
     
     return user
 
-def require_role(roles: list[str]):
-    async def role_checker(current_user = Depends(get_current_user)):
+
+def require_role(roles: List[str]) -> Callable:
+    """Dependency factory checking that the authenticated user possesses one of the required roles."""
+    async def role_checker(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
         if current_user.get("role") not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
         return current_user
     return role_checker
+

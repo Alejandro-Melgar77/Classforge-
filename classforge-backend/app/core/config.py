@@ -1,7 +1,10 @@
-from pydantic_settings import BaseSettings
 from typing import List, Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
+    """Application configuration settings loaded from environment variables."""
+
     PROJECT_NAME: str = "ClassForge"
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = "classforge-super-secret-key-for-development-only"
@@ -14,15 +17,17 @@ class Settings(BaseSettings):
     # Rule R03: Never use ["*"] in production — configure per environment via .env
     CORS_ORIGINS: str = "http://localhost:4200,http://localhost:4201"
     OLLAMA_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "tinyllama"
     N8N_WEBHOOK_URL: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.CORS_ORIGINS.split(",")]
+        """Returns the parsed list of allowed CORS origins."""
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()
 

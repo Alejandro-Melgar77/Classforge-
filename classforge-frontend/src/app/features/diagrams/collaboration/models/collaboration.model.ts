@@ -1,6 +1,10 @@
 export interface WsMessage<T = any> {
   type: string;
-  payload: T;
+  payload?: T;
+  op?: string;
+  node_id?: string;
+  edge_id?: string;
+  data?: any;
   sender_id?: string;
   timestamp?: number;
 }

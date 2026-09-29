@@ -37,3 +37,12 @@ class UMLCommandResponse(BaseModel):
 class PromptRequest(BaseModel):
     prompt: str
     diagram_context: Optional[dict] = None
+
+
+class ImagePromptRequest(BaseModel):
+    image_base64: str
+    mime_type: Optional[str] = "image/jpeg"
+    diagram_id: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+

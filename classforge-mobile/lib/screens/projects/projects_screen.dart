@@ -4,6 +4,7 @@ import '../../core/services/api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/project_model.dart';
 import '../diagrams/diagram_viewer_screen.dart';
+import 'create_project_screen.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({Key? key}) : super(key: key);
@@ -59,6 +60,23 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.surface1,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppTheme.accentBlue,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: Text(
+          'Nuevo Proyecto',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        onPressed: () async {
+          final res = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CreateProjectScreen()),
+          );
+          if (res == true) {
+            _loadProjects();
+          }
+        },
+      ),
       body: Column(
         children: [
           // Search & Filter Header

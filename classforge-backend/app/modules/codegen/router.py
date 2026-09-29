@@ -9,6 +9,7 @@ from app.core.dependencies import get_current_user
 from app.modules.auth.schemas import StandardResponse
 from app.modules.codegen.schemas import CodegenPreviewRequest, CodegenPreviewResponse, CodegenPreviewResponseData, FrontendPromptRequest
 from app.modules.codegen.generator import generate_spring_boot_project
+from app.modules.codegen.gemini_generator import generate_spring_boot_with_gemini
 from app.modules.codegen.frontend_prompt_generator import generate_frontend_meta_prompt
 from app.modules.codegen.zip_service import create_project_zip
 from app.modules.codegen.webhook import notify_n8n_webhook
@@ -38,28 +39,45 @@ async def preview_code(
         
     if not graph_data:
         raise HTTPException(status_code=400, detail="No graph data available for code generation")
-        
-    files = generate_spring_boot_project(graph_data)
+
+    engine_used = "deterministic"
+    summary = None
+
+    if request.engine == "gemini":
+        result = await generate_spring_boot_with_gemini(
+            graph_data, 
+            api_key=request.gemini_api_key, 
+            model=request.gemini_model
+        )
+        files = result["files"]
+        engine_used = result.get("engine_used", "gemini")
+        summary = result.get("summary")
+    else:
+        files = generate_spring_boot_project(graph_data)
     
     await notify_n8n_webhook(
         event_type="codegen_preview",
         diagram_id=diagram_id,
         diagram_name=diagram_name,
-        payload={"total_files": len(files)}
+        payload={"total_files": len(files), "engine": engine_used}
     )
     
     return StandardResponse(
         success=True,
-        message="Code preview generated successfully",
+        message=f"Code preview generated successfully with {engine_used}",
         data={
             "files": files,
-            "total_files": len(files)
+            "total_files": len(files),
+            "engine_used": engine_used,
+            "summary": summary
         }
     )
 
 @router.get("/{diagram_id}/download")
 async def download_code(
     diagram_id: str,
+    engine: Optional[str] = "deterministic",
+    model: Optional[str] = None,
     current_user = Depends(get_current_user),
     diagram_service: DiagramService = Depends(get_diagram_service)
 ):
@@ -71,7 +89,12 @@ async def download_code(
     if not graph_data:
         raise HTTPException(status_code=400, detail="No graph data available for code generation")
         
-    files = generate_spring_boot_project(graph_data)
+    if engine == "gemini":
+        result = await generate_spring_boot_with_gemini(graph_data, model=model)
+        files = result["files"]
+    else:
+        files = generate_spring_boot_project(graph_data)
+        
     zip_bytes = create_project_zip(files)
     
     raw_name = diagram.get("name", "diagram")
@@ -81,7 +104,7 @@ async def download_code(
         event_type="codegen_download",
         diagram_id=diagram_id,
         diagram_name=raw_name,
-        payload={"total_files": len(files), "zip_size_bytes": len(zip_bytes)}
+        payload={"total_files": len(files), "zip_size_bytes": len(zip_bytes), "engine": engine}
     )
     
     return StreamingResponse(
@@ -89,6 +112,7 @@ async def download_code(
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{clean_filename}-backend.zip"'}
     )
+
 
 @router.post("/{diagram_id}/webhook-test")
 async def test_webhook(

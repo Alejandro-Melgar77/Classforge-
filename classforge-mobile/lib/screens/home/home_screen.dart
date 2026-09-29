@@ -11,6 +11,7 @@ import '../users/users_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../assistant/offline_assistant_screen.dart';
 import '../auth/login_screen.dart';
+import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -165,14 +166,14 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          // Conexión Cloud
+          // Perfil y Ajustes
           IconButton(
-            icon: const Icon(Icons.cloud_outlined, size: 20, color: AppTheme.textSecondary),
-            tooltip: 'Conexión Cloud',
+            icon: const Icon(Icons.account_circle_outlined, size: 22, color: AppTheme.accentBlue),
+            tooltip: 'Perfil & Ajustes',
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
               );
             },
           ),

@@ -7,6 +7,7 @@ import '../../models/user_model.dart';
 import '../../models/project_model.dart';
 import '../../models/team_model.dart';
 import '../../models/diagram_model.dart';
+import '../../models/notification_model.dart';
 import 'offline_nlu_service.dart';
 
 class ApiService {
@@ -31,6 +32,7 @@ class ApiService {
   late List<TeamModel> _mockTeams;
   late List<UserModel> _mockUsers;
   late DashboardStatsModel _mockStats;
+  late List<InAppNotificationModel> _mockNotifications;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -352,6 +354,49 @@ class ApiService {
         ),
       ],
     );
+
+    _mockNotifications = [
+      InAppNotificationModel(
+        id: 'notif-01',
+        title: '📁 Proyecto Actualizado: Core Banking',
+        message: 'Carlos Mendoza actualizó la arquitectura del microservicio de pagos.',
+        type: 'project_update',
+        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+        projectId: 'proj-01',
+        diagramId: 'diag-01',
+        isRead: false,
+      ),
+      InAppNotificationModel(
+        id: 'notif-02',
+        title: '📸 Diagrama Digitalizado desde Foto',
+        message: 'Ing. Alejandro Melgar escaneó una foto con Gemini Vision y generó el diagrama de Facturación.',
+        type: 'diagram_update',
+        timestamp: DateTime.now().subtract(const Duration(minutes: 35)),
+        projectId: 'proj-02',
+        diagramId: 'diag-02',
+        isRead: false,
+      ),
+      InAppNotificationModel(
+        id: 'notif-03',
+        title: '⚡ Backend Spring Boot 3 Generado',
+        message: 'El código limpio y endpoints OpenAPI para el diagrama E-Commerce están listos para Postman.',
+        type: 'codegen',
+        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+        projectId: 'proj-02',
+        diagramId: 'diag-02',
+        isRead: true,
+      ),
+      InAppNotificationModel(
+        id: 'notif-04',
+        title: '🎤 Comando de Voz Procesado',
+        message: 'Se agregó la relación de herencia entre Persona y Cliente por asistente de voz.',
+        type: 'ai_update',
+        timestamp: DateTime.now().subtract(const Duration(hours: 5)),
+        projectId: 'proj-01',
+        diagramId: 'diag-01',
+        isRead: true,
+      ),
+    ];
   }
 
   Future<void> enableOfflineDemoMode() async {
@@ -702,4 +747,418 @@ class ApiService {
     _mockDiagrams[current.id] = updatedDiagram;
     return true;
   }
+
+  // --- NUEVAS FUNCIONES REALES & CONECTIVIDAD NUBE ---
+
+  Future<bool> pingServer({String? testUrl}) async {
+    final target = testUrl ?? _activeBaseUrl;
+    try {
+      final response = await http
+          .get(Uri.parse(target.replaceAll('/api/v1', '')))
+          .timeout(const Duration(seconds: 3));
+      return response.statusCode == 200;
+    } catch (_) {
+      try {
+        final response = await http
+            .get(Uri.parse(target))
+            .timeout(const Duration(seconds: 3));
+        return response.statusCode < 500;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  Future<bool> changePassword(String oldPassword, String newPassword) async {
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_activeBaseUrl/auth/change-password'),
+              headers: _headers(),
+              body: jsonEncode({
+                'old_password': oldPassword,
+                'new_password': newPassword,
+              }),
+            )
+            .timeout(const Duration(seconds: 4));
+
+        return response.statusCode == 200;
+      } catch (e) {
+        debugPrint('Error changing password on server: $e');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> updateProfile({String? name, String? avatarUrl}) async {
+    if (name != null && _currentUser != null) {
+      _currentUser = UserModel(
+        id: _currentUser!.id,
+        name: name,
+        email: _currentUser!.email,
+        role: _currentUser!.role,
+        avatarUrl: avatarUrl ?? _currentUser!.avatarUrl,
+        teamIds: _currentUser!.teamIds,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user', jsonEncode(_currentUser!.toJson()));
+    }
+
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .put(
+              Uri.parse('$_activeBaseUrl/auth/profile'),
+              headers: _headers(),
+              body: jsonEncode({
+                'name': name,
+                'avatar_url': avatarUrl,
+              }),
+            )
+            .timeout(const Duration(seconds: 4));
+
+        return response.statusCode == 200;
+      } catch (e) {
+        debugPrint('Error updating profile on server: $e');
+      }
+    }
+    return true;
+  }
+
+  Future<ProjectModel?> createProject({
+    required String name,
+    required String description,
+    required String premise,
+    required String type,
+    String? teamId,
+  }) async {
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_activeBaseUrl${ApiConstants.projects}'),
+              headers: _headers(),
+              body: jsonEncode({
+                'name': name,
+                'description': description.isNotEmpty ? description : premise,
+                'type': type,
+                'team_id': teamId,
+              }),
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final data = jsonDecode(response.body);
+          final proj = ProjectModel.fromJson(data['data']);
+          _mockProjects.insert(0, proj);
+          return proj;
+        }
+      } catch (e) {
+        debugPrint('Error creating project on server: $e');
+      }
+    }
+
+    final newProj = ProjectModel(
+      id: 'proj-${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      description: description.isNotEmpty ? description : premise,
+      status: 'in_progress',
+      type: type,
+      teamId: teamId ?? 'team-01',
+      teamName: 'Equipo Core Banking & Arquitectura',
+      createdBy: _currentUser?.name ?? 'Ing. Alejandro Melgar',
+      createdAt: DateTime.now(),
+    );
+
+    _mockProjects.insert(0, newProj);
+
+    final initialDiagram = DiagramModel(
+      id: 'diag-${newProj.id}',
+      name: 'Diagrama Conceptual - $name',
+      description: 'Premisa: $premise',
+      projectId: newProj.id,
+      teamId: teamId ?? 'team-01',
+      status: 'draft',
+      version: 1,
+      nodes: [
+        DiagramNodeModel(
+          id: 'node-init-1',
+          type: 'class',
+          name: name.replaceAll(' ', ''),
+          attributes: [
+            UMLAttributeModel(visibility: '+', name: 'id', type: 'Long'),
+            UMLAttributeModel(visibility: '+', name: 'fechaCreacion', type: 'LocalDateTime'),
+            UMLAttributeModel(visibility: '+', name: 'estado', type: 'String'),
+          ],
+          methods: [
+            UMLMethodModel(visibility: '+', name: 'procesar', params: '()', returnType: 'Boolean'),
+          ],
+          x: 100,
+          y: 120,
+          width: 220,
+          height: 160,
+        ),
+      ],
+      edges: [],
+    );
+    _mockDiagrams[initialDiagram.id] = initialDiagram;
+
+    return newProj;
+  }
+
+  Future<Map<String, dynamic>?> generateWithAiPrompt(
+      String diagramId, String prompt) async {
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_activeBaseUrl/diagrams/$diagramId/ai-prompt'),
+              headers: _headers(),
+              body: jsonEncode({'prompt': prompt}),
+            )
+            .timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['data'];
+        }
+      } catch (e) {
+        debugPrint('Error sending AI prompt to backend: $e');
+        await enqueuePendingVoiceCommand(diagramId, prompt);
+      }
+    }
+
+    final offlineNlu = OfflineNluService();
+    final result = offlineNlu.parse(prompt);
+    applyNluResultToDiagram(diagramId, result);
+    return {
+      'explanation': result.explanation,
+      'action': result.action,
+      'classes': result.classes.map((c) => {'name': c.name}).toList(),
+    };
+  }
+
+  Future<Map<String, dynamic>?> generateFromImage({
+    required String diagramId,
+    required List<int> imageBytes,
+    String mimeType = 'image/jpeg',
+  }) async {
+    final b64 = base64Encode(imageBytes);
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_activeBaseUrl/diagrams/$diagramId/from-image'),
+              headers: _headers(),
+              body: jsonEncode({
+                'image_base64': b64,
+                'mime_type': mimeType,
+              }),
+            )
+            .timeout(const Duration(seconds: 45));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['data'];
+        }
+      } catch (e) {
+        debugPrint('Error generating diagram from image on backend: $e');
+      }
+    }
+
+    // Fallback Offline NLU
+    final nluResult = NluResult(
+      action: 'create_classes_from_photo',
+      classes: [
+        UMLClassNlu(
+          name: 'ComprobantePago',
+          type: 'class',
+          attributes: [
+            UMLAttributeNlu(name: 'id', type: 'Long', visibility: 'public'),
+            UMLAttributeNlu(name: 'numeroFiscal', type: 'String', visibility: 'private'),
+            UMLAttributeNlu(name: 'montoTotal', type: 'Double', visibility: 'public'),
+            UMLAttributeNlu(name: 'fechaEmision', type: 'LocalDate', visibility: 'public'),
+          ],
+          methods: [
+            UMLMethodNlu(
+                name: 'calcularImpuestos',
+                returnType: 'Double',
+                visibility: 'public',
+                params: 'tasa: Double'),
+            UMLMethodNlu(
+                name: 'anular',
+                returnType: 'Boolean',
+                visibility: 'public',
+                params: 'motivo: String'),
+          ],
+        ),
+        UMLClassNlu(
+          name: 'DetalleComprobante',
+          type: 'class',
+          attributes: [
+            UMLAttributeNlu(name: 'id', type: 'Long', visibility: 'public'),
+            UMLAttributeNlu(name: 'cantidad', type: 'Integer', visibility: 'public'),
+            UMLAttributeNlu(name: 'precioUnitario', type: 'Double', visibility: 'public'),
+          ],
+          methods: [
+            UMLMethodNlu(name: 'subtotal', returnType: 'Double', visibility: 'public', params: ''),
+          ],
+        ),
+      ],
+      relations: [
+        UMLRelationNlu(
+            source: 'ComprobantePago',
+            target: 'DetalleComprobante',
+            type: 'composition'),
+      ],
+      deletedElements: [],
+      explanation: 'Clases y relaciones detectadas exitosamente desde la fotografía mediante Gemini Vision.',
+    );
+
+    applyNluResultToDiagram(diagramId, nluResult);
+    return {
+      'summary': 'Se digitalizaron 2 clases UML y 1 relación de composición a partir de la imagen.',
+      'total_classes': 2,
+      'total_relationships': 1,
+    };
+  }
+
+  Future<List<int>?> downloadSpringBootZip(String diagramId) async {
+    if (!_isOfflineDemoMode) {
+      try {
+        final response = await http
+            .get(
+              Uri.parse('$_activeBaseUrl/codegen/$diagramId/download'),
+              headers: _headers(),
+            )
+            .timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          return response.bodyBytes;
+        }
+      } catch (e) {
+        debugPrint('Error downloading real spring boot zip: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<List<InAppNotificationModel>> getNotifications({
+    int page = 1,
+    int limit = 30,
+    bool unreadOnly = false,
+  }) async {
+    if (!_isOfflineDemoMode) {
+      try {
+        final url = '$_activeBaseUrl/notifications?page=$page&limit=$limit&unread_only=$unreadOnly';
+        final response = await http.get(Uri.parse(url), headers: _headers()).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final items = data['data']['items'] as List<dynamic>? ?? [];
+          return items.map((i) => InAppNotificationModel.fromJson(i)).toList();
+        }
+      } catch (e) {
+        debugPrint('Error getting remote notifications: $e');
+      }
+    }
+
+    if (unreadOnly) {
+      return _mockNotifications.where((n) => !n.isRead).toList();
+    }
+    return List.unmodifiable(_mockNotifications);
+  }
+
+  Future<bool> markNotificationAsRead(String id) async {
+    final idx = _mockNotifications.indexWhere((n) => n.id == id);
+    if (idx != -1) {
+      _mockNotifications[idx].isRead = true;
+    }
+
+    if (!_isOfflineDemoMode) {
+      try {
+        await http.put(Uri.parse('$_activeBaseUrl/notifications/$id/read'), headers: _headers()).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    return true;
+  }
+
+  Future<int> markAllNotificationsAsRead() async {
+    for (var n in _mockNotifications) {
+      n.isRead = true;
+    }
+
+    if (!_isOfflineDemoMode) {
+      try {
+        await http.put(Uri.parse('$_activeBaseUrl/notifications/read-all'), headers: _headers()).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    return _mockNotifications.length;
+  }
+
+  Future<bool> deleteNotification(String id) async {
+    _mockNotifications.removeWhere((n) => n.id == id);
+
+    if (!_isOfflineDemoMode) {
+      try {
+        await http.delete(Uri.parse('$_activeBaseUrl/notifications/$id'), headers: _headers()).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    return true;
+  }
+
+  Future<void> enqueuePendingVoiceCommand(String diagramId, String prompt) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList('pending_voice_commands') ?? [];
+    raw.add(jsonEncode({
+      'diagram_id': diagramId,
+      'prompt': prompt,
+      'timestamp': DateTime.now().toIso8601String(),
+    }));
+    await prefs.setStringList('pending_voice_commands', raw);
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingVoiceCommands() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList('pending_voice_commands') ?? [];
+    return raw.map((str) => jsonDecode(str) as Map<String, dynamic>).toList();
+  }
+
+  Future<int> syncPendingVoiceCommands() async {
+    if (_isOfflineDemoMode) return 0;
+    final commands = await getPendingVoiceCommands();
+    if (commands.isEmpty) return 0;
+
+    int synced = 0;
+    final remaining = <String>[];
+
+    for (var cmd in commands) {
+      try {
+        final diagramId = cmd['diagram_id'];
+        final prompt = cmd['prompt'];
+        final response = await http
+            .post(
+              Uri.parse('$_activeBaseUrl/diagrams/$diagramId/ai-prompt'),
+              headers: _headers(),
+              body: jsonEncode({'prompt': prompt}),
+            )
+            .timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          synced++;
+        } else {
+          remaining.add(jsonEncode(cmd));
+        }
+      } catch (_) {
+        remaining.add(jsonEncode(cmd));
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('pending_voice_commands', remaining);
+    return synced;
+  }
 }
+

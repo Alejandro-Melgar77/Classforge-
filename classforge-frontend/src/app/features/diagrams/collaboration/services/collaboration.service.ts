@@ -20,13 +20,13 @@ export class CollaborationService implements OnDestroy {
   public chatMessages = signal<ChatMessage[]>([]);
   public myPresenceStatus = signal<'online' | 'away' | 'busy'>('online');
 
-  private remoteOperationsSubj = new Subject<any>();
-  public remoteOperations$ = this.remoteOperationsSubj.asObservable();
+  private remoteOperationsSubj = new Subject<WsMessage>();
+  public remoteOperations$: Observable<WsMessage> = this.remoteOperationsSubj.asObservable();
 
   private reconnectAttempts = 0;
   private maxReconnects = 5;
   private lastCursorSend = 0;
-  private pingInterval: any = null;
+  private pingInterval: ReturnType<typeof setInterval> | undefined = undefined;
 
   connect(diagramId: string): void {
     this.diagramId = diagramId;

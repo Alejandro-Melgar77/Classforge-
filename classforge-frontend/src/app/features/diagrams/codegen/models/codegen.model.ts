@@ -2,10 +2,15 @@ export interface GeneratedFiles {
   [filePath: string]: string;
 }
 
+export type CodegenEngine = 'deterministic' | 'gemini';
+
 export interface CodegenPreviewResponse {
   files: GeneratedFiles;
   total_files: number;
+  engine_used?: string;
+  summary?: string;
 }
+
 
 export interface FileTreeNode {
   name: string;

@@ -1,6 +1,6 @@
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 class CreateDiagram(BaseModel):
     name: str
@@ -101,8 +101,8 @@ class DiagramResponse(BaseModel):
             status=doc.get("status", "draft"),
             is_public=doc.get("is_public", False),
             version=doc.get("version", 1),
-            created_at=doc.get("created_at", datetime.utcnow()),
-            updated_at=doc.get("updated_at", datetime.utcnow())
+            created_at=doc.get("created_at", datetime.now(timezone.utc)),
+            updated_at=doc.get("updated_at", datetime.now(timezone.utc))
         )
 
 class DiagramResponseFull(DiagramResponse):

@@ -101,6 +101,15 @@ def generate_spring_boot_project(graph_data: dict, package_name: str = "com.clas
     files[f"src/main/java/{base_path}/exceptions/BadRequestException.java"] = templates.BAD_REQUEST_EXCEPTION.format(package_name=package_name)
     files[f"src/main/java/{base_path}/exceptions/ErrorResponseDTO.java"] = templates.ERROR_RESPONSE_DTO.format(package_name=package_name)
     files[f"src/main/java/{base_path}/exceptions/GlobalExceptionHandler.java"] = templates.GLOBAL_EXCEPTION_HANDLER.format(package_name=package_name)
+
+    # VS Code Configurations & 1-Click Launchers
+    files[".vscode/launch.json"] = templates.VSCODE_LAUNCH_JSON.format(package_name=package_name)
+    files[".vscode/settings.json"] = templates.VSCODE_SETTINGS_JSON
+    files[".vscode/extensions.json"] = templates.VSCODE_EXTENSIONS_JSON
+    files["run.bat"] = templates.RUN_BAT
+    files["run.sh"] = templates.RUN_SH
+    files["mvnw.cmd"] = templates.MVNW_CMD
+    files["mvnw"] = templates.MVNW_SH
     
     nodes = graph_data.get("nodes", []) if isinstance(graph_data, dict) else []
     edges = graph_data.get("edges", []) if isinstance(graph_data, dict) else []

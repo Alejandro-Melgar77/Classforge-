@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from bson import ObjectId
 from app.core.database import get_db
 
 def _get_db():
     return get_db()
 
-async def verify_ws_token(diagram_id: str, token: str) -> dict:
+async def verify_ws_token(diagram_id: str, token: str) -> Optional[Dict[str, Any]]:
     """Verifies a WS token and returns the user document if valid."""
     db = _get_db()
     if db is None:
@@ -20,7 +21,9 @@ async def verify_ws_token(diagram_id: str, token: str) -> dict:
         
     expires_at = ws_token.get("expires_at")
     if expires_at:
-        now = datetime.now(timezone.utc) if expires_at.tzinfo else datetime.utcnow()
+        now = datetime.now(timezone.utc)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at < now:
             return None
         
@@ -31,7 +34,7 @@ async def verify_ws_token(diagram_id: str, token: str) -> dict:
     if isinstance(user_id, str):
         try:
             user_id = ObjectId(user_id)
-        except:
+        except Exception:
             pass
             
     user = await db.users.find_one({"_id": user_id})
@@ -46,7 +49,7 @@ async def update_diagram_graph_data(diagram_id: str, element_id: str = None, op:
         return
     try:
         obj_id = ObjectId(diagram_id)
-    except:
+    except Exception:
         return
         
     diagram = await db.diagrams.find_one({"_id": obj_id})

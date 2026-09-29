@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CodegenService } from '../services/codegen.service';
 import { FileTreeComponent } from './file-tree.component';
 import { ActivatedRoute } from '@angular/router';
+import { CodegenEngine } from '../models/codegen.model';
 
 @Component({
   selector: 'app-live-code-drawer',
@@ -96,6 +97,65 @@ import { ActivatedRoute } from '@angular/router';
 
       </div>
 
+      <!-- ═══ SUB-HEADER: ENGINE CONTROLS & AI SETTINGS ═══ -->
+      <div class="px-4 py-2 bg-[var(--surface-1)] border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+        
+        <!-- Left: Engine Selector Toggle -->
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-semibold text-slate-400">Motor:</span>
+          <div class="flex items-center bg-[var(--surface-2)] p-0.5 rounded-lg border border-[var(--border)]">
+            <button 
+              (click)="setEngine('gemini')"
+              class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer"
+              [ngClass]="codegen.activeEngine() === 'gemini' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
+              <span>🧠</span>
+              <span>IA Gemini Pro</span>
+              <span class="text-[9px] px-1 py-0.2 bg-purple-900/60 text-purple-200 rounded-full font-mono">Semántico</span>
+            </button>
+            
+            <button 
+              (click)="setEngine('deterministic')"
+              class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer"
+              [ngClass]="codegen.activeEngine() === 'deterministic' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
+              <span>⚡</span>
+              <span>Determinista</span>
+              <span class="text-[9px] px-1 py-0.2 bg-blue-900/60 text-blue-200 rounded-full font-mono">Rápido</span>
+            </button>
+          </div>
+          
+          <!-- Gemini Settings Button -->
+          <button 
+            *ngIf="codegen.activeEngine() === 'gemini'"
+            (click)="openSettingsModal()"
+            class="px-2 py-1 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-slate-300 hover:text-white rounded-lg border border-[var(--border)] transition-colors cursor-pointer flex items-center gap-1.5"
+            title="Configurar clave de API y modelo de Gemini">
+            <span>⚙️</span>
+            <span class="text-[10px] font-mono text-purple-300">{{ codegen.geminiModel() }}</span>
+          </button>
+        </div>
+
+        <!-- Right: Active Engine Badge & Regenerate Button -->
+        <div class="flex items-center gap-2">
+          <!-- Active Engine Badge -->
+          <span class="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
+            <span class="w-1.5 h-1.5 rounded-full" [ngClass]="codegen.activeEngine() === 'gemini' ? 'bg-purple-400 animate-pulse' : 'bg-blue-400'"></span>
+            {{ codegen.engineUsed() }}
+          </span>
+
+          <button 
+            (click)="regenerate()"
+            [disabled]="codegen.isLoading()"
+            class="px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer">
+            <span *ngIf="!codegen.isLoading()">🔄 Regenerar</span>
+            <span *ngIf="codegen.isLoading()" class="flex items-center gap-1">
+              <span class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              Generando...
+            </span>
+          </button>
+        </div>
+
+      </div>
+
       <!-- ═══ BODY (SPLIT VIEW) ═══ -->
       <div class="flex-1 flex overflow-hidden relative">
         
@@ -176,6 +236,14 @@ import { ActivatedRoute } from '@angular/router';
 
           </div>
 
+          <!-- Architecture Insight Banner if Gemini generated -->
+          <div *ngIf="codegen.engineSummary()" class="px-3 py-1.5 bg-gradient-to-r from-purple-950/70 to-indigo-950/50 border-b border-purple-500/20 flex items-center justify-between text-[11px] text-purple-200 shrink-0">
+            <div class="flex items-center gap-2 overflow-hidden truncate">
+              <span class="text-xs shrink-0">💡</span>
+              <span class="truncate font-sans"><strong class="text-purple-300">Semántica IA:</strong> {{ codegen.engineSummary() }}</span>
+            </div>
+          </div>
+
           <!-- Code Content Area (with Line Numbers Column) -->
           <div class="flex-1 overflow-auto custom-scrollbar flex bg-[#141416] font-mono leading-relaxed" [style.fontSize.px]="fontSize">
             
@@ -216,11 +284,74 @@ import { ActivatedRoute } from '@angular/router';
 
       </div>
 
+      <!-- ═══ GEMINI SETTINGS MODAL ═══ -->
+      <div *ngIf="isSettingsOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fadeIn select-text">
+        <div class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden text-[var(--text-primary)]">
+          <div class="px-5 py-4 border-b border-[var(--border)] bg-[var(--surface-1)] flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">⚙️</span>
+              <h3 class="text-sm font-bold">Configuración de Google Gemini API</h3>
+            </div>
+            <button (click)="closeSettingsModal()" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[var(--surface-3)]">✕</button>
+          </div>
+          
+          <div class="p-5 flex flex-col gap-4 text-xs">
+            <!-- API Key Field -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-semibold text-slate-300">Clave de API de Gemini:</label>
+              <div class="relative flex items-center">
+                <input 
+                  [type]="showApiKey ? 'text' : 'password'"
+                  [(ngModel)]="tempApiKey"
+                  placeholder="AQ... o AIzaSy..."
+                  class="w-full bg-[var(--surface-1)] border border-[var(--border)] rounded-lg px-3 py-2 pr-10 text-xs font-mono text-white placeholder-slate-500 outline-none focus:border-purple-400">
+                <button 
+                  type="button"
+                  (click)="showApiKey = !showApiKey"
+                  class="absolute right-2 text-slate-400 hover:text-white text-xs p-1"
+                  title="Mostrar u ocultar clave">
+                  {{ showApiKey ? '🙈' : '👁️' }}
+                </button>
+              </div>
+              <span class="text-[10px] text-slate-400">Tu clave se guarda de forma segura en tu navegador y en el servidor local.</span>
+            </div>
+
+            <!-- Model Selector -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-semibold text-slate-300">Modelo de Gemini:</label>
+              <select 
+                [(ngModel)]="tempModel"
+                class="w-full bg-[var(--surface-1)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-purple-400">
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Recomendado - Razonamiento de última generación y alta velocidad)</option>
+                <option value="gemini-flash-latest">gemini-flash-latest (Alta velocidad)</option>
+                <option value="gemini-3.5-flash">gemini-3.5-flash (Flash multimodal)</option>
+                <option value="gemini-3.7-flash">gemini-3.7-flash (Flash híbrido)</option>
+                <option value="gemini-pro-latest">gemini-pro-latest (Pro - Requiere facturación en Google Cloud)</option>
+              </select>
+            </div>
+
+            <div class="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-300 text-[11px] leading-relaxed">
+              ✨ <strong>Generación Semántica Activa:</strong> Gemini analiza las clases UML, relaciones (ManyToOne, OneToMany), validaciones y genera la lógica de negocio real en los servicios Spring Boot 3.
+            </div>
+
+          </div>
+
+          <div class="px-5 py-3 border-t border-[var(--border)] bg-[var(--surface-1)] flex items-center justify-end gap-2">
+            <button (click)="closeSettingsModal()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg">Cancelar</button>
+            <button (click)="saveSettingsAndRegenerate()" class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg shadow-md cursor-pointer">
+              Guardar y Regenerar
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   `
 })
 export class LiveCodeDrawerComponent {
   @Input() isOpen = false;
+  @Input() diagramId = '';
+  @Input() graphData: any = null;
   @Output() close = new EventEmitter<void>();
 
   public codegen = inject(CodegenService);
@@ -231,6 +362,12 @@ export class LiveCodeDrawerComponent {
   isDownloadingZip = false;
   wordWrap = false;
   fontSize = 12;
+
+  // Gemini Settings state
+  isSettingsOpen = false;
+  tempApiKey = '';
+  tempModel = 'gemini-3.8-flash';
+  showApiKey = false;
   
   // Resizable state
   drawerWidth = Math.max(620, Math.min(window.innerWidth * 0.58, 980));
@@ -378,5 +515,48 @@ export class LiveCodeDrawerComponent {
       navigator.clipboard.writeText(path);
     }
   }
+
+  // ─── Gemini Engine & Settings ──────────────────────────────────
+
+  setEngine(engine: CodegenEngine) {
+    this.codegen.setEngine(engine);
+    this.regenerate();
+  }
+
+  openSettingsModal() {
+    this.tempApiKey = this.codegen.geminiApiKey();
+    this.tempModel = this.codegen.geminiModel();
+    this.isSettingsOpen = true;
+  }
+
+  closeSettingsModal() {
+    this.isSettingsOpen = false;
+  }
+
+  saveSettingsAndRegenerate() {
+    this.codegen.setGeminiApiKey(this.tempApiKey.trim());
+    this.codegen.setGeminiModel(this.tempModel);
+    this.isSettingsOpen = false;
+    this.regenerate();
+  }
+
+  regenerate() {
+    const targetId = this.diagramId || this.route.snapshot.paramMap.get('id');
+    if (!targetId) return;
+
+    this.codegen.isLoading.set(true);
+    this.codegen.getPreview(targetId, this.graphData).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.codegen.generatedFiles.set(res.data.files);
+        }
+        this.codegen.isLoading.set(false);
+      },
+      error: () => {
+        this.codegen.isLoading.set(false);
+      }
+    });
+  }
 }
+
 

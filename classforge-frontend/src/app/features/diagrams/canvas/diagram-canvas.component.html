@@ -530,8 +530,9 @@
   <!-- ═══ POPUP MODALS & DRAWERS (Only rendered when opened!) ═══ -->
   <app-collaborators-panel *ngIf="isCollabPanelOpen" [isOpen]="isCollabPanelOpen" (close)="toggleCollabPanel()"></app-collaborators-panel>
   <app-ai-drawer *ngIf="isAiDrawerOpen" [isOpen]="isAiDrawerOpen" [diagramId]="diagramId" (close)="toggleAiDrawer()"></app-ai-drawer>
-  <app-live-code-drawer *ngIf="isLiveCodeOpen" [isOpen]="isLiveCodeOpen" (close)="toggleLiveCode()"></app-live-code-drawer>
+  <app-live-code-drawer *ngIf="isLiveCodeOpen" [isOpen]="isLiveCodeOpen" [diagramId]="diagramId" [graphData]="canvasService.toGraphData()" (close)="toggleLiveCode()"></app-live-code-drawer>
   <app-frontend-prompt-modal *ngIf="isPromptModalOpen" [isOpen]="isPromptModalOpen" [diagramId]="diagramId" [graphData]="canvasService.toGraphData()" (close)="togglePromptModal()"></app-frontend-prompt-modal>
+
 
   <!-- ═══ IN-CANVAS RENAME & BRANDING MODAL ═══ -->
   <div *ngIf="isCanvasEditModalOpen" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">

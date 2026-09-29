@@ -50,6 +50,13 @@ def test_generate_spring_boot_project():
     assert "src/main/java/com/test/config/CorsConfig.java" in files
     assert "src/main/java/com/test/exceptions/GlobalExceptionHandler.java" in files
     assert "README.md" in files
+    assert ".vscode/launch.json" in files
+    assert ".vscode/settings.json" in files
+    assert ".vscode/extensions.json" in files
+    assert "run.bat" in files
+    assert "run.sh" in files
+    assert "mvnw.cmd" in files
+    assert "mvnw" in files
     
     # Assert Entity files
     assert "src/main/java/com/test/entities/User.java" in files

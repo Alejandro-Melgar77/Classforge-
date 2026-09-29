@@ -5,6 +5,27 @@ import { SupportTourService } from '../../services/support-tour.service';
 import { SupportNluService } from '../../services/support-nlu.service';
 import { SupportChatMessage, TourDefinition } from '../../models/support-tour.model';
 
+interface ISpeechRecognitionEvent {
+  results: {
+    [index: number]: {
+      [index: number]: {
+        transcript: string;
+      };
+    };
+  };
+}
+
+interface ISpeechRecognition {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: ISpeechRecognitionEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
 @Component({
   selector: 'app-support-assistant',
   standalone: true,
@@ -21,7 +42,7 @@ export class SupportAssistantComponent implements OnInit, OnDestroy {
   public queryText = '';
   public isRecording = false;
 
-  private recognition: any = null;
+  private recognition: ISpeechRecognition | null = null;
 
   public messages: SupportChatMessage[] = [
     {
@@ -122,14 +143,15 @@ export class SupportAssistantComponent implements OnInit, OnDestroy {
   }
 
   private initSpeechRecognition() {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = (window as unknown as { SpeechRecognition?: new () => ISpeechRecognition; webkitSpeechRecognition?: new () => ISpeechRecognition }).SpeechRecognition ||
+                              (window as unknown as { SpeechRecognition?: new () => ISpeechRecognition; webkitSpeechRecognition?: new () => ISpeechRecognition }).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
       this.recognition.lang = 'es-ES';
       this.recognition.continuous = false;
       this.recognition.interimResults = false;
 
-      this.recognition.onresult = (event: any) => {
+      this.recognition.onresult = (event: ISpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         this.queryText = transcript;
         this.isRecording = false;

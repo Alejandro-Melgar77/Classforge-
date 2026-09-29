@@ -1,12 +1,14 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Any
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any, List, Optional
+from pydantic import BaseModel, EmailStr, Field
+
 
 class StandardResponse(BaseModel):
     success: bool
     data: Any = None
     message: str
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 
 class UserCreateAdmin(BaseModel):
     name: str

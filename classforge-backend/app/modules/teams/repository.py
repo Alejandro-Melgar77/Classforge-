@@ -1,22 +1,27 @@
-from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 import random
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+from bson import ObjectId
+
 
 class TeamRepository:
-    def __init__(self, db):
+    """Repository for managing work teams in MongoDB."""
+
+    def __init__(self, db: Any):
         self.collection = db["teams"]
 
     def _generate_color(self) -> str:
         return "#{:06x}".format(random.randint(0, 0xFFFFFF))
 
     async def create(self, team_data: dict, created_by: str) -> dict:
+        """Creates a new team document with UTC timestamps."""
         raw_members = team_data.get("member_ids", []) or []
         member_oids = [ObjectId(m) for m in raw_members if ObjectId.is_valid(str(m))]
         sm_oid = ObjectId(team_data["scrum_master_id"])
         if sm_oid not in member_oids:
             member_oids.append(sm_oid)
 
+        now = datetime.now(timezone.utc)
         doc = {
             "name": team_data["name"],
             "description": team_data.get("description", ""),
@@ -27,8 +32,8 @@ class TeamRepository:
             "is_deleted": False,
             "deleted_at": None,
             "created_by": ObjectId(created_by),
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": now,
+            "updated_at": now
         }
 
         result = await self.collection.insert_one(doc)
@@ -54,7 +59,7 @@ class TeamRepository:
         if "member_ids" in update_data and isinstance(update_data["member_ids"], list):
             update_data["member_ids"] = [ObjectId(m) for m in update_data["member_ids"] if ObjectId.is_valid(str(m))]
             
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         result = await self.collection.update_one(
             {"_id": ObjectId(team_id)},
             {"$set": update_data}
@@ -66,7 +71,7 @@ class TeamRepository:
             {"_id": ObjectId(team_id)},
             {
                 "$addToSet": {"member_ids": ObjectId(user_id)},
-                "$set": {"updated_at": datetime.utcnow()}
+                "$set": {"updated_at": datetime.now(timezone.utc)}
             }
         )
         return result.modified_count > 0
@@ -76,14 +81,15 @@ class TeamRepository:
             {"_id": ObjectId(team_id)},
             {
                 "$pull": {"member_ids": ObjectId(user_id)},
-                "$set": {"updated_at": datetime.utcnow()}
+                "$set": {"updated_at": datetime.now(timezone.utc)}
             }
         )
         return result.modified_count > 0
 
     async def soft_delete(self, team_id: str) -> bool:
+        now = datetime.now(timezone.utc)
         result = await self.collection.update_one(
             {"_id": ObjectId(team_id)},
-            {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow(), "updated_at": datetime.utcnow()}}
+            {"$set": {"is_deleted": True, "deleted_at": now, "updated_at": now}}
         )
         return result.modified_count > 0

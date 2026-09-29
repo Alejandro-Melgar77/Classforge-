@@ -6,7 +6,7 @@ import { Graph, Node, Edge, Cell } from '@antv/x6';
 import { CanvasService } from '../services/canvas.service';
 import { AutoSaveService } from '../services/auto-save.service';
 import { DiagramService } from '../services/diagram.service';
-import { Diagram, NodeType, EdgeType, UMLNodeData, UMLAttribute, UMLMethod, DiagramParticipantsResponse, ParticipantItem } from '../models/diagram.model';
+import { Diagram, NodeType, EdgeType, Visibility, UMLNodeData, UMLAttribute, UMLMethod, DiagramParticipantsResponse, ParticipantItem } from '../models/diagram.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { CanvasToolbarComponent } from '../toolbar/canvas-toolbar.component';
 import { CollaborationService } from '../collaboration/services/collaboration.service';
@@ -148,7 +148,7 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   private isApplyingRemoteUpdate = false;
   private subs = new Subscription();
-  private codegenTimeout: any;
+  private codegenTimeout: ReturnType<typeof setTimeout> | null = null;
   private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
@@ -546,14 +546,23 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // ─── Floating Edge Quick Toolbar ─────────────────────────────
 
-  openEdgeQuickToolbar(edge: any) {
+  openEdgeQuickToolbar(edge: Edge) {
     if (!edge || !this.graph) return;
     this.selectedEdgeId = edge.id;
     this.quickEdgeType = (edge.shape?.replace('uml-', '') as EdgeType) || 'association';
     const labels = edge.getLabels ? edge.getLabels() : [];
-    this.quickEdgeLabel = labels[0]?.attrs?.label?.text || labels[0]?.attrs?.text?.text || '';
-    this.quickEdgeSourceMult = labels[1]?.attrs?.label?.text || labels[1]?.attrs?.text?.text || '';
-    this.quickEdgeTargetMult = labels[2]?.attrs?.label?.text || labels[2]?.attrs?.text?.text || '';
+    const getLabelText = (idx: number): string => {
+      const l = labels[idx];
+      if (!l || !l.attrs) return '';
+      const attrs = l.attrs as Record<string, any>;
+      const labelObj = attrs['label'] || attrs['text'];
+      if (!labelObj) return '';
+      const textVal = labelObj['text'];
+      return typeof textVal === 'string' ? textVal : '';
+    };
+    this.quickEdgeLabel = getLabelText(0);
+    this.quickEdgeSourceMult = getLabelText(1);
+    this.quickEdgeTargetMult = getLabelText(2);
     this.updateFloatingToolbarsPosition();
     this.cdr.detectChanges();
   }
@@ -614,7 +623,7 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // ─── Floating Node Quick Toolbar ─────────────────────────────
 
-  openNodeQuickToolbar(node: any) {
+  openNodeQuickToolbar(node: Node) {
     if (!node || !this.graph) return;
     this.selectedNodeId = node.id;
     this.updateFloatingToolbarsPosition();
@@ -652,7 +661,7 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // ─── In-Box Direct Inline Editing ────────────────────────────
 
-  startInlineEditing(node: any, mode: 'name' | 'attributes' | 'methods') {
+  startInlineEditing(node: Node, mode: 'name' | 'attributes' | 'methods') {
     this.inlineEditingNodeId = node.id;
     this.inlineEditingMode = mode;
     const data = (node.getData() as UMLNodeData) || { name: 'Clase', attributes: [], methods: [] };
@@ -732,10 +741,10 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   parseAttributesFromText(text: string): UMLAttribute[] {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('—'));
     return lines.map(line => {
-      let vis: any = '+';
+      let vis: Visibility = '+';
       let cleanLine = line;
       if (line.startsWith('+') || line.startsWith('-') || line.startsWith('#') || line.startsWith('~')) {
-        vis = line[0];
+        vis = line[0] as Visibility;
         cleanLine = line.slice(1).trim();
       }
       const isStatic = cleanLine.startsWith('_') && cleanLine.endsWith('_');
@@ -770,10 +779,10 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   parseMethodsFromText(text: string): UMLMethod[] {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('—'));
     return lines.map(line => {
-      let vis: any = '+';
+      let vis: Visibility = '+';
       let cleanLine = line;
       if (line.startsWith('+') || line.startsWith('-') || line.startsWith('#') || line.startsWith('~')) {
-        vis = line[0];
+        vis = line[0] as Visibility;
         cleanLine = line.slice(1).trim();
       }
       const isAbstract = cleanLine.includes('{abstract}');
@@ -907,9 +916,12 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // ─── Inline Node Edit Modal Methods ───────────────────────────
 
-  openNodeEditModal(node: any) {
+  openNodeEditModal(cellOrNode: Node | Cell | null | undefined) {
+    if (!cellOrNode || !this.graph) return;
+    const node = cellOrNode.isNode() ? (cellOrNode as Node) : null;
+    if (!node) return;
     this.editingNodeId = node.id;
-    const rawData = node.getData() || {};
+    const rawData = (node.getData() || {}) as Partial<UMLNodeData>;
     this.editingNodeData = {
       name: rawData.name || 'Clase',
       stereotype: rawData.stereotype || null,

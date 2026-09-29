@@ -1,12 +1,17 @@
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from bson import ObjectId
-from datetime import datetime
-from typing import List, Optional
+
 
 class FolderRepository:
-    def __init__(self, db):
+    """Repository for managing folders in MongoDB."""
+
+    def __init__(self, db: Any):
         self.collection = db["folders"]
 
     async def create(self, data: dict, owner_id: str) -> dict:
+        """Creates a new folder document in MongoDB."""
+        now = datetime.now(timezone.utc)
         doc = {
             "name": data["name"],
             "owner_id": ObjectId(owner_id),
@@ -16,8 +21,8 @@ class FolderRepository:
             "type": data["type"],
             "is_deleted": False,
             "deleted_at": None,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": now,
+            "updated_at": now
         }
         result = await self.collection.insert_one(doc)
         doc["_id"] = result.inserted_id
@@ -42,15 +47,18 @@ class FolderRepository:
         return await cursor.to_list(length=1000)
 
     async def update(self, folder_id: str, name: str) -> bool:
+        """Updates a folder name and timestamp."""
         result = await self.collection.update_one(
             {"_id": ObjectId(folder_id)},
-            {"$set": {"name": name, "updated_at": datetime.utcnow()}}
+            {"$set": {"name": name, "updated_at": datetime.now(timezone.utc)}}
         )
         return result.modified_count > 0
 
     async def soft_delete(self, folder_id: str) -> bool:
+        """Soft-deletes a folder by setting is_deleted to True."""
+        now = datetime.now(timezone.utc)
         result = await self.collection.update_one(
             {"_id": ObjectId(folder_id)},
-            {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow(), "updated_at": datetime.utcnow()}}
+            {"$set": {"is_deleted": True, "deleted_at": now, "updated_at": now}}
         )
         return result.modified_count > 0
