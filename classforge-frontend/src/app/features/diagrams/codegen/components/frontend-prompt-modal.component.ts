@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, inject, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CodegenService } from '../services/codegen.service';
-import { FrontendFramework, FrontendTheme } from '../models/codegen.model';
+import { FrontendFramework, FrontendTheme, CodegenEngine } from '../models/codegen.model';
 
 interface FrameworkOption {
   id: FrontendFramework;
@@ -30,43 +30,67 @@ interface FrameworkOption {
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold">Generador de Prompt para Aplicaciones Móviles y Web con IA</h2>
-                <span class="px-2 py-0.5 text-[10px] font-semibold tracking-wide rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  ⚡ Determinista (<5ms)
+                <h2 class="text-base font-bold">Generador de Prompt para Apps Móviles & Web</h2>
+                
+                <!-- Engine Badge -->
+                <span class="px-2 py-0.5 text-[10px] font-semibold tracking-wide rounded-full"
+                      [ngClass]="selectedEngine === 'gemini' ? 'bg-purple-500/10 text-purple-300 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'">
+                  {{ selectedEngine === 'gemini' ? '🧠 IA Gemini Pro' : '⚡ Determinista' }}
                 </span>
               </div>
               <p class="text-xs text-[var(--text-secondary)]">
-                Genera la especificación completa para que <strong>Claude, ChatGPT, Gemini o Cursor</strong> construyan la app móvil (Flutter / React Native) o frontend exacto para tu backend Spring Boot 3.
+                Genera la especificación para que <strong>Claude, ChatGPT, Gemini o Cursor</strong> construyan tu app móvil (Flutter / React Native) con micrófono, voz y APK automático.
               </p>
             </div>
           </div>
 
-          <button (click)="close.emit()" class="p-2 text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-3)] rounded-lg transition-colors">
+          <button (click)="close.emit()" class="p-2 text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-3)] rounded-lg transition-colors cursor-pointer">
             ✕
           </button>
         </div>
 
-        <!-- Controls Bar: Frameworks & Themes -->
+        <!-- Controls Bar: Frameworks, Engines & Themes -->
         <div class="px-6 py-3 border-b border-[var(--border)] bg-[var(--surface-2)] flex flex-col gap-3 text-sm">
           
           <!-- Category 1: Mobile Frameworks (Flutter & React Native) -->
-          <div class="flex flex-wrap items-center gap-3">
-            <span class="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1 shrink-0">
-              📱 Móvil:
-            </span>
-            <div class="flex flex-wrap items-center gap-2">
-              <button 
-                *ngFor="let fw of mobileFrameworks" 
-                (click)="selectFramework(fw.id)"
-                class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 border shadow-xs"
-                [ngClass]="selectedFramework === fw.id ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white border-purple-400 shadow-md' : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:border-purple-500/50 hover:bg-slate-800'">
-                <span>{{ fw.icon }}</span>
-                <span>{{ fw.name }}</span>
-                <span class="text-[9px] px-1.5 py-0.2 rounded-full"
-                      [ngClass]="selectedFramework === fw.id ? 'bg-purple-900/60 text-purple-200' : 'bg-slate-700/50 text-slate-400'">
-                  {{ fw.badge }}
-                </span>
-              </button>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1 shrink-0">
+                📱 Móvil:
+              </span>
+              <div class="flex flex-wrap items-center gap-2">
+                <button 
+                  *ngFor="let fw of mobileFrameworks" 
+                  (click)="selectFramework(fw.id)"
+                  class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 border shadow-xs cursor-pointer"
+                  [ngClass]="selectedFramework === fw.id ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white border-purple-400 shadow-md' : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:border-purple-500/50 hover:bg-slate-800'">
+                  <span>{{ fw.icon }}</span>
+                  <span>{{ fw.name }}</span>
+                  <span class="text-[9px] px-1.5 py-0.2 rounded-full"
+                        [ngClass]="selectedFramework === fw.id ? 'bg-purple-900/60 text-purple-200' : 'bg-slate-700/50 text-slate-400'">
+                    {{ fw.badge }}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Engine Selector for Prompt -->
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[11px] font-semibold text-slate-400">Motor:</span>
+              <div class="flex items-center bg-[var(--surface-1)] p-0.5 rounded-lg border border-[var(--border)] gap-1">
+                <button 
+                  (click)="selectEngine('gemini')"
+                  class="px-2 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 cursor-pointer"
+                  [ngClass]="selectedEngine === 'gemini' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'">
+                  <span>🧠</span> Gemini Pro
+                </button>
+                <button 
+                  (click)="selectEngine('deterministic')"
+                  class="px-2 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 cursor-pointer"
+                  [ngClass]="selectedEngine === 'deterministic' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'">
+                  <span>⚡</span> Rápido
+                </button>
+              </div>
             </div>
           </div>
 
@@ -80,7 +104,7 @@ interface FrameworkOption {
                 <button 
                   *ngFor="let fw of webFrameworks" 
                   (click)="selectFramework(fw.id)"
-                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 border"
+                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 border cursor-pointer"
                   [ngClass]="selectedFramework === fw.id ? 'bg-blue-600 text-white border-blue-400 shadow-xs' : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white hover:border-slate-600'">
                   <span>{{ fw.icon }}</span>
                   <span>{{ fw.name }}</span>
@@ -94,18 +118,31 @@ interface FrameworkOption {
               <div class="flex items-center bg-[var(--surface-1)] p-0.5 rounded-lg border border-[var(--border)] gap-1">
                 <button 
                   (click)="selectTheme('dark')"
-                  class="px-2 py-0.5 text-xs font-medium rounded transition-all flex items-center gap-1"
+                  class="px-2 py-0.5 text-xs font-medium rounded transition-all flex items-center gap-1 cursor-pointer"
                   [ngClass]="selectedTheme === 'dark' ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'">
                   <span>🌙</span> Dark
                 </button>
                 <button 
                   (click)="selectTheme('light')"
-                  class="px-2 py-0.5 text-xs font-medium rounded transition-all flex items-center gap-1"
+                  class="px-2 py-0.5 text-xs font-medium rounded transition-all flex items-center gap-1 cursor-pointer"
                   [ngClass]="selectedTheme === 'light' ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'">
                   <span>☀️</span> Light
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- Feature Capability Highlights -->
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <span class="px-2 py-0.5 bg-purple-500/10 text-purple-300 border border-purple-500/20 rounded-md text-[10px] flex items-center gap-1">
+              🎙️ Asistente de Voz & Micrófono
+            </span>
+            <span class="px-2 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded-md text-[10px] flex items-center gap-1">
+              ☁️ Flujo Híbrido Anti-Pantalla en Blanco
+            </span>
+            <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-md text-[10px] flex items-center gap-1">
+              📱 Auto-Scaffolding & Build de APK
+            </span>
           </div>
 
         </div>
@@ -121,7 +158,7 @@ interface FrameworkOption {
             <div class="flex items-center gap-3">
               <span *ngIf="isLoading" class="text-xs text-blue-400 animate-pulse flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"></span>
-                Sintetizando arquitectura móvil y contratos REST...
+                Sintetizando arquitectura móvil, voz y contratos REST...
               </span>
               <span *ngIf="!isLoading && promptData" class="text-xs text-slate-400 font-mono">
                 {{ promptData.character_count }} caracteres · ~{{ promptData.estimated_tokens }} tokens
@@ -133,7 +170,7 @@ interface FrameworkOption {
           <div class="flex-1 bg-[#141416] border border-[#26262e] rounded-xl p-4 overflow-y-auto font-mono text-xs text-slate-300 leading-relaxed select-text custom-scrollbar" style="font-family: 'JetBrains Mono', Consolas, monospace;">
             <div *ngIf="isLoading" class="flex flex-col gap-2 py-12 items-center justify-center text-slate-500">
               <div class="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-              <span>Generando meta-prompt determinista para {{ selectedFrameworkName }}...</span>
+              <span>Generando meta-prompt para {{ selectedFrameworkName }}...</span>
             </div>
             
             <pre *ngIf="!isLoading && promptData" class="whitespace-pre-wrap font-inherit m-0">{{ promptData.prompt }}</pre>
@@ -147,7 +184,7 @@ interface FrameworkOption {
           <div class="mt-3 px-3.5 py-2.5 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20 rounded-xl flex items-center justify-between text-xs text-purple-200">
             <div class="flex items-center gap-2">
               <span class="text-base">💡</span>
-              <span><strong>Modelos Recomendados para Móvil & Web:</strong> Pega este prompt en <strong>Claude 3.5 Sonnet</strong>, <strong>GPT-4o</strong>, <strong>Gemini 1.5 Pro</strong> o <strong>Cursor</strong> para obtener el código fuente completo listo para producción.</span>
+              <span><strong>Modelos Recomendados para Móvil & Web:</strong> Pega este prompt en <strong>Claude 3.5 Sonnet</strong>, <strong>GPT-4o</strong>, <strong>Gemini Pro</strong> o <strong>Cursor</strong> para obtener el código fuente completo y compilar el APK.</span>
             </div>
           </div>
 
@@ -198,13 +235,14 @@ export class FrontendPromptModalComponent implements OnChanges {
 
   selectedFramework: FrontendFramework = 'flutter';
   selectedTheme: FrontendTheme = 'dark';
+  selectedEngine: CodegenEngine = 'gemini';
   isLoading = false;
   copied = false;
   promptData: { prompt: string; character_count: number; estimated_tokens: number } | null = null;
 
   frameworks: FrameworkOption[] = [
-    { id: 'flutter', name: 'Flutter 3 (Dart)', category: 'mobile', icon: '📱', badge: 'Riverpod + Dio', description: 'App móvil multiplataforma Android/iOS' },
-    { id: 'react-native', name: 'React Native', category: 'mobile', icon: '⚛️', badge: 'Expo + Query', description: 'App móvil nativa con TypeScript' },
+    { id: 'flutter', name: 'Flutter 3 (Dart)', category: 'mobile', icon: '📱', badge: 'Riverpod + Dio + Mic', description: 'App móvil multiplataforma con voz y APK' },
+    { id: 'react-native', name: 'React Native', category: 'mobile', icon: '⚛️', badge: 'Expo + Query + Mic', description: 'App móvil nativa con TypeScript' },
     { id: 'react', name: 'React 18+', category: 'web', icon: '⚡', badge: 'Vite + Tailwind', description: 'Single Page App moderna' },
     { id: 'angular', name: 'Angular 17+', category: 'web', icon: '🅰️', badge: 'Signals + RxJS', description: 'Enterprise SPA' },
     { id: 'vue', name: 'Vue 3', category: 'web', icon: '🟢', badge: 'Pinia + Vite', description: 'Composition API' },
@@ -239,6 +277,11 @@ export class FrontendPromptModalComponent implements OnChanges {
     this.fetchPrompt();
   }
 
+  selectEngine(engine: CodegenEngine) {
+    this.selectedEngine = engine;
+    this.fetchPrompt();
+  }
+
   fetchPrompt() {
     if (!this.diagramId && !this.graphData) return;
     this.isLoading = true;
@@ -247,6 +290,7 @@ export class FrontendPromptModalComponent implements OnChanges {
     this.codegen.getFrontendPrompt(this.diagramId, {
       target_framework: this.selectedFramework,
       theme: this.selectedTheme,
+      engine: this.selectedEngine,
       graph_data: this.graphData
     }).subscribe({
       next: (res) => {
@@ -281,4 +325,3 @@ export class FrontendPromptModalComponent implements OnChanges {
     window.URL.revokeObjectURL(url);
   }
 }
-

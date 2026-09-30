@@ -5,7 +5,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CodegenService } from '../services/codegen.service';
 import { FileTreeComponent } from './file-tree.component';
 import { ActivatedRoute } from '@angular/router';
-import { CodegenEngine } from '../models/codegen.model';
+import { CodegenEngine, BackendFramework } from '../models/codegen.model';
 import { CanvasService } from '../../services/canvas.service';
 
 @Component({
@@ -41,7 +41,7 @@ import { CanvasService } from '../../services/canvas.service';
           <div class="flex flex-col overflow-hidden">
             <div class="flex items-center gap-2">
               <h2 class="text-sm font-bold text-[var(--text-primary)] truncate">
-                Código Spring Boot 3 en Vivo
+                Código {{ codegen.targetBackend() === 'fastapi' ? 'FastAPI (Python)' : 'Spring Boot 3' }} en Vivo
               </h2>
               
               <!-- Sync Indicator -->
@@ -58,7 +58,7 @@ import { CanvasService } from '../../services/canvas.service';
 
             <!-- Meta subtext -->
             <div class="flex items-center gap-2 text-[10px] text-slate-400 truncate">
-              <span class="hidden sm:inline">Java 17 · Spring Boot 3.3.3</span>
+              <span class="hidden sm:inline">{{ codegen.targetBackend() === 'fastapi' ? 'Python 3.11 · FastAPI · Render' : 'Java 17 · Spring Boot 3.3.3' }}</span>
               <span class="hidden sm:inline">•</span>
               <span class="font-mono text-emerald-400">{{ filePaths.length }} archivos generados</span>
             </div>
@@ -101,29 +101,51 @@ import { CanvasService } from '../../services/canvas.service';
 
       </div>
 
-      <!-- ═══ SUB-HEADER: ENGINE CONTROLS & AI SETTINGS ═══ -->
+      <!-- ═══ SUB-HEADER: BACKEND SELECTOR, ENGINE CONTROLS & AI SETTINGS ═══ -->
       <div class="px-3 md:px-4 py-2 bg-[var(--surface-1)] border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
         
-        <!-- Left: Engine Selector Toggle -->
-        <div class="flex items-center gap-2">
-          <span class="text-[11px] font-semibold text-slate-400 hidden xs:inline">Motor:</span>
+        <!-- Left: Backend Framework & Engine Selector -->
+        <div class="flex flex-wrap items-center gap-2">
+          
+          <!-- Backend Framework Selector -->
+          <div class="flex items-center bg-[var(--surface-2)] p-0.5 rounded-lg border border-[var(--border)]">
+            <button 
+              (click)="setBackend('spring_boot')"
+              class="px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer"
+              [ngClass]="codegen.targetBackend() === 'spring_boot' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
+              <span>☕</span>
+              <span>Spring Boot 3</span>
+            </button>
+            
+            <button 
+              (click)="setBackend('fastapi')"
+              class="px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer"
+              [ngClass]="codegen.targetBackend() === 'fastapi' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
+              <span>🐍</span>
+              <span>FastAPI</span>
+            </button>
+          </div>
+
+          <div class="h-4 w-[1px] bg-[var(--border)] hidden sm:block"></div>
+
+          <!-- Engine Toggle -->
           <div class="flex items-center bg-[var(--surface-2)] p-0.5 rounded-lg border border-[var(--border)]">
             <button 
               (click)="setEngine('gemini')"
-              class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer"
+              class="px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer"
               [ngClass]="codegen.activeEngine() === 'gemini' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
               <span>🧠</span>
-              <span>IA Gemini Pro</span>
-              <span class="text-[9px] px-1 py-0.2 bg-purple-900/60 text-purple-200 rounded-full font-mono hidden sm:inline">Semántico</span>
+              <span class="hidden sm:inline">IA Gemini</span>
+              <span class="sm:hidden">Gemini</span>
             </button>
             
             <button 
               (click)="setEngine('deterministic')"
-              class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer"
+              class="px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer"
               [ngClass]="codegen.activeEngine() === 'deterministic' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'">
               <span>⚡</span>
-              <span>Determinista</span>
-              <span class="text-[9px] px-1 py-0.2 bg-blue-900/60 text-blue-200 rounded-full font-mono hidden sm:inline">Rápido</span>
+              <span class="hidden sm:inline">Determinista</span>
+              <span class="sm:hidden">Rápido</span>
             </button>
           </div>
           
@@ -131,10 +153,10 @@ import { CanvasService } from '../../services/canvas.service';
           <button 
             *ngIf="codegen.activeEngine() === 'gemini'"
             (click)="openSettingsModal()"
-            class="px-2 py-1 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-slate-300 hover:text-white rounded-lg border border-[var(--border)] transition-colors cursor-pointer flex items-center gap-1.5"
+            class="px-2 py-1 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-slate-300 hover:text-white rounded-lg border border-[var(--border)] transition-colors cursor-pointer flex items-center gap-1"
             title="Configurar clave de API y modelo de Gemini">
             <span>⚙️</span>
-            <span class="text-[10px] font-mono text-purple-300">{{ codegen.geminiModel() }}</span>
+            <span class="text-[10px] font-mono text-purple-300 hidden md:inline">{{ codegen.geminiModel() }}</span>
           </button>
         </div>
 
@@ -710,7 +732,10 @@ export class LiveCodeDrawerComponent implements OnInit, OnChanges {
     const diagramId = this.diagramId || this.route.snapshot.paramMap.get('id');
     if (diagramId) {
       this.isDownloadingZip = true;
-      this.codegen.downloadZip(diagramId, 'classforge-springboot-backend.zip');
+      const filename = this.codegen.targetBackend() === 'fastapi' 
+        ? 'classforge-fastapi-backend.zip' 
+        : 'classforge-springboot-backend.zip';
+      this.codegen.downloadZip(diagramId, filename);
       setTimeout(() => {
         this.isDownloadingZip = false;
         this.cdr.markForCheck();
@@ -786,6 +811,12 @@ export class LiveCodeDrawerComponent implements OnInit, OnChanges {
   }
 
   // ─── Gemini Engine & Settings ──────────────────────────────────
+
+  setBackend(backend: BackendFramework) {
+    this.codegen.setBackend(backend);
+    this.cdr.markForCheck();
+    this.regenerate();
+  }
 
   setEngine(engine: CodegenEngine) {
     this.codegen.setEngine(engine);

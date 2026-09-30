@@ -126,6 +126,13 @@ spring:
         format_sql: true
         use_sql_comments: true
 
+# ClassForge Cloud Bridge Configuration
+classforge:
+  cloud:
+    base-url: https://classforge-backend.onrender.com
+    api-key: ""
+    timeout-seconds: 15
+
 # Server Configuration
 server:
   port: 8080
@@ -955,5 +962,141 @@ else
     exit 1
 fi
 """
+
+CLOUD_CONFIG = """package {package_name}.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+/**
+ * Configuracion de enlace hibrido con el backend central en la nube de ClassForge.
+ */
+@Configuration
+public class CloudConfig {{
+
+    @Value("${{classforge.cloud.base-url:https://classforge-backend.onrender.com}}")
+    private String cloudBaseUrl;
+
+    @Value("${{classforge.cloud.api-key:}}")
+    private String cloudApiKey;
+
+    public String getCloudBaseUrl() {{
+        return cloudBaseUrl;
+    }}
+
+    public String getCloudApiKey() {{
+        return cloudApiKey;
+    }}
+
+    @Bean
+    public RestTemplate restTemplate() {{
+        return new RestTemplate();
+    }}
+}}
+"""
+
+CLOUD_SYNC_SERVICE = """package {package_name}.services;
+
+import {package_name}.config.CloudConfig;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.*;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Servicio de sincronizacion y Cloud Bridge con el backend central FastAPI de ClassForge.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CloudSyncService {{
+
+    private final CloudConfig cloudConfig;
+    private final RestTemplate restTemplate;
+
+    public Map<String, Object> checkCloudHealth() {{
+        Map<String, Object> result = new HashMap<>();
+        String url = cloudConfig.getCloudBaseUrl() + "/health";
+        result.put("cloudUrl", cloudConfig.getCloudBaseUrl());
+        
+        try {{
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            result.put("status", "connected");
+            result.put("cloudResponse", response.getBody());
+            result.put("statusCode", response.getStatusCode().value());
+        }} catch (Exception ex) {{
+            log.warn("Backend en la nube no alcanzable directamente: {{}}", ex.getMessage());
+            result.put("status", "offline_fallback");
+            result.put("message", "Operando en modo autonomo local");
+            result.put("error", ex.getMessage());
+        }}
+        return result;
+    }}
+
+    public Map<String, Object> relayVoiceCommand(Map<String, Object> payload) {{
+        String url = cloudConfig.getCloudBaseUrl() + "/api/v1/ai/generate";
+        log.info("Reenviando comando de voz al backend central FastAPI: {{}}", url);
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (cloudConfig.getCloudApiKey() != null && !cloudConfig.getCloudApiKey().isEmpty()) {{
+            headers.setBearerAuth(cloudConfig.getCloudApiKey());
+        }}
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+        try {{
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
+            return response.getBody();
+        }} catch (Exception ex) {{
+            log.error("Error al procesar comando de voz en la nube: {{}}", ex.getMessage());
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("error", "Error comunicando con el motor de voz en la nube: " + ex.getMessage());
+            return err;
+        }}
+    }}
+}}
+"""
+
+CLOUD_CONTROLLER = """package {package_name}.controllers;
+
+import {package_name}.services.CloudSyncService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+
+/**
+ * Controlador REST para la interconexion Nube / Local y Asistente de Voz.
+ */
+@RestController
+@RequestMapping("/api/v1/cloud")
+@RequiredArgsConstructor
+@Tag(name = "Cloud Bridge", description = "Conectividad hibrida Nube/Local y Asistente de Voz con FastAPI")
+public class CloudController {{
+
+    private final CloudSyncService cloudSyncService;
+
+    @GetMapping("/status")
+    @Operation(summary = "Verificar estado de enlace con el Backend FastAPI en la nube")
+    public ResponseEntity<Map<String, Object>> getCloudStatus() {{
+        return ResponseEntity.ok(cloudSyncService.checkCloudHealth());
+    }}
+
+    @PostMapping("/voice-relay")
+    @Operation(summary = "Reenviar comando de voz hacia el backend central FastAPI / Gemini")
+    public ResponseEntity<Map<String, Object>> relayVoiceCommand(@RequestBody Map<String, Object> payload) {{
+        return ResponseEntity.ok(cloudSyncService.relayVoiceCommand(payload));
+    }}
+}}
+"""
+
 
 

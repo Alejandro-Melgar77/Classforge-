@@ -3,14 +3,15 @@ export interface GeneratedFiles {
 }
 
 export type CodegenEngine = 'deterministic' | 'gemini';
+export type BackendFramework = 'spring_boot' | 'fastapi';
 
 export interface CodegenPreviewResponse {
   files: GeneratedFiles;
   total_files: number;
+  target_backend?: BackendFramework;
   engine_used?: string;
   summary?: string;
 }
-
 
 export interface FileTreeNode {
   name: string;
@@ -29,6 +30,9 @@ export interface FrontendPromptRequest {
   theme: FrontendTheme;
   /** Graph data snapshot from canvas */
   graph_data?: any;
+  engine?: CodegenEngine;
+  gemini_api_key?: string;
+  gemini_model?: string;
 }
 
 export interface FrontendPromptResponse {
@@ -37,5 +41,5 @@ export interface FrontendPromptResponse {
   estimated_tokens: number;
   target_framework: string;
   theme: string;
+  engine_used?: string;
 }
-

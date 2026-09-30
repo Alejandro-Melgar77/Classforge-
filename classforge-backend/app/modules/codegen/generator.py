@@ -95,6 +95,9 @@ def generate_spring_boot_project(graph_data: dict, package_name: str = "com.clas
     files[f"src/main/java/{base_path}/MainApplication.java"] = templates.MAIN_APPLICATION.format(package_name=package_name)
     files[f"src/main/java/{base_path}/config/OpenApiConfig.java"] = templates.OPENAPI_CONFIG.format(package_name=package_name)
     files[f"src/main/java/{base_path}/config/CorsConfig.java"] = templates.CORS_CONFIG.format(package_name=package_name)
+    files[f"src/main/java/{base_path}/config/CloudConfig.java"] = templates.CLOUD_CONFIG.format(package_name=package_name)
+    files[f"src/main/java/{base_path}/services/CloudSyncService.java"] = templates.CLOUD_SYNC_SERVICE.format(package_name=package_name)
+    files[f"src/main/java/{base_path}/controllers/CloudController.java"] = templates.CLOUD_CONTROLLER.format(package_name=package_name)
     
     # Global Exception Handling
     files[f"src/main/java/{base_path}/exceptions/ResourceNotFoundException.java"] = templates.RESOURCE_NOT_FOUND_EXCEPTION.format(package_name=package_name)

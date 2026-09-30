@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../../../../environments/environment';
 import { ApiResponse } from '../../../../core/models/api-response.model';
-import { CodegenPreviewResponse, GeneratedFiles, FrontendPromptRequest, FrontendPromptResponse, CodegenEngine } from '../models/codegen.model';
+import { CodegenPreviewResponse, GeneratedFiles, FrontendPromptRequest, FrontendPromptResponse, CodegenEngine, BackendFramework } from '../models/codegen.model';
 
 @Injectable({
   providedIn: 'root'
@@ -14,6 +14,7 @@ export class CodegenService {
   generatedFiles = signal<GeneratedFiles>({});
   selectedFilePath = signal<string>('pom.xml');
   isLoading = signal<boolean>(false);
+  targetBackend = signal<BackendFramework>('spring_boot');
   activeEngine = signal<CodegenEngine>('gemini');
   geminiModel = signal<string>(localStorage.getItem('classforge_gemini_model') || 'gemini-3.8-flash');
   geminiApiKey = signal<string>(localStorage.getItem('classforge_gemini_api_key') || '');
@@ -26,6 +27,15 @@ export class CodegenService {
 
   setEngine(engine: CodegenEngine): void {
     this.activeEngine.set(engine);
+  }
+
+  setBackend(backend: BackendFramework): void {
+    this.targetBackend.set(backend);
+    if (backend === 'fastapi') {
+      this.selectedFilePath.set('app/main.py');
+    } else {
+      this.selectedFilePath.set('pom.xml');
+    }
   }
 
   setGeminiApiKey(key: string): void {
@@ -41,6 +51,7 @@ export class CodegenService {
   getPreview(diagramId: string, graphData: any = {}): Observable<ApiResponse<CodegenPreviewResponse>> {
     const payload = {
       graph_data: graphData,
+      target_backend: this.targetBackend(),
       engine: this.activeEngine(),
       gemini_api_key: this.geminiApiKey() || undefined,
       gemini_model: this.geminiModel()
@@ -70,16 +81,26 @@ export class CodegenService {
     diagramId: string, 
     options: FrontendPromptRequest
   ): Observable<ApiResponse<FrontendPromptResponse>> {
+    const payload: FrontendPromptRequest = {
+      ...options,
+      engine: options.engine || this.activeEngine(),
+      gemini_api_key: this.geminiApiKey() || undefined,
+      gemini_model: this.geminiModel()
+    };
+
     return this.http.post<ApiResponse<FrontendPromptResponse>>(
       `${environment.apiUrl}/codegen/${diagramId}/frontend-prompt`,
-      options
+      payload
     );
   }
 
-  downloadZip(diagramId: string, filename: string): void {
+  downloadZip(diagramId: string, filename?: string): void {
+    const backend = this.targetBackend();
     const engine = this.activeEngine();
     const model = this.geminiModel();
-    const url = `${environment.apiUrl}/codegen/${diagramId}/download?engine=${engine}&model=${model}`;
+    const defaultFilename = backend === 'fastapi' ? 'classforge-fastapi-backend.zip' : 'classforge-springboot-backend.zip';
+    const targetFilename = filename || defaultFilename;
+    const url = `${environment.apiUrl}/codegen/${diagramId}/download?target_backend=${backend}&engine=${engine}&model=${model}`;
 
     this.http.get(url, {
       responseType: 'blob'
@@ -87,10 +108,9 @@ export class CodegenService {
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = filename;
+      a.download = targetFilename;
       a.click();
       window.URL.revokeObjectURL(blobUrl);
     });
   }
 }
-

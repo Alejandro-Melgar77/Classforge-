@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import Optional
@@ -7,10 +8,14 @@ import re
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.modules.auth.schemas import StandardResponse
-from app.modules.codegen.schemas import CodegenPreviewRequest, CodegenPreviewResponse, CodegenPreviewResponseData, FrontendPromptRequest
+from app.modules.codegen.schemas import CodegenPreviewRequest, FrontendPromptRequest
 from app.modules.codegen.generator import generate_spring_boot_project
-from app.modules.codegen.gemini_generator import generate_spring_boot_with_gemini
-from app.modules.codegen.frontend_prompt_generator import generate_frontend_meta_prompt
+from app.modules.codegen.fastapi_generator import generate_fastapi_project
+from app.modules.codegen.gemini_generator import generate_backend_with_gemini
+from app.modules.codegen.frontend_prompt_generator import (
+    generate_frontend_meta_prompt,
+    generate_frontend_meta_prompt_with_gemini
+)
 from app.modules.codegen.zip_service import create_project_zip
 from app.modules.codegen.webhook import notify_n8n_webhook
 from app.modules.diagrams.service import DiagramService
@@ -40,34 +45,40 @@ async def preview_code(
     if not graph_data:
         raise HTTPException(status_code=400, detail="No graph data available for code generation")
 
+    target_backend = request.target_backend or "spring_boot"
     engine_used = "deterministic"
     summary = None
 
     if request.engine == "gemini":
-        result = await generate_spring_boot_with_gemini(
-            graph_data, 
-            api_key=request.gemini_api_key, 
+        result = await generate_backend_with_gemini(
+            graph_data=graph_data,
+            target_backend=target_backend,
+            api_key=request.gemini_api_key,
             model=request.gemini_model
         )
         files = result["files"]
         engine_used = result.get("engine_used", "gemini")
         summary = result.get("summary")
     else:
-        files = generate_spring_boot_project(graph_data)
+        if target_backend == "fastapi":
+            files = generate_fastapi_project(graph_data)
+        else:
+            files = generate_spring_boot_project(graph_data)
     
     await notify_n8n_webhook(
         event_type="codegen_preview",
         diagram_id=diagram_id,
         diagram_name=diagram_name,
-        payload={"total_files": len(files), "engine": engine_used}
+        payload={"total_files": len(files), "engine": engine_used, "backend": target_backend}
     )
     
     return StandardResponse(
         success=True,
-        message=f"Code preview generated successfully with {engine_used}",
+        message=f"Code preview generated successfully for {target_backend} with {engine_used}",
         data={
             "files": files,
             "total_files": len(files),
+            "target_backend": target_backend,
             "engine_used": engine_used,
             "summary": summary
         }
@@ -76,6 +87,7 @@ async def preview_code(
 @router.get("/{diagram_id}/download")
 async def download_code(
     diagram_id: str,
+    target_backend: Optional[str] = "spring_boot",
     engine: Optional[str] = "deterministic",
     model: Optional[str] = None,
     current_user = Depends(get_current_user),
@@ -90,27 +102,35 @@ async def download_code(
         raise HTTPException(status_code=400, detail="No graph data available for code generation")
         
     if engine == "gemini":
-        result = await generate_spring_boot_with_gemini(graph_data, model=model)
+        result = await generate_backend_with_gemini(
+            graph_data=graph_data,
+            target_backend=target_backend,
+            model=model
+        )
         files = result["files"]
     else:
-        files = generate_spring_boot_project(graph_data)
+        if target_backend == "fastapi":
+            files = generate_fastapi_project(graph_data)
+        else:
+            files = generate_spring_boot_project(graph_data)
         
     zip_bytes = create_project_zip(files)
     
     raw_name = diagram.get("name", "diagram")
     clean_filename = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_name)
+    suffix = "fastapi-backend" if target_backend == "fastapi" else "springboot-backend"
     
     await notify_n8n_webhook(
         event_type="codegen_download",
         diagram_id=diagram_id,
         diagram_name=raw_name,
-        payload={"total_files": len(files), "zip_size_bytes": len(zip_bytes), "engine": engine}
+        payload={"total_files": len(files), "zip_size_bytes": len(zip_bytes), "engine": engine, "backend": target_backend}
     )
     
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{clean_filename}-backend.zip"'}
+        headers={"Content-Disposition": f'attachment; filename="{clean_filename}-{suffix}.zip"'}
     )
 
 
@@ -144,9 +164,23 @@ async def get_frontend_prompt(
     if not graph_data:
         raise HTTPException(status_code=400, detail="No graph data available for prompt generation")
         
-    prompt = generate_frontend_meta_prompt(graph_data, request.target_framework, request.theme)
-    char_count = len(prompt)
-    estimated_tokens = max(1, char_count // 4)
+    if request.engine == "gemini":
+        result = await generate_frontend_meta_prompt_with_gemini(
+            graph_data=graph_data,
+            target_framework=request.target_framework,
+            theme=request.theme,
+            api_key=request.gemini_api_key,
+            model=request.gemini_model
+        )
+        prompt = result["prompt"]
+        char_count = result["character_count"]
+        estimated_tokens = result["estimated_tokens"]
+        engine_used = result.get("engine_used", "gemini")
+    else:
+        prompt = generate_frontend_meta_prompt(graph_data, request.target_framework, request.theme)
+        char_count = len(prompt)
+        estimated_tokens = max(1, char_count // 4)
+        engine_used = "deterministic"
     
     return StandardResponse(
         success=True,
@@ -156,6 +190,7 @@ async def get_frontend_prompt(
             "character_count": char_count,
             "estimated_tokens": estimated_tokens,
             "target_framework": request.target_framework,
-            "theme": request.theme
+            "theme": request.theme,
+            "engine_used": engine_used
         }
     )
