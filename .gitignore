@@ -1,4 +1,4 @@
-﻿# Ignorar carpetas y archivos fuera del software solicitado
+# Ignorar carpetas y archivos fuera del software solicitado
 docs/
 documentacion/
 documento/
@@ -9,6 +9,10 @@ build_backend.py
 *.apk
 *.apk.zip
 *.exe
+pruebas*/
+pruebas apps/
+pruebas backend/
+*.zip
 
 # Python / Backend
 __pycache__/
