@@ -19,6 +19,7 @@ from app.modules.collaboration.router import router as ws_router
 from app.modules.ai.router import router as ai_router
 from app.modules.codegen.router import router as codegen_router
 from app.modules.notifications.router import router as notifications_router
+from app.modules.ai_chat.router import router as ai_chat_router
 
 
 @asynccontextmanager
@@ -36,7 +37,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_origin_regex=r"https://.*\.trycloudflare\.com",
+    allow_origin_regex=r"https://(.*\.trycloudflare\.com|.*\.pages\.dev)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,10 +54,10 @@ app.include_router(ws_router, prefix=f"{settings.API_V1_STR}/ws", tags=["collabo
 app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(codegen_router, prefix=f"{settings.API_V1_STR}/codegen", tags=["codegen"])
 app.include_router(notifications_router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
+app.include_router(ai_chat_router, prefix=f"{settings.API_V1_STR}/ai-chat", tags=["ai-chat"])
 
 
 @app.get("/", tags=["health"])
 def root() -> Dict[str, str]:
     """Health check endpoint to verify that the API server is operational."""
     return {"message": "ClassForge API Running"}
-

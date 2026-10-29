@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_URL: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.8-flash"
+    AI_CHAT_ENABLED: bool = True
+    AI_CONTEXT_MAX_TOKENS: int = 8000
 
     @property
     def cors_origins_list(self) -> List[str]:

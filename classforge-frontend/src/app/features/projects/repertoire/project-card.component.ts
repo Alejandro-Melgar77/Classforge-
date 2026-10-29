@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Project } from '../models/project.model';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { AuthService } from '../../../core/services/auth.service';
@@ -7,7 +8,7 @@ import { AuthService } from '../../../core/services/auth.service';
 @Component({
   selector: 'app-project-card',
   standalone: true,
-  imports: [CommonModule, StatusBadgeComponent],
+  imports: [CommonModule, RouterLink, StatusBadgeComponent],
   template: `
     <div class="bg-[var(--surface-2)] border border-[var(--border)] rounded-xl overflow-hidden hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--surface-1)] transition-all duration-300 flex flex-col h-full group">
       
@@ -42,6 +43,9 @@ import { AuthService } from '../../../core/services/auth.service';
           </div>
 
           <div class="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+            <a [routerLink]="['/ai-chat', project.id]" class="p-1.5 text-[var(--text-secondary)] hover:text-emerald-400 bg-[var(--surface-3)] rounded flex items-center justify-center" title="Chat IA del Proyecto">
+              💬
+            </a>
             <button (click)="view.emit(project)" class="p-1.5 text-[var(--text-secondary)] hover:text-white bg-[var(--surface-3)] rounded" title="Visualizar">
               👁️
             </button>
@@ -74,7 +78,6 @@ export class ProjectCardComponent {
     if (!user) return false;
     if (user.role === 'admin' || user.role === 'scrum_master') return true;
     if (this.project.owner_id === user.id) return true;
-    // In a real app we would check if they are in the team and have edit rights
     return false;
   }
 }

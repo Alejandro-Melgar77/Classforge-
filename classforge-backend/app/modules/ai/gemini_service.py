@@ -157,7 +157,8 @@ async def generate_uml_with_gemini(
     prompt: str,
     diagram_context: Optional[dict] = None,
     api_key: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None
 ) -> Optional[UMLCommandResponse]:
     """
     Sends the user prompt and optional diagram context to Google Gemini API
@@ -199,11 +200,14 @@ async def generate_uml_with_gemini(
 
     full_user_content = f"SOLICITUD DEL USUARIO:\n{prompt}{context_str}\n\nGenera el diagrama UML estructurado en JSON respetando todas las reglas."
 
+    instruction = system_prompt or build_uml_system_instruction()
     payload = {
+        "system_instruction": {
+            "parts": [{"text": instruction}]
+        },
         "contents": [
             {
                 "parts": [
-                    {"text": build_uml_system_instruction()},
                     {"text": full_user_content}
                 ]
             }

@@ -904,6 +904,57 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
     this.isResizingToolbox = false;
   }
 
+  @HostListener('document:keydown', ['$event'])
+  onKeyDown(event: KeyboardEvent) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+    const ctrl = event.ctrlKey || event.metaKey;
+
+    if (ctrl && (event.key === 's' || event.key === 'S')) {
+      event.preventDefault();
+      this.manualSave();
+      return;
+    }
+
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !ctrl) {
+      if (this.selectedNodeId) {
+        event.preventDefault();
+        this.deleteSelectedNode();
+      } else if (this.selectedEdgeId) {
+        event.preventDefault();
+        this.deleteSelectedEdge();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeNodeQuickToolbar();
+      this.closeEdgeQuickToolbar();
+      if (this.graph) {
+        this.graph.cleanSelection();
+      }
+      return;
+    }
+
+    if (ctrl && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      if (this.graph) {
+        this.graph.select(this.graph.getNodes());
+      }
+      return;
+    }
+
+    if (!ctrl && (event.key === 'f' || event.key === 'F')) {
+      event.preventDefault();
+      if (this.graph) {
+        this.graph.zoomToFit({ padding: 20 });
+      }
+      return;
+    }
+  }
+
   // ─── Toolbox Events ───────────────────────────────────────────
 
   onNodeDropped(event: { type: NodeType; x: number; y: number }) {

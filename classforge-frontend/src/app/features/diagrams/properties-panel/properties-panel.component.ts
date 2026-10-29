@@ -276,4 +276,14 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
     this.autoSave.markDirty();
     this.cdr.detectChanges();
   }
+
+  validateIdentifier(name: string): { valid: boolean; warning?: string } {
+    if (!name || !name.trim()) return { valid: false, warning: 'El nombre no puede estar vacio.' };
+    if (/\s/.test(name)) return { valid: false, warning: 'No debe contener espacios.' };
+    const reserved = ['class', 'interface', 'public', 'private', 'protected', 'static', 'void', 'def', 'import', 'from', 'return'];
+    if (reserved.includes(name.toLowerCase())) {
+      return { valid: true, warning: 'Palabra reservada del lenguaje.' };
+    }
+    return { valid: true };
+  }
 }

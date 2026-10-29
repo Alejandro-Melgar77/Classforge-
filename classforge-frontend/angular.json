@@ -33,13 +33,38 @@
             "assets": ["src/favicon.ico", "src/assets", "src/_redirects"],
             "styles": ["src/styles.scss"],
             "scripts": []
-          }
+          },
+          "configurations": {
+            "production": {
+              "optimization": true,
+              "extractLicenses": true,
+              "sourceMap": false
+            },
+            "development": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.development.ts"
+                }
+              ],
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
-          "options": {
-            "buildTarget": "classforge-frontend:build"
-          }
+          "configurations": {
+            "production": {
+              "buildTarget": "classforge-frontend:build:production"
+            },
+            "development": {
+              "buildTarget": "classforge-frontend:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
         }
       }
     }

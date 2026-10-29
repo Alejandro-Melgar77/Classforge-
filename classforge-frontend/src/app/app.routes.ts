@@ -31,6 +31,10 @@ export const routes: Routes = [
       {
         path: 'diagrams',
         loadChildren: () => import('./features/diagrams/diagrams.routes').then(m => m.DIAGRAMS_ROUTES)
+      },
+      {
+        path: 'ai-chat',
+        loadChildren: () => import('./features/ai-chat/ai-chat.routes').then(m => m.AI_CHAT_ROUTES)
       }
     ]
   },

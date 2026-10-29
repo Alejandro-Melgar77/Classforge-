@@ -35,7 +35,7 @@
     <button (click)="zoomIn()" class="toolbar-btn" title="Acercar">
       <lucide-icon name="zoom-in" [size]="15"></lucide-icon>
     </button>
-    <button (click)="fitView()" class="toolbar-btn" title="Ajustar vista (Ctrl+Shift+F)">
+    <button (click)="fitView()" class="toolbar-btn" title="Ajustar vista (F)">
       <lucide-icon name="maximize" [size]="15"></lucide-icon>
     </button>
     <button (click)="autoLayout()" class="toolbar-btn" title="Auto-distribuir">
@@ -77,4 +77,26 @@
       <input type="file" accept=".xmi,.xml" (change)="importXmi($event)" class="hidden">
     </label>
   </div>
+
+  <!-- AutoSave Status Indicator -->
+  <div class="ml-auto flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded transition-all duration-300"
+       [ngClass]="{
+         'text-emerald-400 bg-emerald-500/10': autoSave.saveStatus() === 'saved',
+         'text-amber-400 bg-amber-500/10': autoSave.saveStatus() === 'saving',
+         'text-slate-400 bg-slate-500/10': autoSave.saveStatus() === 'unsaved',
+         'text-rose-400 bg-rose-500/10': autoSave.saveStatus() === 'error'
+       }">
+    <span class="w-1.5 h-1.5 rounded-full"
+          [ngClass]="{
+            'bg-emerald-400': autoSave.saveStatus() === 'saved',
+            'bg-amber-400 animate-pulse': autoSave.saveStatus() === 'saving',
+            'bg-slate-400': autoSave.saveStatus() === 'unsaved',
+            'bg-rose-400': autoSave.saveStatus() === 'error'
+          }"></span>
+    <span *ngIf="autoSave.saveStatus() === 'saved'">Guardado ✓</span>
+    <span *ngIf="autoSave.saveStatus() === 'saving'">Guardando...</span>
+    <span *ngIf="autoSave.saveStatus() === 'unsaved'">Cambios sin guardar</span>
+    <span *ngIf="autoSave.saveStatus() === 'error'">Error al guardar ⚠️</span>
+  </div>
+
 </div>

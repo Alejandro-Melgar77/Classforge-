@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { LucideAngularModule, Undo, Redo, Trash2, Copy, ClipboardPaste, Maximize, ZoomIn, ZoomOut, Download, Upload, LayoutGrid, FileJson, FileCode } from 'lucide-angular';
 import { CanvasService } from '../services/canvas.service';
 import { DiagramService } from '../services/diagram.service';
+import { AutoSaveService } from '../services/auto-save.service';
 import { ActivatedRoute } from '@angular/router';
 
 @Component({
@@ -14,6 +15,7 @@ import { ActivatedRoute } from '@angular/router';
 export class CanvasToolbarComponent {
   private canvasService = inject(CanvasService);
   private diagramService = inject(DiagramService);
+  public autoSave = inject(AutoSaveService);
   private route = inject(ActivatedRoute);
 
   exportMenuOpen = false;
