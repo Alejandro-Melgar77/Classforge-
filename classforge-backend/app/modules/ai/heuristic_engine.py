@@ -12,7 +12,11 @@ from app.modules.ai.schemas import (
 def normalize_text(text: str) -> str:
     nfd = unicodedata.normalize('NFD', text)
     clean = "".join([c for c in nfd if unicodedata.category(c) != 'Mn'])
-    return clean.lower().strip()
+    cleaned = clean.lower().strip()
+    cleaned = re.sub(r'\bclses?\b', 'clase', cleaned)
+    cleaned = re.sub(r'\bclaes?\b', 'clase', cleaned)
+    cleaned = re.sub(r'\batribtos?\b', 'atributos', cleaned)
+    return cleaned
 
 def capitalize_name(name: str) -> str:
     clean = re.sub(r'[^a-zA-Z0-9_]', '', name)
@@ -286,8 +290,8 @@ def parse_heuristic(prompt: str) -> Optional[UMLCommandResponse]:
     elif "enum" in norm or "enumeracion" in norm: stereotype = "enum"
 
     create_pattern = re.compile(
-        r"(?:(?:crea(?:r|me)?|genera(?:r|me)?|haz(?:me)?|agrega(?:r|me)?|pon(?:er|me)?|nueva?)\s+)?(?:una?\s+)?(?:clase\s+abstracta|interfaz|interface|enum(?:eracion)?|tabla|clase|entidad|modelo)\s+"
-        r"(?:con\s+el\s+nombre\s+|llamada\s+|llamado\s+|de\s+nombre\s+)?([a-zA-Z0-9_]+)(?:\s+(?:con|con\s+los|con\s+\d+|de)\s*(?:atributos|campos|valores|propiedades|columnas)?(?:\s+(?:de\s+nombres?|llamados?|:))?\s+(.+))?",
+        r"(?:(?:crea(?:r|me)?|genera(?:r|me)?|haz(?:me)?|agrega(?:r|me)?|anad(?:e|ir|eme)?|pon(?:er|me)?|nueva?|inserta(?:r|me)?)\s+)?(?:una?\s+)?(?:clase\s+abstracta|interfaz|interface|enum(?:eracion)?|tabla|clase|entidad|modelo)\s+"
+        r"(?:con\s+el\s+nombre\s+|llamada\s+|llamado\s+|de\s+nombre\s+)?([a-zA-Z0-9_]+)(?:[,\s]+(?:con|con\s+los|con\s+\d+|de)\s*(?:atributos|campos|valores|propiedades|columnas)?(?:\s+(?:de\s+nombres?|llamados?|:))?\s+(.+))?",
         re.IGNORECASE
     )
     m = create_pattern.search(norm)

@@ -77,6 +77,7 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   // Panel states
   isToolboxOpen = true;
   isAiDrawerOpen = false;
+  projectId?: string;
   isLiveCodeOpen = false;
   isPromptModalOpen = false;
   isCollabPanelOpen = false;
@@ -182,6 +183,7 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
     this.diagramService.getDiagram(this.diagramId).subscribe(res => {
       if (res.success) {
         this.diagram = res.data;
+        this.projectId = (res.data as any)?.project_id || (res.data as any)?.project || undefined;
         if (this.graph && this.diagram.graph_data) {
           this.canvasService.fromGraphData(this.diagram.graph_data);
         }

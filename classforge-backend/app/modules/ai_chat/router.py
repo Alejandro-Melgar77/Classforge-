@@ -111,12 +111,9 @@ async def set_role(
     """Activates or deactivates a specific AI role for the project.
     Only admins and scrum masters can change role configuration.
     """
+    # All authenticated project members can configure active AI roles
     user_role = current_user.get("role", "dev")
-    if user_role not in ("admin", "scrum_master"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo el Scrum Master o Admin pueden activar roles de IA.",
-        )
+    logger.info(f"[AiChatRouter] set_role by {current_user.get('username')} (role: {user_role})")
     repo = AiConversationRepository(db)
     current_roles = await repo.get_active_roles(project_id)
     roles_set = set(current_roles)

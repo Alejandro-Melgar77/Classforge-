@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = "http://localhost:11434"
     N8N_WEBHOOK_URL: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     AI_CHAT_ENABLED: bool = True
     AI_CONTEXT_MAX_TOKENS: int = 8000
 

@@ -69,6 +69,13 @@ REGLAS DE FIDELIDAD AL PROMPT:
    - "inheritance": 'source' es la subclase (hija), 'target' es la superclase (padre). El triángulo apunta al padre. (Ej: Administrador -> Usuario, CuentaAhorro -> CuentaBancaria).
    - "association": 'source' se asocia con 'target' con las cardinalidades pedidas (ej: Propietario "1" a Mascota "1..*").
 3. COHERENCIA DE NOMBRES: Los campos 'source' y 'target' de cada relación DEBEN coincidir exactamente con los nombres en 'classes'.
+4. REGLA ESTRICTA DE NO INVENTAR: NUNCA añadas clases, atributos, métodos o relaciones que el usuario NO haya mencionado explícitamente. Si el usuario pide "crear tabla Producto con precio, stock, codigo" → genera ÚNICAMENTE la clase Producto con esos 3 atributos, NADA MÁS.
+5. ID AUTOMÁTICO: Toda clase recibe automáticamente un atributo "id" de tipo "Long" con visibilidad "-" como primer atributo, EXCEPTO si el usuario explícitamente dijo "sin id" o ya mencionó un atributo llamado "id".
+6. RESPUESTA SOLO JSON: Tu respuesta debe ser EXCLUSIVAMENTE el objeto JSON. No escribas texto antes ni después. No uses bloques de código markdown (sin ```). Solo el JSON puro.
+7. EJEMPLO DE ENTRADA/SALIDA:
+   ENTRADA: "crea una tabla Producto con atributos precio, stock, codigo"
+   SALIDA CORRECTA:
+   {"action":"generate_system","classes":[{"name":"Producto","stereotype":null,"attributes":[{"name":"id","type":"Long","visibility":"-"},{"name":"precio","type":"Double","visibility":"-"},{"name":"stock","type":"Long","visibility":"-"},{"name":"codigo","type":"String","visibility":"-"}],"methods":[]}],"relations":[],"deleted_elements":[],"explanation":"Clase Producto creada con atributos id, precio, stock y codigo."}
 """
 
 def sanitize_json_string(raw: str) -> str:
@@ -170,22 +177,18 @@ async def generate_uml_with_gemini(
         logger.warning("[GeminiService] GEMINI_API_KEY no configurada. Saltando a heurística.")
         return None
 
-    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-3.7-flash") or "gemini-3.7-flash"
+    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash") or "gemini-2.0-flash"
     
     # Priority candidate list with modern models
     candidate_models = [target_model]
     defaults = [
-        "gemini-3.7-flash",
-        "gemini-3.8-flash",
-        "gemini-2.5-flash",
+        "gemini-2.5-flash-preview-05-20",
         "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         "gemini-1.5-flash",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "gemini-flash-latest",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-pro",
-        "gemini-pro-latest"
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp",
     ]
     for d in defaults:
         if d not in candidate_models:

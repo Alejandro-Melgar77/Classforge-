@@ -529,7 +529,7 @@
 
   <!-- ═══ POPUP MODALS & DRAWERS (Only rendered when opened!) ═══ -->
   <app-collaborators-panel *ngIf="isCollabPanelOpen" [isOpen]="isCollabPanelOpen" (close)="toggleCollabPanel()"></app-collaborators-panel>
-  <app-ai-drawer *ngIf="isAiDrawerOpen" [isOpen]="isAiDrawerOpen" [diagramId]="diagramId" (close)="toggleAiDrawer()"></app-ai-drawer>
+  <app-ai-drawer *ngIf="isAiDrawerOpen" [isOpen]="isAiDrawerOpen" [diagramId]="diagramId" [projectId]="projectId" (close)="toggleAiDrawer()"></app-ai-drawer>
   <app-live-code-drawer *ngIf="isLiveCodeOpen" [isOpen]="isLiveCodeOpen" [diagramId]="diagramId" [graphData]="canvasService.toGraphData()" (close)="toggleLiveCode()"></app-live-code-drawer>
   <app-frontend-prompt-modal *ngIf="isPromptModalOpen" [isOpen]="isPromptModalOpen" [diagramId]="diagramId" [graphData]="canvasService.toGraphData()" (close)="togglePromptModal()"></app-frontend-prompt-modal>
 

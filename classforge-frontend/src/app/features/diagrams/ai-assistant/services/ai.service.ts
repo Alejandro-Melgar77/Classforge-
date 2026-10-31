@@ -25,9 +25,9 @@ export class AiService {
       });
     }
 
-    // Retrieve configured Gemini API Key and Model (defaults to gemini-3.7-flash)
+    // Retrieve configured Gemini API Key and Model (defaults to gemini-2.0-flash)
     let apiKey: string | undefined = undefined;
-    let model: string = 'gemini-3.7-flash';
+    let model: string = 'gemini-2.0-flash';
     if (typeof localStorage !== 'undefined') {
       const storedKey = localStorage.getItem('classforge_gemini_api_key');
       if (storedKey && storedKey.trim()) {

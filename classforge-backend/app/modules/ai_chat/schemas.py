@@ -93,6 +93,8 @@ class AiRoleChatRequest(BaseModel):
     ai_role: str = Field(..., pattern="^(architect|qa|tech_lead|mentor)$")
     project_id: str
     diagram_id: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
 
 
 class AiRoleChatResponse(BaseModel):

@@ -29,7 +29,8 @@ GEMINI_CHAT_MODELS = [
     "gemini-2.0-flash",
     "gemini-2.5-flash",
     "gemini-1.5-flash",
-    "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-pro",
 ]
 
 
@@ -84,6 +85,8 @@ class AiChatService:
             user_message=request.message,
             system_prompt=system_prompt,
             temperature=role_config.get("temperature", 0.3),
+            api_key=request.api_key,
+            model=request.model,
         )
 
         # 5. Detect if response contains diagram changes
@@ -158,14 +161,19 @@ class AiChatService:
         )
 
     async def _call_gemini_with_role(
-        self, user_message: str, system_prompt: str, temperature: float = 0.3
+        self,
+        user_message: str,
+        system_prompt: str,
+        temperature: float = 0.3,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> str:
         """Calls Gemini API with a role system prompt and returns the text response."""
-        key = getattr(settings, "GEMINI_API_KEY", None)
+        key = api_key or getattr(settings, "GEMINI_API_KEY", None)
         if not key:
             return (
                 "⚠️ La IA no está configurada (falta GEMINI_API_KEY). "
-                "Configura la clave en el panel de ajustes."
+                "Configura la clave en el panel de ajustes o en el almacenamiento local."
             )
 
         payload = {
@@ -177,9 +185,14 @@ class AiChatService:
             },
         }
 
+        models_to_try = [model] if model else []
+        for m in GEMINI_CHAT_MODELS:
+            if m not in models_to_try:
+                models_to_try.append(m)
+
         last_error = "Unknown error"
-        for model in GEMINI_CHAT_MODELS:
-            url = f"{GEMINI_API_BASE}/{model}:generateContent?key={key}"
+        for m in models_to_try:
+            url = f"{GEMINI_API_BASE}/{m}:generateContent?key={key}"
             try:
                 async with httpx.AsyncClient(timeout=45.0) as client:
                     res = await client.post(url, json=payload)
@@ -192,10 +205,10 @@ class AiChatService:
                                 return parts[0].get("text", "")
                     else:
                         last_error = f"HTTP {res.status_code}"
-                        logger.warning(f"[AiChatService] {model} returned {res.status_code}")
+                        logger.warning(f"[AiChatService] {m} returned {res.status_code}: {res.text[:100]}")
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"[AiChatService] Exception calling {model}: {e}")
+                logger.warning(f"[AiChatService] Exception calling {m}: {e}")
 
         return f"⚠️ No se pudo conectar con la IA en este momento ({last_error}). Intenta de nuevo."
 
