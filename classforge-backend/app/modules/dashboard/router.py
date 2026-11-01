@@ -24,15 +24,16 @@ async def get_dashboard_stats(
     team_query = {"is_deleted": False}
     project_query = {"is_deleted": False}
     
+    user_teams = []
     if role == "scrum_master":
         team_query["scrum_master_id"] = ObjectId(user_id)
-        teams = await team_repo.collection.find(team_query).to_list(length=1000)
-        team_ids = [t["_id"] for t in teams]
+        user_teams = await team_repo.collection.find(team_query).to_list(length=1000)
+        team_ids = [t["_id"] for t in user_teams]
         project_query["$or"] = [{"team_id": {"$in": team_ids}}, {"owner_id": ObjectId(user_id)}]
     elif role == "dev":
         team_query["member_ids"] = ObjectId(user_id)
-        teams = await team_repo.collection.find(team_query).to_list(length=1000)
-        team_ids = [t["_id"] for t in teams]
+        user_teams = await team_repo.collection.find(team_query).to_list(length=1000)
+        team_ids = [t["_id"] for t in user_teams]
         project_query["$or"] = [{"team_id": {"$in": team_ids}}, {"owner_id": ObjectId(user_id)}]
     
     # Calculate stats
@@ -50,10 +51,9 @@ async def get_dashboard_stats(
     if role == "admin":
         total_members = await user_repo.count_documents({"is_deleted": False})
     else:
-        # distinct members in user's teams
-        teams = await team_repo.collection.find(team_query).to_list(length=1000)
+        # distinct members in user's teams (reuse user_teams, no duplicate query)
         members = set()
-        for t in teams:
+        for t in user_teams:
             for m in t.get("member_ids", []):
                 members.add(str(m))
         total_members = len(members)
@@ -89,9 +89,11 @@ async def get_dashboard_stats(
             "timestamp": log.get("timestamp")
         })
         
-    # My projects and teams (limit 5 for dashboard)
-    my_projects = await project_repo.collection.find(project_query).sort("created_at", -1).limit(5).to_list(length=5)
-    my_teams = await team_repo.collection.find(team_query).sort("created_at", -1).limit(5).to_list(length=5)
+    # My projects and teams (limit 5 with projections for high performance)
+    project_proj = {"name": 1, "status": 1, "team_id": 1, "updated_at": 1}
+    team_proj = {"name": 1, "avatar_color": 1}
+    my_projects = await project_repo.collection.find(project_query, project_proj).sort("created_at", -1).limit(5).to_list(length=5)
+    my_teams = await team_repo.collection.find(team_query, team_proj).sort("created_at", -1).limit(5).to_list(length=5)
     
     data = {
         "total_projects": total_projects,

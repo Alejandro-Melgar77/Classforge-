@@ -1,91 +1,117 @@
-<div class="h-9 bg-[var(--surface-2)]/80 border-b border-[var(--border)] flex items-center px-2 gap-0.5">
+<div class="h-9 bg-[var(--surface-2)]/90 border-b border-[var(--border)] flex items-center px-2 gap-0.5 overflow-x-auto custom-scrollbar select-none"
+     role="toolbar"
+     aria-label="Barra de herramientas del editor">
 
-  <!-- Edit Group -->
-  <div class="flex items-center gap-0.5">
-    <button (click)="undo()" class="toolbar-btn" title="Deshacer (Ctrl+Z)">
+  <!-- Grupo Edición -->
+  <div class="flex items-center gap-0.5" role="group" aria-label="Historial de acciones">
+    <button (click)="undo()" class="toolbar-btn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer última acción">
       <lucide-icon name="undo" [size]="15"></lucide-icon>
     </button>
-    <button (click)="redo()" class="toolbar-btn" title="Rehacer (Ctrl+Y)">
+    <button (click)="redo()" class="toolbar-btn" title="Rehacer (Ctrl+Y)" aria-label="Rehacer acción">
       <lucide-icon name="redo" [size]="15"></lucide-icon>
     </button>
   </div>
 
-  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+  <div class="w-px h-5 bg-[var(--border)] mx-1" aria-hidden="true"></div>
 
-  <!-- Clipboard Group -->
-  <div class="flex items-center gap-0.5">
-    <button (click)="copy()" class="toolbar-btn" title="Copiar (Ctrl+C)">
+  <!-- Grupo Portapapeles -->
+  <div class="flex items-center gap-0.5" role="group" aria-label="Portapapeles y eliminación">
+    <button (click)="copy()" class="toolbar-btn" title="Copiar (Ctrl+C)" aria-label="Copiar elementos seleccionados">
       <lucide-icon name="copy" [size]="15"></lucide-icon>
     </button>
-    <button (click)="paste()" class="toolbar-btn" title="Pegar (Ctrl+V)">
+    <button (click)="paste()" class="toolbar-btn" title="Pegar (Ctrl+V)" aria-label="Pegar elementos del portapapeles">
       <lucide-icon name="clipboard-paste" [size]="15"></lucide-icon>
     </button>
-    <button (click)="deleteSelected()" class="toolbar-btn hover:!text-red-400" title="Eliminar seleccionado (Del)">
+    <button (click)="deleteSelected()" class="toolbar-btn hover:!text-red-400" title="Eliminar seleccionado (Supr)" aria-label="Eliminar elemento seleccionado">
       <lucide-icon name="trash-2" [size]="15"></lucide-icon>
     </button>
   </div>
 
-  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+  <div class="w-px h-5 bg-[var(--border)] mx-1" aria-hidden="true"></div>
 
-  <!-- View Group -->
-  <div class="flex items-center gap-0.5">
-    <button (click)="zoomOut()" class="toolbar-btn" title="Alejar">
+  <!-- Grupo Vista -->
+  <div class="flex items-center gap-0.5" role="group" aria-label="Controles de vista y zoom">
+    <button (click)="zoomOut()" class="toolbar-btn" title="Alejar (-)" aria-label="Alejar lienzo">
       <lucide-icon name="zoom-out" [size]="15"></lucide-icon>
     </button>
-    <button (click)="zoomIn()" class="toolbar-btn" title="Acercar">
+    <button (click)="zoomIn()" class="toolbar-btn" title="Acercar (+)" aria-label="Acercar lienzo">
       <lucide-icon name="zoom-in" [size]="15"></lucide-icon>
     </button>
-    <button (click)="fitView()" class="toolbar-btn" title="Ajustar vista (F)">
+    <button (click)="fitView()" class="toolbar-btn" title="Ajustar vista a la pantalla (F)" aria-label="Ajustar lienzo a la pantalla">
       <lucide-icon name="maximize" [size]="15"></lucide-icon>
     </button>
-    <button (click)="autoLayout()" class="toolbar-btn" title="Auto-distribuir">
+    <button (click)="autoLayout()" class="toolbar-btn" title="Auto-distribuir clases" aria-label="Auto-distribuir clases en el lienzo">
       <lucide-icon name="layout-grid" [size]="15"></lucide-icon>
     </button>
   </div>
 
-  <div class="w-px h-5 bg-[var(--border)] mx-1"></div>
+  <div class="w-px h-5 bg-[var(--border)] mx-1" aria-hidden="true"></div>
 
-  <!-- Export/Import Group -->
-  <div class="flex items-center gap-0.5 relative">
+  <!-- Grupo Exportar / Importar -->
+  <div class="flex items-center gap-0.5 relative" role="group" aria-label="Importación y exportación">
     <div class="relative">
-      <button (click)="toggleExportMenu()" class="toolbar-btn flex items-center gap-1" title="Exportar">
+      <button (click)="toggleExportMenu()" 
+              class="toolbar-btn flex items-center gap-1 font-medium" 
+              [attr.aria-expanded]="exportMenuOpen"
+              aria-haspopup="menu"
+              title="Exportar diagrama en varios formatos"
+              aria-label="Abrir menú de exportación">
         <lucide-icon name="download" [size]="15"></lucide-icon>
-        <span class="text-[10px]">Exportar</span>
-        <span class="text-[8px] ml-0.5">▼</span>
+        <span class="text-[11px]">Exportar</span>
+        <span class="text-[8px] ml-0.5" aria-hidden="true">▼</span>
       </button>
-      <div *ngIf="exportMenuOpen" class="absolute left-0 top-full mt-1 w-36 bg-[var(--surface-3)] border border-[var(--border)] rounded-md shadow-xl overflow-hidden py-1 z-30">
-        <button (click)="exportPng()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
-          📷 Export PNG
+
+      <div *ngIf="exportMenuOpen" 
+           class="absolute left-0 top-full mt-1 w-40 bg-[var(--surface-3)] border border-[var(--border)] rounded-lg shadow-2xl overflow-hidden py-1 z-50 animate-in fade-in duration-100"
+           role="menu"
+           aria-label="Formatos de exportación">
+        <button (click)="exportPng()" role="menuitem" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2 cursor-pointer">
+          <span>📷</span> <span>Exportar PNG</span>
         </button>
-        <button (click)="exportPdf()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
-          📄 Export PDF
+        <button (click)="exportPdf()" role="menuitem" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2 cursor-pointer">
+          <span>📄</span> <span>Exportar PDF</span>
         </button>
         <div class="h-px bg-[var(--border)] my-0.5"></div>
-        <button (click)="exportXmi()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
-          📦 Export XMI
+        <button (click)="exportXmi()" role="menuitem" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2 cursor-pointer">
+          <span>📦</span> <span>Exportar XMI</span>
         </button>
-        <button (click)="exportJson()" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2">
-          📋 Export JSON
+        <button (click)="exportJson()" role="menuitem" class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-4)] flex items-center gap-2 cursor-pointer">
+          <span>📋</span> <span>Exportar JSON</span>
         </button>
       </div>
     </div>
 
-    <!-- Import XMI -->
-    <label class="toolbar-btn flex items-center gap-1 cursor-pointer" title="Importar XMI">
+    <!-- Importar XMI -->
+    <label class="toolbar-btn flex items-center gap-1 cursor-pointer" 
+           title="Importar archivo XMI/XML (máx 10MB)"
+           aria-label="Importar archivo XMI o XML">
       <lucide-icon name="upload" [size]="15"></lucide-icon>
-      <span class="text-[10px]">Importar</span>
-      <input type="file" accept=".xmi,.xml" (change)="importXmi($event)" class="hidden">
+      <span class="text-[11px]">Importar</span>
+      <input type="file" accept=".xmi,.xml" (change)="importXmi($event)" class="hidden" aria-label="Seleccionar archivo XMI">
     </label>
   </div>
 
-  <!-- AutoSave Status Indicator -->
-  <div class="ml-auto flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded transition-all duration-300"
+  <div class="w-px h-5 bg-[var(--border)] mx-1" aria-hidden="true"></div>
+
+  <!-- Botón Ayuda / Atajos de teclado -->
+  <button (click)="openShortcuts.emit()" 
+          class="toolbar-btn text-amber-400 hover:text-amber-300" 
+          title="Ver atajos de teclado (?)"
+          aria-label="Ver atajos de teclado">
+    <lucide-icon name="help-circle" [size]="15"></lucide-icon>
+  </button>
+
+  <!-- AutoSave Status Indicator (Visible y Accesible) -->
+  <div class="ml-auto flex items-center gap-2 text-[11px] font-medium px-2.5 py-0.5 rounded-full transition-all duration-300 shrink-0"
        [ngClass]="{
-         'text-emerald-400 bg-emerald-500/10': autoSave.saveStatus() === 'saved',
-         'text-amber-400 bg-amber-500/10': autoSave.saveStatus() === 'saving',
-         'text-slate-400 bg-slate-500/10': autoSave.saveStatus() === 'unsaved',
-         'text-rose-400 bg-rose-500/10': autoSave.saveStatus() === 'error'
-       }">
+         'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20': autoSave.saveStatus() === 'saved',
+         'text-amber-400 bg-amber-500/10 border border-amber-500/20': autoSave.saveStatus() === 'saving',
+         'text-slate-400 bg-slate-500/10 border border-slate-500/20': autoSave.saveStatus() === 'unsaved',
+         'text-rose-400 bg-rose-500/15 border border-rose-500/30': autoSave.saveStatus() === 'error'
+       }"
+       role="status"
+       aria-live="polite">
+    
     <span class="w-1.5 h-1.5 rounded-full"
           [ngClass]="{
             'bg-emerald-400': autoSave.saveStatus() === 'saved',
@@ -93,10 +119,23 @@
             'bg-slate-400': autoSave.saveStatus() === 'unsaved',
             'bg-rose-400': autoSave.saveStatus() === 'error'
           }"></span>
-    <span *ngIf="autoSave.saveStatus() === 'saved'">Guardado ✓</span>
-    <span *ngIf="autoSave.saveStatus() === 'saving'">Guardando...</span>
-    <span *ngIf="autoSave.saveStatus() === 'unsaved'">Cambios sin guardar</span>
-    <span *ngIf="autoSave.saveStatus() === 'error'">Error al guardar ⚠️</span>
+
+    <span class="capitalize">
+      <ng-container [ngSwitch]="autoSave.saveStatus()">
+        <span *ngSwitchCase="'saved'">Guardado</span>
+        <span *ngSwitchCase="'saving'">Guardando...</span>
+        <span *ngSwitchCase="'unsaved'">Sin guardar</span>
+        <span *ngSwitchCase="'error'">Error al guardar</span>
+      </ng-container>
+    </span>
+
+    <!-- Botón reintentar ante error -->
+    <button *ngIf="autoSave.saveStatus() === 'error'"
+            (click)="retrySave()"
+            class="text-[10px] underline hover:text-white ml-1 cursor-pointer font-bold"
+            title="Reintentar guardado en el servidor">
+      Reintentar
+    </button>
   </div>
 
 </div>

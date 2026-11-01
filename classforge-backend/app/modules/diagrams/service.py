@@ -1,31 +1,12 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone
 import xml.etree.ElementTree as ET
+
+from app.core.authz import can_access_diagram, can_access_project
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.modules.diagrams.repository import DiagramRepository
 from app.modules.diagrams.schemas import CreateDiagram, UpdateDiagram, SaveGraph
-
-def can_access_diagram(user: Dict[str, Any], diagram: Dict[str, Any], team: Optional[Dict[str, Any]]) -> bool:
-    role = user.get("role")
-    user_id = str(user["_id"])
-    if role == "admin":
-        return True
-    
-    # Creator always has access
-    if str(diagram.get("created_by")) == user_id:
-        return True
-
-    # If user is assigned as a member/participant to this diagram
-    diagram_members = [str(m) for m in diagram.get("member_ids", [])]
-    if user_id in diagram_members:
-        return True
-    
-    # If user is the Scrum Master of the diagram's assigned team
-    if role == "scrum_master" and team:
-        if str(team.get("scrum_master_id")) == user_id:
-            return True
-            
-    return False
 
 class DiagramService:
     def __init__(self, db):
@@ -67,16 +48,27 @@ class DiagramService:
         # Safely resolve project_id
         proj_id_val = doc.get("project_id")
         if proj_id_val and ObjectId.is_valid(str(proj_id_val)):
-            doc["project_id"] = ObjectId(str(proj_id_val))
-        else:
-            # Find an existing project owned by or accessible to user, or auto-create one
-            proj = await self.db["projects"].find_one({"owner_id": user_id, "is_deleted": {"$ne": True}})
+            proj_oid = ObjectId(str(proj_id_val))
+            proj = await self.db["projects"].find_one({"_id": proj_oid, "is_deleted": False})
             if not proj:
-                proj = await self.db["projects"].find_one({"is_deleted": {"$ne": True}})
+                raise NotFoundError("Proyecto especificado no encontrado")
+            team = None
+            if proj.get("team_id"):
+                team = await self._get_team(proj["team_id"])
+            if not can_access_project(user, proj, team):
+                raise ForbiddenError("No tienes acceso al proyecto especificado")
+            doc["project_id"] = proj_oid
+            if not doc.get("team_id") and proj.get("team_id"):
+                doc["team_id"] = proj["team_id"]
+        else:
+            # Find an existing personal project owned by the user, or auto-create one
+            proj = await self.db["projects"].find_one({"owner_id": user_id, "type": "personal", "is_deleted": False})
+            if not proj:
+                proj = await self.db["projects"].find_one({"owner_id": user_id, "is_deleted": False})
             if not proj:
                 new_proj = {
-                    "name": "Proyecto Principal",
-                    "description": "Proyecto generado automáticamente",
+                    "name": "Proyecto Personal",
+                    "description": "Proyecto personal generado automáticamente",
                     "type": "personal",
                     "status": "in_progress",
                     "owner_id": user_id,
@@ -115,7 +107,7 @@ class DiagramService:
         
         return diagram
 
-    async def list_diagrams(self, user: Dict[str, Any], project_id: Optional[str] = None, team_id: Optional[str] = None, status: Optional[str] = None, page: int = 1, limit: int = 20) -> List[Dict[str, Any]]:
+    async def list_diagrams(self, user: Dict[str, Any], project_id: Optional[str] = None, team_id: Optional[str] = None, status: Optional[str] = None, page: int = 1, limit: int = 20) -> Tuple[List[Dict[str, Any]], int]:
         query = {}
         if project_id and ObjectId.is_valid(project_id):
             query["project_id"] = ObjectId(project_id)
@@ -147,8 +139,10 @@ class DiagramService:
             query["created_by"] = user_id
                 
         skip = (page - 1) * limit
+        total = await self.repository.count_diagrams(query)
         diagrams = await self.repository.list_diagrams(query, skip, limit)
-        return await self._enrich_team_names(diagrams)
+        enriched = await self._enrich_team_names(diagrams)
+        return enriched, total
 
     async def get_diagram(self, diagram_id: str, user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         diagram = await self.repository.get_by_id(diagram_id)
@@ -156,8 +150,18 @@ class DiagramService:
             return None
             
         team = await self._get_team(diagram.get("team_id"))
-        if not can_access_diagram(user, diagram, team):
-            raise PermissionError("Access denied")
+        project = None
+        if diagram.get("project_id"):
+            proj_id = diagram["project_id"]
+            if not isinstance(proj_id, ObjectId):
+                proj_id = ObjectId(str(proj_id)) if ObjectId.is_valid(str(proj_id)) else None
+            if proj_id:
+                project = await self.db["projects"].find_one({"_id": proj_id, "is_deleted": False})
+                if project and not team and project.get("team_id"):
+                    team = await self._get_team(project["team_id"])
+
+        if not can_access_diagram(user, diagram, team, project):
+            raise ForbiddenError("Access denied")
             
         if team:
             diagram["team_name"] = team.get("name")
@@ -176,7 +180,7 @@ class DiagramService:
 
         # Only Admin, Scrum Master of the team, or Diagram Creator can update metadata
         if role != "admin" and not is_sm and not is_creator:
-            raise PermissionError("Only Admin or Scrum Master can modify diagram details")
+            raise ForbiddenError("Only Admin or Scrum Master can modify diagram details")
             
         update_data = {k: v for k, v in data.model_dump().items() if v is not None}
         
@@ -219,7 +223,7 @@ class DiagramService:
                 users = await self.db["users"].find({"_id": {"$in": all_uids}, "is_active": True}).to_list(length=None)
                 for u in users:
                     uid_str = str(u["_id"])
-                    name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("username", "Usuario")
+                    name = u.get("name") or f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("username", "Usuario")
                     available_members.append({
                         "id": uid_str,
                         "name": name,
@@ -232,7 +236,7 @@ class DiagramService:
             users = await self.db["users"].find({"role": {"$in": ["dev", "scrum_master"]}, "is_active": True}).to_list(length=50)
             for u in users:
                 uid_str = str(u["_id"])
-                name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("username", "Usuario")
+                name = u.get("name") or f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("username", "Usuario")
                 available_members.append({
                     "id": uid_str,
                     "name": name,

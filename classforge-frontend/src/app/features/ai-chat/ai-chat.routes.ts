@@ -1,13 +1,19 @@
 import { Routes } from '@angular/router';
 
-/** Routes for the AI Chat feature module. */
+/**
+ * AI Chat routes.
+ * As part of P6b / P7a architecture, direct /ai-chat/:projectId routes
+ * redirect to the project hub center (/projects).
+ */
 export const AI_CHAT_ROUTES: Routes = [
   {
     path: ':projectId',
-    loadComponent: () =>
-      import('./components/ai-chat-panel/ai-chat-panel.component').then(
-        m => m.AiChatPanelComponent
-      ),
-    title: 'Chat IA — ClassForge'
+    redirectTo: '/projects/:projectId/equipo-ia',
+    pathMatch: 'full'
+  },
+  {
+    path: '',
+    redirectTo: '/projects',
+    pathMatch: 'full'
   }
 ];

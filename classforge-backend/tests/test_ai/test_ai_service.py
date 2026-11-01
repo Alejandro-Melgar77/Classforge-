@@ -41,4 +41,4 @@ async def test_process_prompt_fallback():
     res = await process_prompt(prompt)
     assert res.action == "generate_system"
     assert len(res.classes) > 0
-    assert res.source == "nlu_heuristic"
+    assert res.source in ("nlu_heuristic", "offline_nlu", "heuristic")

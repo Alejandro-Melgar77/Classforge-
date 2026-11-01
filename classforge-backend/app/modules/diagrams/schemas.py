@@ -1,6 +1,7 @@
+import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class CreateDiagram(BaseModel):
     name: str
@@ -122,3 +123,45 @@ class DiagramResponseFull(DiagramResponse):
 class WsTokenResponse(BaseModel):
     token: str
     expires_at: datetime
+
+
+ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+class DiagramFromImageRequest(BaseModel):
+    image_base64: str = Field(..., description="Base64 encoded image string")
+    mime_type: str = Field(default="image/jpeg", description="MIME type of the image")
+    api_key: Optional[str] = Field(default=None, repr=False)
+    model: Optional[str] = None
+
+    @field_validator("mime_type")
+    @classmethod
+    def validate_mime_type(cls, v: str) -> str:
+        clean = (v or "").strip().lower()
+        if clean not in ALLOWED_IMAGE_MIMES:
+            raise ValueError(f"MIME type no permitido: '{v}'. Permitidos: {', '.join(sorted(ALLOWED_IMAGE_MIMES))}")
+        return clean
+
+    @field_validator("image_base64")
+    @classmethod
+    def validate_image_payload(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("image_base64 es requerido")
+        raw = v.strip()
+        if "," in raw:
+            raw = raw.split(",", 1)[1]
+        try:
+            decoded = base64.b64decode(raw, validate=True)
+        except Exception:
+            raise ValueError("image_base64 no contiene datos base64 válidos")
+        if len(decoded) > MAX_IMAGE_BYTES:
+            raise ValueError("El tamaño de la imagen decodificada excede el límite de 8 MB")
+        return raw
+
+
+class DiagramAiPromptRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000, description="Prompt text with max 4000 chars")
+    api_key: Optional[str] = Field(default=None, repr=False)
+    model: Optional[str] = None
+

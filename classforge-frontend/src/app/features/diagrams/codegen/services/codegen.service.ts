@@ -16,8 +16,8 @@ export class CodegenService {
   isLoading = signal<boolean>(false);
   targetBackend = signal<BackendFramework>('spring_boot');
   activeEngine = signal<CodegenEngine>('gemini');
-  geminiModel = signal<string>(localStorage.getItem('classforge_gemini_model') || 'gemini-3.8-flash');
-  geminiApiKey = signal<string>(localStorage.getItem('classforge_gemini_api_key') || '');
+  geminiModel = signal<string>(typeof localStorage !== 'undefined' ? (localStorage.getItem('classforge_gemini_model') || 'gemini-3.8-flash') : 'gemini-3.8-flash');
+  geminiApiKey = signal<string>(typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('classforge_gemini_api_key') || '') : '');
   engineUsed = signal<string>('deterministic');
   engineSummary = signal<string>('');
   
@@ -40,7 +40,16 @@ export class CodegenService {
 
   setGeminiApiKey(key: string): void {
     this.geminiApiKey.set(key);
-    localStorage.setItem('classforge_gemini_api_key', key);
+    if (typeof sessionStorage !== 'undefined') {
+      if (key && key.trim()) {
+        sessionStorage.setItem('classforge_gemini_api_key', key.trim());
+      } else {
+        sessionStorage.removeItem('classforge_gemini_api_key');
+      }
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('classforge_gemini_api_key');
+    }
   }
 
   setGeminiModel(model: string): void {

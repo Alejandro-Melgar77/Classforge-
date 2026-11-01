@@ -10,6 +10,18 @@ class StandardResponse(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class UserPublic(BaseModel):
+    id: str
+    name: str
+    email: EmailStr
+    role: str = "dev"
+    avatar_url: Optional[str] = None
+    team_ids: List[str] = Field(default_factory=list)
+    is_active: bool = True
+
+    model_config = {"extra": "ignore"}
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str

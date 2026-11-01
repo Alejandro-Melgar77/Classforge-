@@ -26,7 +26,9 @@ import { AuthService } from '../../../core/services/auth.service';
           </div>
         </div>
         
-        <h3 class="text-lg font-bold text-white mb-1 truncate" [title]="project.name">{{ project.name }}</h3>
+        <a [routerLink]="['/projects', project.id]" class="text-lg font-bold text-white mb-1 truncate hover:text-primary transition-colors block" [title]="project.name">
+          {{ project.name }}
+        </a>
         
         <p class="text-sm text-[var(--text-secondary)] line-clamp-2 mb-4 flex-1" [title]="project.description">
           {{ project.description || 'Sin descripción' }}
@@ -43,13 +45,13 @@ import { AuthService } from '../../../core/services/auth.service';
           </div>
 
           <div class="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-            <a [routerLink]="['/ai-chat', project.id]" class="p-1.5 text-[var(--text-secondary)] hover:text-emerald-400 bg-[var(--surface-3)] rounded flex items-center justify-center" title="Chat IA del Proyecto">
-              💬
+            <a [routerLink]="['/projects', project.id, 'equipo-ia']" class="p-1.5 text-[var(--text-secondary)] hover:text-emerald-400 bg-[var(--surface-3)] rounded flex items-center justify-center" title="Equipo IA del Proyecto">
+              🤖
             </a>
-            <button (click)="view.emit(project)" class="p-1.5 text-[var(--text-secondary)] hover:text-white bg-[var(--surface-3)] rounded" title="Visualizar">
+            <a [routerLink]="['/projects', project.id]" class="p-1.5 text-[var(--text-secondary)] hover:text-white bg-[var(--surface-3)] rounded flex items-center justify-center" title="Centro de Proyecto">
               👁️
-            </button>
-            <button *ngIf="canEdit()" (click)="edit.emit(project)" class="p-1.5 text-[var(--text-secondary)] hover:text-[var(--primary)] bg-[var(--surface-3)] rounded" title="Editar">
+            </a>
+            <button *ngIf="canEdit()" (click)="edit.emit(project)" class="p-1.5 text-[var(--text-secondary)] hover:text-[var(--primary)] bg-[var(--surface-3)] rounded cursor-pointer" title="Editar">
               ✏️
             </button>
           </div>

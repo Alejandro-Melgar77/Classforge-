@@ -1,3 +1,22 @@
+/** Represents a proposal produced by an AI role. */
+export interface ProposalItem {
+  id: string;
+  kind: 'uml_command' | 'task' | 'note';
+  title: string;
+  rationale: string;
+  severity: 'info' | 'warn' | 'critical';
+  command?: Record<string, unknown> | null;
+  target_element_ids?: string[];
+}
+
+/** Structured output contract from AI Team roles. */
+export interface AiTeamResponse {
+  reply_markdown: string;
+  proposals: ProposalItem[];
+  questions: string[];
+  needs_context: boolean;
+}
+
 /** Represents a message in the AI group chat. */
 export interface AiMessage {
   id: string;
@@ -11,6 +30,9 @@ export interface AiMessage {
   visible_to_all: boolean;
   has_diagram_changes?: boolean;
   diagram_snapshot?: Record<string, unknown>;
+  proposals?: ProposalItem[];
+  questions?: string[];
+  needs_context?: boolean;
 }
 
 /** Represents the full conversation document for a project. */
@@ -24,7 +46,19 @@ export interface AiConversation {
 }
 
 /** Valid AI role identifiers. */
-export type AiRoleId = 'architect' | 'qa' | 'tech_lead' | 'mentor';
+export type AiRoleId = 'architect' | 'qa' | 'tech_lead' | 'mentor' | 'dba' | 'security' | 'analyst';
+
+/** UI skin configuration for an AI role. */
+export interface AiRoleSkin {
+  accent: string;
+  bg: string;
+  border: string;
+  text: string;
+  icon: string;
+  bubble_shape: string;
+  typing_text: string;
+  avatar_style: string;
+}
 
 /** Status configuration for an AI role. */
 export interface AiRoleStatus {
@@ -33,6 +67,8 @@ export interface AiRoleStatus {
   emoji: string;
   description: string;
   is_active: boolean;
+  skin?: AiRoleSkin;
+  triggers?: string[];
 }
 
 /** UI theme/skin configuration for an AI role. */
@@ -43,6 +79,8 @@ export interface AiRoleTheme {
   textColor: string;
   borderColor: string;
   description: string;
+  icon?: string;
+  bubbleShape?: string;
 }
 
 /** Map of role themes for consistent UI presentation. */
@@ -50,35 +88,73 @@ export const AI_ROLE_THEMES: Record<AiRoleId, AiRoleTheme> = {
   architect: {
     emoji: '🏛️',
     label: 'Arquitecto IA',
-    bgColor: '#1E3A5F',
-    textColor: '#7EB3FF',
-    borderColor: '#2D6BE4',
-    description: 'Diseña y valida la arquitectura del sistema'
+    bgColor: '#0F172A',
+    textColor: '#93C5FD',
+    borderColor: '#2563EB',
+    description: 'Diseña y valida la arquitectura del sistema',
+    icon: 'landmark',
+    bubbleShape: 'bubble-rounded-bl',
   },
   qa: {
     emoji: '🔬',
     label: 'QA IA',
-    bgColor: '#1A3C2F',
-    textColor: '#4ADE80',
-    borderColor: '#00C896',
-    description: 'Detecta inconsistencias y errores en el modelo'
+    bgColor: '#064E3B',
+    textColor: '#A7F3D0',
+    borderColor: '#059669',
+    description: 'Detecta inconsistencias y errores en el modelo',
+    icon: 'shield-check',
+    bubbleShape: 'bubble-angular',
   },
   tech_lead: {
     emoji: '⚡',
     label: 'Tech Lead IA',
-    bgColor: '#5C2E00',
-    textColor: '#FBBF24',
-    borderColor: '#F5A623',
-    description: 'Guía decisiones técnicas y estándares de código'
+    bgColor: '#451A03',
+    textColor: '#FDE68A',
+    borderColor: '#D97706',
+    description: 'Guía decisiones técnicas y estándares de código',
+    icon: 'terminal',
+    bubbleShape: 'bubble-rounded-tr',
   },
   mentor: {
     emoji: '📚',
     label: 'Mentor IA',
-    bgColor: '#2D1B69',
-    textColor: '#C4B5FD',
-    borderColor: '#9B51E0',
-    description: 'Explica conceptos y enseña buenas prácticas'
-  }
+    bgColor: '#2E1065',
+    textColor: '#DDD6FE',
+    borderColor: '#7C3AED',
+    description: 'Explica conceptos y enseña buenas prácticas',
+    icon: 'sparkles',
+    bubbleShape: 'bubble-pill',
+  },
+  dba: {
+    emoji: '💾',
+    label: 'DBA IA',
+    bgColor: '#164E63',
+    textColor: '#A5F3FC',
+    borderColor: '#0891B2',
+    description: 'Optimiza persistencia, normalización 3FN y claves',
+    icon: 'database',
+    bubbleShape: 'bubble-cut-corner',
+  },
+  security: {
+    emoji: '🛡️',
+    label: 'Seguridad IA',
+    bgColor: '#450A0A',
+    textColor: '#FECACA',
+    borderColor: '#DC2626',
+    description: 'Audita OWASP, contraseñas y control de accesos',
+    icon: 'shield-alert',
+    bubbleShape: 'bubble-sharp-bl',
+  },
+  analyst: {
+    emoji: '📋',
+    label: 'Analista IA',
+    bgColor: '#134E4A',
+    textColor: '#99F6E4',
+    borderColor: '#0D9488',
+    description: 'Mapea requisitos e historias de usuario a clases',
+    icon: 'file-text',
+    bubbleShape: 'bubble-card',
+  },
 };
 
 /** Response from the AI role chat endpoint. */
@@ -88,4 +164,8 @@ export interface AiRoleChatResponse {
   diagram_changes_json?: unknown;
   role_label: string;
   role_emoji: string;
+  structured_response?: AiTeamResponse;
+  proposals?: ProposalItem[];
+  questions?: string[];
+  needs_context?: boolean;
 }

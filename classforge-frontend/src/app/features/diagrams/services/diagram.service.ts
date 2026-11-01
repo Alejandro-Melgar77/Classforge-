@@ -68,6 +68,10 @@ export class DiagramService {
     return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/${id}/history`);
   }
 
+  restoreVersion(id: string, version: number): Observable<ApiResponse<Diagram>> {
+    return this.http.post<ApiResponse<Diagram>>(`${this.apiUrl}/${id}/history/${version}/restore`, {});
+  }
+
   getWsToken(id: string): Observable<ApiResponse<{token: string}>> {
     return this.http.get<ApiResponse<{token: string}>>(`${this.apiUrl}/${id}/ws-token`);
   }

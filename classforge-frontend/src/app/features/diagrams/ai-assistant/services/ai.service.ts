@@ -5,6 +5,17 @@ import { NluParserService } from './nlu-parser.service';
 import { UMLCommandResponse } from '../models/ai-command.model';
 import { environment } from '../../../../../environments/environment';
 
+export interface AiHealthResponse {
+  provider: string;
+  models: string[];
+  has_server_key: boolean;
+  local_available: boolean;
+  local_model: string;
+  local_latency_ms?: number | null;
+  routing?: Record<string, string[]>;
+  ollama_available?: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -12,7 +23,29 @@ export class AiService {
   private http = inject(HttpClient);
   private nluParser = inject(NluParserService);
 
-  processInput(text: string, diagramContext?: any): Observable<UMLCommandResponse> {
+  checkHealth(): Observable<AiHealthResponse> {
+    const url = `${environment.apiUrl}/ai/health`;
+    return this.http.get<any>(url).pipe(
+      map(res => res as AiHealthResponse),
+      catchError(err => {
+        console.warn('[AiService] Failed to check AI health:', err);
+        return of({
+          provider: 'gemini',
+          models: ['gemini-3.8-flash'],
+          has_server_key: false,
+          local_available: false,
+          local_model: 'qwen2.5:1.5b'
+        });
+      })
+    );
+  }
+
+  processInput(
+    text: string,
+    diagramContext?: any,
+    preferredProvider: 'auto' | 'gemini' | 'local' = 'auto',
+    localOnly: boolean = false
+  ): Observable<UMLCommandResponse> {
     const trimmed = text.trim();
     if (!trimmed) {
       return of({
@@ -21,39 +54,47 @@ export class AiService {
         relations: [],
         deleted_elements: [],
         explanation: 'Consulta vacía.',
-        source: 'offline_nlu'
+        source: 'heuristic'
       });
     }
 
-    // Retrieve configured Gemini API Key and Model (defaults to gemini-2.0-flash)
+    // Retrieve configured Gemini API Key from sessionStorage and Model preference
     let apiKey: string | undefined = undefined;
-    let model: string = 'gemini-2.0-flash';
-    if (typeof localStorage !== 'undefined') {
-      const storedKey = localStorage.getItem('classforge_gemini_api_key');
+    let model: string = 'gemini-3.8-flash';
+    if (typeof sessionStorage !== 'undefined') {
+      const storedKey = sessionStorage.getItem('classforge_gemini_api_key');
       if (storedKey && storedKey.trim()) {
         apiKey = storedKey.trim();
       }
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('classforge_gemini_api_key');
       const storedModel = localStorage.getItem('classforge_gemini_model');
       if (storedModel && storedModel.trim()) {
         model = storedModel.trim();
       }
     }
 
-    // 1. Primary Engine: Google Gemini 3.7 Flash Semantic UML Generator via Backend
+    // Purpose-based routing with local LLM and Gemini support
     const url = `${environment.apiUrl}/ai/generate`;
-    const payload = {
+    const payload: any = {
       prompt: trimmed,
       diagram_context: diagramContext,
       api_key: apiKey,
-      model: model
+      model: model,
+      local_only: localOnly
     };
 
+    if (preferredProvider && preferredProvider !== 'auto') {
+      payload.preferred_provider = preferredProvider;
+    }
+
     return this.http.post<any>(url, payload).pipe(
-      timeout(25000),
+      timeout(28000),
       map(res => {
         const data: UMLCommandResponse = res.data || res;
         if (data && (data.classes?.length > 0 || data.relations?.length > 0 || (data.action && data.action !== 'unknown'))) {
-          data.source = (data.source as any) || 'backend_ai';
+          data.source = (data.source as any) || 'heuristic';
           return data;
         }
         // Fallback if backend returned empty
@@ -69,7 +110,7 @@ export class AiService {
   private fallbackToLocalNlu(text: string): UMLCommandResponse {
     const parsed = this.nluParser.parse(text);
     if (parsed && parsed.action !== 'unknown') {
-      parsed.source = 'offline_nlu';
+      parsed.source = 'heuristic';
       return parsed;
     }
     return {
@@ -78,9 +119,7 @@ export class AiService {
       relations: [],
       deleted_elements: [],
       explanation: 'No se pudo interpretar el comando con el motor local ni con la IA.',
-      source: 'offline_nlu'
+      source: 'heuristic'
     };
   }
 }
-
-

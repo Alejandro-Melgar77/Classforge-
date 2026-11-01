@@ -6,6 +6,7 @@ from jose import JWTError, jwt
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.modules.auth.repository import SessionRepository
 from app.modules.users.repository import UserRepository
 
 security = HTTPBearer()
@@ -19,7 +20,8 @@ def get_user_repository(db: Any = Depends(get_db)) -> UserRepository:
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    db: Any = Depends(get_db)
 ) -> Dict[str, Any]:
     """Validate JWT access token and retrieve current active user."""
     token = credentials.credentials
@@ -28,12 +30,25 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        sid: Optional[str] = payload.get("sid")
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # If session claim is present, ensure it is still active (session revocation check)
+    if sid:
+        session_repo = SessionRepository(db)
+        if not await session_repo.is_session_active(sid):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesión revocada o inválida",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        request.state.sid = sid
+
     user = await user_repo.get_by_id(user_id)
     if user is None or user.get("is_deleted", False):
         raise HTTPException(status_code=404, detail="User not found")
@@ -51,6 +66,7 @@ async def get_current_user(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired due to inactivity")
 
     await user_repo.update_last_activity(user_id)
+    request.state.user_id = user_id
     
     return user
 

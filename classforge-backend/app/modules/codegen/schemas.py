@@ -6,7 +6,7 @@ class CodegenPreviewRequest(BaseModel):
     graph_data: Optional[Dict[str, Any]] = None
     target_backend: Optional[str] = "spring_boot"  # "spring_boot" | "fastapi"
     engine: Optional[str] = "deterministic"  # "deterministic" | "gemini"
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = Field(default=None, repr=False)
     gemini_model: Optional[str] = "gemini-3.8-flash"
 
 class CodegenPreviewResponseData(BaseModel):
@@ -26,7 +26,7 @@ class FrontendPromptRequest(BaseModel):
     theme: str = "dark"  # dark, light
     graph_data: Optional[Dict[str, Any]] = None
     engine: Optional[str] = "deterministic"  # "deterministic" | "gemini"
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = Field(default=None, repr=False)
     gemini_model: Optional[str] = "gemini-3.8-flash"
 
 class FrontendPromptResponseData(BaseModel):

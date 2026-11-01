@@ -1,17 +1,19 @@
 """
-ProjectContextBuilder: Assembles full project context for Gemini AI injection.
-Queries MongoDB for project, team, members, diagram, and chat history.
+ProjectContextBuilder: Thin adapter preserving legacy signature while fixing reported issues:
+- Resolves 'username' -> 'name'.
+- Resolves edge node IDs into readable class names.
+- Never injects raw exception tracebacks or str(e) into the AI prompt.
 """
 from __future__ import annotations
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
 
 class ProjectContextBuilder:
-    """Builds a formatted project context string for injecting into AI system prompts."""
+    """Thin adapter for assembling project context strings safely."""
 
     async def build(
         self,
@@ -20,17 +22,7 @@ class ProjectContextBuilder:
         diagram_id: Optional[str] = None,
         history_limit: int = 15,
     ) -> str:
-        """Assembles the full context of a ClassForge project.
-        
-        Args:
-            db: AsyncIOMotorDatabase instance.
-            project_id: The project's MongoDB ObjectId as string.
-            diagram_id: Optional diagram ObjectId string to include in context.
-            history_limit: How many recent AI conversation messages to include.
-        
-        Returns:
-            A formatted multi-line string ready to be injected into a system prompt.
-        """
+        """Assembles project context without leaking internal exceptions."""
         try:
             project = await self._get_project(db, project_id)
             team = await self._get_team(db, project)
@@ -39,7 +31,7 @@ class ProjectContextBuilder:
             history = await self._get_recent_history(db, project_id, history_limit)
             tasks = await self._get_active_tasks(db, project_id)
 
-            return f"""=== CONTEXTO COMPLETO DEL PROYECTO ClassForge ===
+            return f"""=== CONTEXTO DEL PROYECTO ClassForge ===
 
 PROYECTO: {project.get('name', 'Sin nombre')}
 DESCRIPCIÓN: {project.get('description', 'Sin descripción')}
@@ -53,19 +45,20 @@ DIAGRAMA ACTIVO: {diagram.get('name', 'Ninguno seleccionado') if diagram else 'N
 ESTRUCTURA ACTUAL DEL DIAGRAMA:
 {self._summarize_diagram(diagram.get('graph_data', {})) if diagram else 'Sin datos de diagrama'}
 
-HISTORIAL DE CONVERSACIONES RECIENTES CON LA IA (últimas {history_limit}):
+HISTORIAL RECIENTE:
 {self._format_history(history)}
 
-TAREAS ACTIVAS ASIGNADAS A LA IA:
+TAREAS ACTIVAS:
 {self._format_tasks(tasks)}
 ================================================="""
         except Exception as e:
-            logger.error(f"[ContextBuilder] Error building context for project {project_id}: {e}")
-            return f"=== CONTEXTO DEL PROYECTO ===\nError al cargar contexto: {e}\n==========================="
+            logger.warning(f"[ProjectContextBuilder] Error assembling context: {e}")
+            return "=== CONTEXTO DEL PROYECTO ===\nInformación del proyecto temporalmente no disponible.\n==========================="
 
     async def _get_project(self, db, project_id: str) -> dict:
         try:
-            doc = await db["projects"].find_one({"_id": ObjectId(project_id)})
+            pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+            doc = await db["projects"].find_one({"_id": pid})
             return doc or {}
         except Exception:
             return {}
@@ -75,7 +68,8 @@ TAREAS ACTIVAS ASIGNADAS A LA IA:
         if not team_id:
             return None
         try:
-            return await db["teams"].find_one({"_id": team_id if isinstance(team_id, ObjectId) else ObjectId(str(team_id))})
+            tid = ObjectId(team_id) if ObjectId.is_valid(team_id) else team_id
+            return await db["teams"].find_one({"_id": tid})
         except Exception:
             return None
 
@@ -86,10 +80,8 @@ TAREAS ACTIVAS ASIGNADAS A LA IA:
         if not member_ids:
             return []
         try:
-            cursor = db["users"].find(
-                {"_id": {"$in": [m if isinstance(m, ObjectId) else ObjectId(str(m)) for m in member_ids]}},
-                {"username": 1, "email": 1, "role": 1}
-            )
+            oids = [ObjectId(m) if ObjectId.is_valid(m) else m for m in member_ids]
+            cursor = db["users"].find({"_id": {"$in": oids}}, {"name": 1, "role": 1})
             return await cursor.to_list(length=50)
         except Exception:
             return []
@@ -98,25 +90,26 @@ TAREAS ACTIVAS ASIGNADAS A LA IA:
         if not diagram_id:
             return None
         try:
-            return await db["diagrams"].find_one({"_id": ObjectId(diagram_id)})
+            did = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
+            return await db["diagrams"].find_one({"_id": did})
         except Exception:
             return None
 
     async def _get_recent_history(self, db, project_id: str, limit: int) -> list[dict]:
         try:
-            conv = await db["ai_conversations"].find_one({"project_id": ObjectId(project_id)})
-            if not conv:
-                return []
-            messages = conv.get("messages", [])
-            return messages[-limit:] if len(messages) > limit else messages
+            cursor = db["ai_messages"].find({"project_id": str(project_id)}).sort("created_at", -1).limit(limit)
+            msgs = await cursor.to_list(length=limit)
+            msgs.reverse()
+            return msgs
         except Exception:
             return []
 
     async def _get_active_tasks(self, db, project_id: str) -> list[dict]:
         try:
+            pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
             cursor = db["ai_tasks"].find(
-                {"project_id": ObjectId(project_id), "status": {"$in": ["pending", "in_progress"]}},
-                {"title": 1, "ai_role": 1, "status": 1, "description": 1}
+                {"project_id": pid, "status": {"$in": ["pending", "in_progress"]}},
+                {"title": 1, "ai_role": 1, "status": 1}
             ).limit(10)
             return await cursor.to_list(length=10)
         except Exception:
@@ -127,17 +120,27 @@ TAREAS ACTIVAS ASIGNADAS A LA IA:
             return "  (Sin miembros registrados)"
         lines = []
         for m in members:
-            username = m.get("username", "Desconocido")
+            name = m.get("name") or "Usuario"
             role = m.get("role", "dev")
-            lines.append(f"  - {username} ({role})")
+            lines.append(f"  - {name} ({role})")
         return "\n".join(lines)
 
     def _summarize_diagram(self, graph_data: Any) -> str:
-        """Converts AntV X6 graph JSON to human-readable text for Gemini."""
+        """Converts graph JSON to human-readable text, resolving node UUIDs to class names."""
         if not graph_data or not isinstance(graph_data, dict):
             return "  Diagrama vacío"
         nodes = graph_data.get("nodes", [])
         edges = graph_data.get("edges", [])
+
+        # Build ID -> Name resolution map
+        id_to_name: Dict[str, str] = {}
+        for node in nodes:
+            nid = str(node.get("id", ""))
+            data = node.get("data", {})
+            name = data.get("name") or nid
+            if nid:
+                id_to_name[nid] = name
+
         summary = []
         for node in nodes:
             data = node.get("data", {})
@@ -157,32 +160,35 @@ TAREAS ACTIVAS ASIGNADAS A LA IA:
                 f"    Atributos: {', '.join(attrs) or 'ninguno'}\n"
                 f"    Métodos: {', '.join(methods) or 'ninguno'}"
             )
+
         for edge in edges:
-            src = edge.get("source", "?")
-            tgt = edge.get("target", "?")
+            raw_src = str(edge.get("source", "?"))
+            raw_tgt = str(edge.get("target", "?"))
+            src_name = id_to_name.get(raw_src, raw_src)
+            tgt_name = id_to_name.get(raw_tgt, raw_tgt)
+
             edge_data = edge.get("data", {})
             rel_type = edge_data.get("type", edge.get("type", "association"))
-            src_mult = edge_data.get("sourceMultiplicity", "")
-            tgt_mult = edge_data.get("targetMultiplicity", "")
+            src_mult = edge_data.get("sourceMultiplicity", edge.get("source_multiplicity", ""))
+            tgt_mult = edge_data.get("targetMultiplicity", edge.get("target_multiplicity", ""))
             summary.append(
-                f"  RELACIÓN: {src} --[{rel_type}]--> {tgt} "
-                f"[{src_mult}:{tgt_mult}]"
+                f"  RELACIÓN: {src_name} --[{rel_type}]--> {tgt_name} [{src_mult}:{tgt_mult}]"
             )
+
         return "\n".join(summary) if summary else "  Diagrama vacío"
 
     def _format_history(self, messages: list[dict]) -> str:
         if not messages:
-            return "  (Sin historial de conversaciones)"
+            return "  (Sin historial previo)"
         lines = []
         for msg in messages:
             author = msg.get("author_name", "Desconocido")
-            author_type = msg.get("author_type", "user")
-            content = msg.get("content", "")
+            content = (msg.get("content") or "").replace("\n", " ")[:150]
             role = msg.get("ai_role", "")
-            if author_type == "ai" and role:
-                lines.append(f"  [{role.upper()} IA]: {content[:200]}")
+            if msg.get("author_type") == "ai" and role:
+                lines.append(f"  [{role.upper()}]: {content}")
             else:
-                lines.append(f"  [{author}]: {content[:200]}")
+                lines.append(f"  [{author}]: {content}")
         return "\n".join(lines)
 
     def _format_tasks(self, tasks: list[dict]) -> str:

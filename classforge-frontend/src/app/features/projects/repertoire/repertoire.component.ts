@@ -1,12 +1,14 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ProjectCardComponent } from './project-card.component';
 import { ProjectsService, ProjectFilters } from '../services/projects.service';
 import { FoldersService } from '../services/folders.service';
 import { Project } from '../models/project.model';
 import { Folder } from '../models/folder.model';
 import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-repertoire',
@@ -18,6 +20,8 @@ export class RepertoireComponent implements OnInit {
   private projectsService = inject(ProjectsService);
   private foldersService = inject(FoldersService);
   private authService = inject(AuthService);
+  private toastService = inject(ToastService);
+  private router = inject(Router);
 
   projects: Project[] = [];
   folders: Folder[] = [];
@@ -43,8 +47,7 @@ export class RepertoireComponent implements OnInit {
         this.folders = res.data || [];
         this.loadingFolders = false;
       },
-      error: (err) => {
-        console.error('Error loading folders', err);
+      error: () => {
         this.loadingFolders = false;
       }
     });
@@ -63,7 +66,7 @@ export class RepertoireComponent implements OnInit {
         this.loadingProjects = false;
       },
       error: (err) => {
-        console.error('Error loading projects', err);
+        this.toastService.error(err.error?.detail || err.message || 'Error cargando proyectos');
         this.loadingProjects = false;
       }
     });
@@ -83,12 +86,10 @@ export class RepertoireComponent implements OnInit {
   }
 
   viewProject(project: Project) {
-    // Navigate to UML canvas in future phase
-    console.log('View project', project);
+    this.router.navigate(['/projects', project.id]);
   }
 
   editProject(project: Project) {
-    // Open edit modal
-    console.log('Edit project', project);
+    this.router.navigate(['/projects', project.id, 'resumen']);
   }
 }

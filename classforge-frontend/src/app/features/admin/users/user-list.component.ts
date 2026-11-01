@@ -2,6 +2,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UsersAdminService, UserAdmin, CreateUserAdminDto, UpdateUserAdminDto } from '../services/users-admin.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
 @Component({
   selector: 'app-user-list',
@@ -122,6 +124,11 @@ import { UsersAdminService, UserAdmin, CreateUserAdminDto, UpdateUserAdminDto } 
 
                 <!-- Actions -->
                 <td class="px-5 py-3.5 text-right space-x-1.5">
+                  <button (click)="openAuditModal(user)" 
+                          class="p-1.5 rounded text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 transition-colors border border-amber-500/30"
+                          title="Ver registro de auditoría">
+                    📜
+                  </button>
                   <button (click)="openEditModal(user)" 
                           class="p-1.5 rounded text-slate-300 hover:text-white hover:bg-[var(--surface-3)] transition-colors border border-[var(--border)]/60"
                           title="Editar usuario y rol">
@@ -215,6 +222,13 @@ import { UsersAdminService, UserAdmin, CreateUserAdminDto, UpdateUserAdminDto } 
 })
 export class UserListComponent implements OnInit {
   private usersService = inject(UsersAdminService);
+  private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmDialogService);
+
+  isAuditModalOpen = false;
+  isAuditLoading = false;
+  auditTargetUser: UserAdmin | null = null;
+  auditLogs: any[] = [];
 
   users: UserAdmin[] = [];
   searchQuery = '';
@@ -300,13 +314,36 @@ export class UserListComponent implements OnInit {
     this.editingUser = null;
   }
 
+  openAuditModal(user: UserAdmin) {
+    this.auditTargetUser = user;
+    this.isAuditModalOpen = true;
+    this.isAuditLoading = true;
+    this.auditLogs = [];
+    this.usersService.getAuditLogs(user.id).subscribe({
+      next: (res) => {
+        this.isAuditLoading = false;
+        this.auditLogs = res.data || [];
+      },
+      error: () => {
+        this.isAuditLoading = false;
+        this.toastService.error('Error al cargar registros de auditoría');
+      }
+    });
+  }
+
+  closeAuditModal() {
+    this.isAuditModalOpen = false;
+    this.auditTargetUser = null;
+    this.auditLogs = [];
+  }
+
   saveUserModal() {
     if (!this.userForm.name.trim()) {
-      alert('Por favor ingresa un nombre para el usuario');
+      this.toastService.error('Por favor ingresa un nombre para el usuario');
       return;
     }
     if (!this.userForm.email.trim()) {
-      alert('Por favor ingresa un correo electrónico válido');
+      this.toastService.error('Por favor ingresa un correo electrónico válido');
       return;
     }
 
@@ -322,21 +359,21 @@ export class UserListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success) {
+            this.toastService.success('Usuario actualizado correctamente');
             this.closeUserModal();
             this.loadUsers();
           } else {
-            alert(res.message || 'Error al actualizar usuario');
+            this.toastService.error(res.message || 'Error al actualizar usuario');
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error:', err);
-          alert('Error: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al actualizar usuario');
         }
       });
     } else {
       if (!this.userForm.password.trim()) {
-        alert('Por favor ingresa una contraseña');
+        this.toastService.error('Por favor ingresa una contraseña');
         this.isSaving = false;
         return;
       }
@@ -350,37 +387,41 @@ export class UserListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success) {
+            this.toastService.success('Usuario creado exitosamente');
             this.closeUserModal();
             this.loadUsers();
           } else {
-            alert(res.message || 'Error al crear usuario');
+            this.toastService.error(res.message || 'Error al crear usuario');
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error:', err);
-          alert('Error: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al crear usuario');
         }
       });
     }
   }
 
-  deleteUser(user: UserAdmin) {
-    if (!confirm(`¿Estás seguro de que deseas eliminar al usuario "${user.name}" (${user.email})?`)) {
-      return;
-    }
+  async deleteUser(user: UserAdmin) {
+    const confirmed = await this.confirmService.confirm({
+      title: '¿Eliminar usuario?',
+      message: `¿Estás seguro de que deseas eliminar al usuario "${user.name}" (${user.email})?`,
+      confirmText: 'Eliminar Usuario',
+      danger: true
+    });
+    if (!confirmed) return;
 
     this.usersService.deleteUser(user.id).subscribe({
       next: (res) => {
         if (res.success) {
+          this.toastService.success('Usuario eliminado');
           this.loadUsers();
         } else {
-          alert(res.message || 'Error al eliminar usuario');
+          this.toastService.error(res.message || 'Error al eliminar usuario');
         }
       },
       error: (err) => {
-        console.error('Error:', err);
-        alert('Error: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al eliminar usuario');
       }
     });
   }

@@ -37,11 +37,23 @@ export class ProjectsService {
     return this.http.get<ApiResponse<Project[]>>(this.apiUrl, { params });
   }
 
+  getProject(id: string): Observable<ApiResponse<Project>> {
+    return this.http.get<ApiResponse<Project>>(`${this.apiUrl}/${id}`);
+  }
+
   createProject(data: CreateProjectDto): Observable<ApiResponse<Project>> {
     return this.http.post<ApiResponse<Project>>(this.apiUrl, data);
   }
 
+  updateProject(id: string, data: Partial<CreateProjectDto>): Observable<ApiResponse<Project>> {
+    return this.http.put<ApiResponse<Project>>(`${this.apiUrl}/${id}`, data);
+  }
+
   updateProjectStatus(id: string, status: ProjectStatus): Observable<ApiResponse<Project>> {
-    return this.http.patch<ApiResponse<Project>>(`${this.apiUrl}/${id}/status`, { status });
+    return this.http.put<ApiResponse<Project>>(`${this.apiUrl}/${id}/status`, { status });
+  }
+
+  deleteProject(id: string): Observable<ApiResponse<void>> {
+    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/${id}`);
   }
 }

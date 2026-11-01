@@ -60,9 +60,9 @@ export function applyUMLNodeAttrs(node: Node, isLight: boolean = gIsLightMode) {
 
   const headerColors: Record<string, { bg: string; text: string; border: string }> = {
     class: { bg: '#2563EB', text: '#FFFFFF', border: isLight ? '#3B82F6' : '#60A5FA' },
-    interface: { bg: '#0D9488', text: '#FFFFFF', border: isLight ? '#14B8A6' : '#2DD4BF' },
+    interface: { bg: '#0F766E', text: '#FFFFFF', border: isLight ? '#14B8A6' : '#2DD4BF' },
     abstract: { bg: '#7C3AED', text: '#FFFFFF', border: isLight ? '#8B5CF6' : '#A78BFA' },
-    enum: { bg: '#D97706', text: '#FFFFFF', border: isLight ? '#F59E0B' : '#FBBF24' },
+    enum: { bg: '#B45309', text: '#FFFFFF', border: isLight ? '#D97706' : '#F59E0B' },
     package: { bg: '#475569', text: '#FFFFFF', border: isLight ? '#64748B' : '#94A3B8' },
     note: { bg: isLight ? '#FEF3C7' : '#334155', text: isLight ? '#78350F' : '#F1F5F9', border: isLight ? '#FDE68A' : '#475569' }
   };

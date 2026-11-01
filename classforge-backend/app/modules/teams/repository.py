@@ -41,6 +41,8 @@ class TeamRepository:
         return doc
 
     async def get_by_id(self, team_id: str) -> Optional[dict]:
+        if not team_id or not ObjectId.is_valid(str(team_id)):
+            return None
         return await self.collection.find_one({"_id": ObjectId(team_id), "is_deleted": False})
 
     async def get_all(self, role: str, user_id: str) -> List[dict]:

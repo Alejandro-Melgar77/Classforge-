@@ -1,16 +1,18 @@
-import base64
+from __future__ import annotations
+
 import json
 import logging
 import re
 import uuid
 from typing import Any, Dict, List, Optional
-import httpx
+from pydantic import SecretStr
 
-from app.core.config import settings
+from app.core.errors import ValidationError
+from app.llm import LlmMessage, LlmRequest, get_provider
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB hard limit
 
 
 def build_vision_system_prompt() -> str:
@@ -18,7 +20,7 @@ def build_vision_system_prompt() -> str:
 Analyze the provided image of a UML class diagram (whiteboard photo, sketch, scanned diagram, or digital screenshot).
 Carefully detect all classes, interfaces, attributes, types, methods, and relationships.
 
-You MUST output ONLY a valid raw JSON object (NO markdown backticks, NO ```json, NO explanation) matching this exact schema:
+You MUST output ONLY a valid raw JSON object matching this exact schema:
 {
   "classes": [
     {
@@ -47,13 +49,66 @@ You MUST output ONLY a valid raw JSON object (NO markdown backticks, NO ```json,
 }
 
 Relationship types allowed:
-- "association" (standard arrow or line)
-- "inheritance" (generalization / triangle arrow pointing to parent)
-- "composition" (solid diamond)
-- "aggregation" (hollow diamond)
-- "dependency" (dashed arrow)
-- "realization" (dashed line with triangle)
+- "association", "inheritance", "composition", "aggregation", "dependency", "realization"
 """
+
+
+VISION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "classes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "isInterface": {"type": "boolean"},
+                    "attributes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "type": {"type": "string"},
+                                "visibility": {"type": "string"},
+                            },
+                        },
+                    },
+                    "methods": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "returnType": {"type": "string"},
+                                "visibility": {"type": "string"},
+                                "parameters": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+        "relationships": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "type": {"type": "string"},
+                    "sourceMultiplicity": {"type": "string"},
+                    "targetMultiplicity": {"type": "string"},
+                    "label": {"type": "string"},
+                },
+                "required": ["source", "target"],
+            },
+        },
+        "summary": {"type": "string"},
+    },
+    "required": ["classes", "relationships"],
+}
 
 
 def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]:
@@ -63,9 +118,9 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
     cells = []
     classes = semantics.get("classes", [])
     relationships = semantics.get("relationships", [])
-    
+
     class_name_to_id = {}
-    
+
     # Layout positions in a grid
     cols = 3
     node_width = 240
@@ -77,8 +132,8 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
 
     for idx, cls in enumerate(classes):
         class_name = cls.get("name", f"Class{idx+1}").strip()
-        class_name = re.sub(r'[^a-zA-Z0-9_]', '', class_name) or f"Class{idx+1}"
-        
+        class_name = re.sub(r"[^a-zA-Z0-9_]", "", class_name) or f"Class{idx+1}"
+
         node_id = str(uuid.uuid4())
         class_name_to_id[class_name.lower()] = node_id
         class_name_to_id[class_name] = node_id
@@ -93,38 +148,46 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
         clean_attrs = []
         for a in raw_attrs:
             if isinstance(a, dict):
-                clean_attrs.append({
-                    "name": a.get("name", "attr"),
-                    "type": a.get("type", "String"),
-                    "visibility": a.get("visibility", "+"),
-                    "isNullable": a.get("isNullable", False)
-                })
+                clean_attrs.append(
+                    {
+                        "name": a.get("name", "attr"),
+                        "type": a.get("type", "String"),
+                        "visibility": a.get("visibility", "+"),
+                        "isNullable": a.get("isNullable", False),
+                    }
+                )
             elif isinstance(a, str):
-                clean_attrs.append({
-                    "name": a.replace("+", "").replace("-", "").replace("#", "").strip(),
-                    "type": "String",
-                    "visibility": "+",
-                    "isNullable": False
-                })
+                clean_attrs.append(
+                    {
+                        "name": a.replace("+", "").replace("-", "").replace("#", "").strip(),
+                        "type": "String",
+                        "visibility": "+",
+                        "isNullable": False,
+                    }
+                )
 
         # Normalize methods
         raw_methods = cls.get("methods", [])
         clean_methods = []
         for m in raw_methods:
             if isinstance(m, dict):
-                clean_methods.append({
-                    "name": m.get("name", "method"),
-                    "returnType": m.get("returnType", "void"),
-                    "visibility": m.get("visibility", "+"),
-                    "parameters": m.get("parameters", "")
-                })
+                clean_methods.append(
+                    {
+                        "name": m.get("name", "method"),
+                        "returnType": m.get("returnType", "void"),
+                        "visibility": m.get("visibility", "+"),
+                        "parameters": m.get("parameters", ""),
+                    }
+                )
             elif isinstance(m, str):
-                clean_methods.append({
-                    "name": m.replace("+", "").replace("-", "").replace("#", "").strip(),
-                    "returnType": "void",
-                    "visibility": "+",
-                    "parameters": ""
-                })
+                clean_methods.append(
+                    {
+                        "name": m.replace("+", "").replace("-", "").replace("#", "").strip(),
+                        "returnType": "void",
+                        "visibility": "+",
+                        "parameters": "",
+                    }
+                )
 
         node_cell = {
             "id": node_id,
@@ -135,8 +198,8 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
                 "name": class_name,
                 "attributes": clean_attrs,
                 "methods": clean_methods,
-                "isInterface": cls.get("isInterface", False)
-            }
+                "isInterface": cls.get("isInterface", False),
+            },
         }
         cells.append(node_cell)
 
@@ -144,16 +207,16 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
     for rel in relationships:
         source_name = str(rel.get("source", "")).strip()
         target_name = str(rel.get("target", "")).strip()
-        
+
         source_id = class_name_to_id.get(source_name) or class_name_to_id.get(source_name.lower())
         target_id = class_name_to_id.get(target_name) or class_name_to_id.get(target_name.lower())
-        
+
         if source_id and target_id and source_id != target_id:
             rel_type = rel.get("type", "association")
             label_text = rel.get("label") or ""
             target_mult = rel.get("targetMultiplicity") or ""
             source_mult = rel.get("sourceMultiplicity") or ""
-            
+
             display_label = label_text
             if target_mult:
                 display_label = f"{display_label} [{target_mult}]".strip()
@@ -168,8 +231,8 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
                     "type": rel_type,
                     "sourceMultiplicity": source_mult,
                     "targetMultiplicity": target_mult,
-                    "label": label_text
-                }
+                    "label": label_text,
+                },
             }
             cells.append(edge_cell)
 
@@ -180,75 +243,54 @@ async def generate_diagram_from_image(
     image_bytes: bytes,
     mime_type: str = "image/jpeg",
     api_key: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Sends an image of a UML diagram to Google Gemini Vision API and returns ClassForge graph_data.
+    Sends an image of a UML diagram to LLM Vision Provider (Gemini / Fake)
+    and returns ClassForge graph_data.
     """
-    key = api_key or getattr(settings, "GEMINI_API_KEY", None)
-    if not key:
-        raise ValueError("GEMINI_API_KEY no configurada en el backend")
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise ValidationError(f"El tamaño de la imagen ({len(image_bytes)} bytes) excede el límite permitido de 8 MB")
 
-    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash") or "gemini-3.8-flash"
-    candidate_models = [target_model]
-    for m in ["gemini-3.8-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-flash-latest"]:
-        if m not in candidate_models:
-            candidate_models.append(m)
+    provider = get_provider(purpose="vision")
 
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": build_vision_system_prompt()},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": b64_image
-                        }
-                    }
-                ]
-            }
+    req = LlmRequest(
+        system=build_vision_system_prompt(),
+        messages=[
+            LlmMessage(
+                role="user",
+                text="Analiza esta imagen y extrae el diagrama UML completo con clases, atributos, métodos y relaciones.",
+                image_bytes=image_bytes,
+                mime_type=mime_type or "image/jpeg",
+            )
         ],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 4096,
-            "responseMimeType": "application/json"
+        temperature=0.1,
+        purpose="vision",
+        json_schema=VISION_JSON_SCHEMA,
+        api_key=SecretStr(api_key) if api_key else None,
+        model=model,
+    )
+
+    try:
+        res = await provider.generate(req)
+        if res.raw_json and isinstance(res.raw_json, dict):
+            semantics = res.raw_json
+        else:
+            cleaned = res.text.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+            semantics = json.loads(cleaned)
+
+        graph_data = convert_semantics_to_graph_data(semantics)
+        return {
+            "graph_data": graph_data,
+            "semantics": semantics,
+            "summary": semantics.get("summary", "Diagrama generado a partir de la imagen"),
+            "total_classes": len(semantics.get("classes", [])),
+            "total_relationships": len(semantics.get("relationships", [])),
+            "model_used": res.model,
         }
-    }
-
-    last_error = None
-    for cand in candidate_models:
-        url = f"{GEMINI_API_BASE}/{cand}:generateContent?key={key}"
-        try:
-            async with httpx.AsyncClient(timeout=45.0) as client:
-                response = await client.post(url, json=payload)
-                if response.status_code == 200:
-                    resp_json = response.json()
-                    candidates = resp_json.get("candidates", [])
-                    if candidates:
-                        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        clean_json = raw_text.strip()
-                        if clean_json.startswith("```"):
-                            clean_json = re.sub(r'^```(?:json)?\s*', '', clean_json)
-                            clean_json = re.sub(r'\s*```$', '', clean_json)
-
-                        semantics = json.loads(clean_json)
-                        graph_data = convert_semantics_to_graph_data(semantics)
-                        return {
-                            "graph_data": graph_data,
-                            "semantics": semantics,
-                            "summary": semantics.get("summary", "Diagrama generado a partir de la imagen"),
-                            "total_classes": len(semantics.get("classes", [])),
-                            "total_relationships": len(semantics.get("relationships", [])),
-                            "model_used": cand
-                        }
-                else:
-                    logger.warning(f"Gemini model {cand} returned status {response.status_code}: {response.text}")
-                    last_error = f"Gemini error {response.status_code}: {response.text}"
-        except Exception as e:
-            logger.warning(f"Error calling Gemini model {cand}: {e}")
-            last_error = str(e)
-
-    raise RuntimeError(f"No se pudo procesar la imagen con Gemini Vision: {last_error}")
+    except Exception as exc:
+        logger.error(f"[VisionService] Error procesando imagen con LLM: {exc}")
+        raise RuntimeError(f"No se pudo procesar la imagen con Gemini Vision: {exc}")

@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import './app/features/ai-team/ui/ai-team-theme.scss';
+
 :root {
   --primary: #2D6BE4;
   --primary-dark: #1A4FB0;

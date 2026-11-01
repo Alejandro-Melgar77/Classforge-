@@ -72,4 +72,12 @@ export class AiChatService {
       {}
     );
   }
+
+  /** Marks a proposal as applied or dismissed. */
+  setProposalState(projectId: string, messageId: string, proposalId: string, status: 'applied' | 'dismissed'): Observable<any> {
+    return this.http.post<any>(
+      `${this.base}/projects/${projectId}/messages/${messageId}/proposals/${proposalId}/state`,
+      { status }
+    );
+  }
 }

@@ -1,0 +1,242 @@
+<header class="ai-team-header bg-slate-950/90 border-b border-slate-800 p-3 select-none text-slate-200">
+  <!-- Top Bar: Status Badges, Model & Connection -->
+  <div class="flex items-center justify-between gap-2 mb-2.5 flex-wrap">
+    <!-- Active Model or Privacy Badge -->
+    <div 
+      *ngIf="!store.isLocalOnly()"
+      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-[11px] font-semibold"
+      [title]="i18n.activeModelTitle"
+    >
+      <span>🧠</span>
+      <span>{{ i18n.activeModelBadge }}</span>
+    </div>
+
+    <div 
+      *ngIf="store.isLocalOnly()"
+      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-semibold"
+      title="Modo confidencial activo por privacidad: no se envían datos a Gemini"
+    >
+      <span>🔒</span>
+      <span>Modo Privado (Solo Local)</span>
+    </div>
+
+    <!-- Connection Status & Daily Usage -->
+    <div class="flex items-center gap-2">
+      <!-- Daily Consumption -->
+      <span 
+        class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[10px] text-slate-300 font-mono"
+        [title]="'Consumo acumulado aproximado en este proyecto hoy'"
+      >
+        <span>📊</span>
+        <span>{{ consumptionText() }}</span>
+      </span>
+
+      <!-- Connection Status Dot & Label -->
+      <div 
+        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors"
+        [ngClass]="{
+          'bg-emerald-500/10 text-emerald-400 border-emerald-500/30': store.connectionStatus() === 'connected',
+          'bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse': store.connectionStatus() === 'reconnecting' || store.connectionStatus() === 'connecting',
+          'bg-rose-500/10 text-rose-400 border-rose-500/30': store.connectionStatus() === 'disconnected' || store.connectionStatus() === 'polling_fallback'
+        }"
+      >
+        <span 
+          class="w-1.5 h-1.5 rounded-full"
+          [ngClass]="{
+            'bg-emerald-400': store.connectionStatus() === 'connected',
+            'bg-amber-400': store.connectionStatus() === 'reconnecting' || store.connectionStatus() === 'connecting',
+            'bg-rose-400': store.connectionStatus() === 'disconnected' || store.connectionStatus() === 'polling_fallback'
+          }"
+        ></span>
+        <span>{{ connectionLabel() }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Participative AI Main Toggle Row -->
+  <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 transition-all mb-2">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex items-start gap-2.5">
+        <!-- Custom accessible checkbox switch -->
+        <label class="relative inline-flex items-center cursor-pointer mt-0.5">
+          <input 
+            type="checkbox" 
+            id="participative-toggle"
+            [checked]="store.isParticipativeEnabled()" 
+            (change)="onToggleParticipative()"
+            class="sr-only peer"
+            aria-label="Activar o desactivar modo de IA participativa"
+          />
+          <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+        </label>
+
+        <div>
+          <label for="participative-toggle" class="text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer leading-tight">
+            <span>{{ i18n.participativeLabel }}</span>
+            <span 
+              *ngIf="store.isParticipativeEnabled()"
+              class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase"
+            >
+              Proactiva
+            </span>
+          </label>
+          <p class="text-[10px] text-slate-400 mt-0.5 leading-snug">
+            {{ store.isParticipativeEnabled() ? i18n.participativeHelp : i18n.participativePassiveHelp }}
+          </p>
+          <div class="text-[9px] text-slate-500 mt-1 font-mono flex items-center gap-1">
+            <span>🕒</span>
+            <span>{{ participativeAuditText() }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toggle Roles Drawer Button -->
+      <button 
+        (click)="toggleRolesAccordion()"
+        class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium transition-colors cursor-pointer shrink-0"
+        [attr.aria-expanded]="showRolesExpanded()"
+        aria-controls="roles-container"
+      >
+        <span>Roles ({{ store.activeRoles().length }}/{{ store.roles().length }})</span>
+        <span class="ml-1">{{ showRolesExpanded() ? '▲' : '▼' }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Privacy / Local-Only Mode Toggle Row (P8a) -->
+  <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 transition-all mb-2">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex items-start gap-2.5">
+        <label class="relative inline-flex items-center cursor-pointer mt-0.5">
+          <input 
+            type="checkbox" 
+            id="local-only-toggle"
+            [checked]="store.isLocalOnly()" 
+            (change)="onToggleLocalOnly()"
+            class="sr-only peer"
+            aria-label="Activar o desactivar modo de privacidad estrictamente local"
+          />
+          <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+        </label>
+
+        <div>
+          <label for="local-only-toggle" class="text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer leading-tight">
+            <span>Privacidad Estricta (Local Only)</span>
+            <span 
+              *ngIf="store.isLocalOnly()"
+              class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase"
+            >
+              Cero Nube
+            </span>
+          </label>
+          <p class="text-[10px] text-slate-400 mt-0.5 leading-snug">
+            {{ store.isLocalOnly() 
+              ? 'Los roles en la nube están inhabilitados. Para modelar usa la pestaña Comandos con tu modelo local.' 
+              : 'Permite invocar roles con Gemini 3.8 Flash para razonamiento arquitectural profundo.' }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expandable Roles Cards Container -->
+  <div 
+    id="roles-container"
+    *ngIf="showRolesExpanded()"
+    class="space-y-2 mt-2 pt-2 border-t border-slate-800/80 max-h-72 overflow-y-auto pr-1 custom-scrollbar"
+  >
+    <div class="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1">
+      <span>{{ i18n.rolesSectionTitle }}</span>
+      <span class="text-[10px] text-slate-500 font-normal">Skins y nivel de autonomía</span>
+    </div>
+
+    <!-- Role Cards List -->
+    <div 
+      *ngFor="let role of store.roles()"
+      class="role-card p-2 rounded-lg transition-all border flex flex-col gap-1.5"
+      [attr.data-role]="role.role_id"
+      [class.opacity-50]="!role.is_active"
+      [class.border-slate-800]="!role.is_active"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <!-- Role Info -->
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-base select-none shrink-0">{{ role.emoji }}</span>
+          <div class="min-w-0">
+            <span class="text-xs font-bold text-slate-200 block truncate leading-tight">
+              {{ role.label }}
+            </span>
+            <span class="text-[10px] text-slate-400 block truncate">
+              {{ role.description }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Role Active Toggle -->
+        <button 
+          (click)="onToggleRoleActive(role, $event)"
+          class="px-2 py-0.5 rounded text-[10px] font-bold border transition-colors shrink-0 cursor-pointer"
+          [ngClass]="role.is_active 
+            ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' 
+            : 'bg-slate-800 border-slate-700 text-slate-400'"
+          [title]="i18n.toggleRole(role.label, role.is_active)"
+          [attr.aria-label]="i18n.toggleRole(role.label, role.is_active)"
+        >
+          {{ role.is_active ? 'Activo' : 'Inactivo' }}
+        </button>
+      </div>
+
+      <!-- Autonomy Selector Segmented Controls -->
+      <div *ngIf="role.is_active" class="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
+        <span class="text-slate-400 font-medium">Autonomía:</span>
+        <div class="inline-flex rounded-md p-0.5 bg-slate-900 border border-slate-800" role="group">
+          <!-- Suggest Mode -->
+          <button 
+            type="button"
+            (click)="onChangeAutonomy(role, 'suggest')"
+            class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer"
+            [ngClass]="role.autonomy === 'suggest' 
+              ? 'bg-blue-600 text-white shadow-sm' 
+              : 'text-slate-400 hover:text-slate-200'"
+            [title]="'Genera propuestas estructuradas que tú debes confirmar antes de aplicar'"
+          >
+            {{ i18n.autonomyOptions.suggest }}
+          </button>
+
+          <!-- Apply Mode (Protected by Role Permission) -->
+          <div class="relative group inline-block">
+            <button 
+              type="button"
+              (click)="onChangeAutonomy(role, 'apply')"
+              [disabled]="!canApplyAutonomy()"
+              class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all"
+              [ngClass]="{
+                'bg-emerald-600 text-white shadow-sm cursor-pointer': role.autonomy === 'apply' && canApplyAutonomy(),
+                'text-slate-400 hover:text-slate-200 cursor-pointer': role.autonomy !== 'apply' && canApplyAutonomy(),
+                'opacity-30 cursor-not-allowed text-slate-500': !canApplyAutonomy()
+              }"
+              [attr.aria-disabled]="!canApplyAutonomy()"
+            >
+              {{ i18n.autonomyOptions.apply }}
+            </button>
+
+            <!-- Tooltip when Apply is Forbidden -->
+            <div 
+              *ngIf="!canApplyAutonomy()" 
+              class="absolute right-0 bottom-full mb-1 hidden group-hover:block z-30 w-48 p-1.5 text-[9px] bg-slate-900 text-amber-300 rounded border border-amber-500/40 shadow-xl"
+              role="tooltip"
+            >
+              {{ i18n.autonomyTooltipForbidden }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Local Only explanation for cloud roles (P8a) -->
+      <div *ngIf="store.isLocalOnly()" class="mt-1.5 p-1.5 rounded bg-amber-950/40 border border-amber-500/30 text-[10px] text-amber-300 flex items-center gap-1.5">
+        <span>🔒</span>
+        <span>Deshabilitado en modo local por privacidad (requiere Gemini 3.8 Flash).</span>
+      </div>
+    </div>
+  </div>
+</header>

@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { TeamsService } from '../../projects/services/teams.service';
 import { UsersAdminService, UserAdmin } from '../services/users-admin.service';
 import { Team, TeamMember, CreateTeamDto, UpdateTeamDto } from '../../projects/models/team.model';
+import { ToastService } from '../../../core/services/toast.service';
+import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
 @Component({
   selector: 'app-team-list',
@@ -313,6 +315,8 @@ import { Team, TeamMember, CreateTeamDto, UpdateTeamDto } from '../../projects/m
 export class TeamListComponent implements OnInit {
   private teamsService = inject(TeamsService);
   private usersService = inject(UsersAdminService);
+  private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmDialogService);
 
   teams: Team[] = [];
   allUsers: UserAdmin[] = [];
@@ -435,11 +439,11 @@ export class TeamListComponent implements OnInit {
 
   saveTeamModal() {
     if (!this.teamForm.name.trim()) {
-      alert('Por favor ingresa un nombre para el equipo');
+      this.toastService.error('Por favor ingresa un nombre para el equipo');
       return;
     }
     if (!this.teamForm.scrum_master_id) {
-      alert('Por favor selecciona un Scrum Master para el equipo');
+      this.toastService.error('Por favor selecciona un Scrum Master para el equipo');
       return;
     }
 
@@ -455,16 +459,16 @@ export class TeamListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success) {
+            this.toastService.success('Equipo actualizado exitosamente');
             this.closeTeamModal();
             this.loadData();
           } else {
-            alert(res.message || 'Error al actualizar equipo');
+            this.toastService.error(res.message || 'Error al actualizar equipo');
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error:', err);
-          alert('Error: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al actualizar equipo');
         }
       });
     } else {
@@ -477,16 +481,16 @@ export class TeamListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success) {
+            this.toastService.success('Equipo creado exitosamente');
             this.closeTeamModal();
             this.loadData();
           } else {
-            alert(res.message || 'Error al crear equipo');
+            this.toastService.error(res.message || 'Error al crear equipo');
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error:', err);
-          alert('Error: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al crear equipo');
         }
       });
     }
@@ -529,37 +533,42 @@ export class TeamListComponent implements OnInit {
       next: (res) => {
         this.isSaving = false;
         if (res.success) {
+          this.toastService.success('Miembros del equipo actualizados');
           this.closeMembersModal();
           this.loadData();
         } else {
-          alert(res.message || 'Error al guardar miembros');
+          this.toastService.error(res.message || 'Error al guardar miembros');
         }
       },
       error: (err) => {
         this.isSaving = false;
-        console.error('Error:', err);
-        alert('Error: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al guardar miembros');
       }
     });
   }
 
   // ═══ Delete Team ═══
 
-  deleteTeam(team: Team) {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el equipo "${team.name}"?`)) {
-      return;
-    }
+  async deleteTeam(team: Team) {
+    const confirmed = await this.confirmService.confirm({
+      title: '¿Eliminar equipo?',
+      message: `¿Estás seguro de que deseas eliminar el equipo "${team.name}"? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar Equipo',
+      danger: true
+    });
+    if (!confirmed) return;
+
     this.teamsService.deleteTeam(team.id).subscribe({
       next: (res) => {
         if (res.success) {
+          this.toastService.success('Equipo eliminado');
           this.loadData();
         } else {
-          alert(res.message || 'Error al eliminar equipo');
+          this.toastService.error(res.message || 'Error al eliminar equipo');
         }
       },
       error: (err) => {
-        console.error('Error:', err);
-        alert('Error: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al eliminar equipo');
       }
     });
   }

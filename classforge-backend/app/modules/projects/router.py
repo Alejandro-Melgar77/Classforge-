@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
+from typing import Optional
+
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
+from app.core.utils import validate_object_id
 from app.modules.auth.schemas import StandardResponse
 from app.modules.projects.schemas import ProjectCreate, ProjectUpdate, ProjectStatusUpdate, ProjectResponse
 from app.modules.projects.service import ProjectService
-from typing import Optional
 
 router = APIRouter()
 
@@ -24,6 +26,7 @@ async def create_project(
 @router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
 async def list_projects(
+    response: Response,
     team_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
@@ -34,7 +37,10 @@ async def list_projects(
     current_user = Depends(get_current_user),
     service: ProjectService = Depends(get_project_service)
 ):
+    if team_id:
+        validate_object_id(team_id, "team_id")
     items, total = await service.list_projects(current_user, team_id, status, type, page, limit, sort_by, order)
+    response.headers["X-Total-Count"] = str(total)
     return StandardResponse(success=True, message="Projects retrieved", data={
         "items": [ProjectResponse.from_mongo(i) for i in items],
         "total": total,
@@ -48,6 +54,7 @@ async def get_project(
     current_user = Depends(get_current_user),
     service: ProjectService = Depends(get_project_service)
 ):
+    validate_object_id(project_id, "project_id")
     project = await service.get_project(project_id, current_user)
     return StandardResponse(success=True, message="Project retrieved", data=ProjectResponse.from_mongo(project))
 
@@ -58,6 +65,7 @@ async def update_project(
     current_user = Depends(get_current_user),
     service: ProjectService = Depends(get_project_service)
 ):
+    validate_object_id(project_id, "project_id")
     project = await service.update_project(project_id, data, current_user)
     return StandardResponse(success=True, message="Project updated", data=ProjectResponse.from_mongo(project))
 
@@ -68,6 +76,7 @@ async def update_status(
     current_user = Depends(get_current_user),
     service: ProjectService = Depends(get_project_service)
 ):
+    validate_object_id(project_id, "project_id")
     project = await service.update_status(project_id, data, current_user)
     return StandardResponse(success=True, message="Status updated", data=ProjectResponse.from_mongo(project))
 
@@ -77,5 +86,6 @@ async def delete_project(
     current_user = Depends(require_role(["admin"])),
     service: ProjectService = Depends(get_project_service)
 ):
+    validate_object_id(project_id, "project_id")
     await service.delete_project(project_id, str(current_user["_id"]))
     return StandardResponse(success=True, message="Project deleted", data=None)

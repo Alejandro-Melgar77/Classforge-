@@ -24,14 +24,20 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
-def create_access_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Create a signed JWT access token with UTC expiration."""
+def create_access_token(
+    subject: Union[str, Any],
+    expires_delta: Optional[timedelta] = None,
+    sid: Optional[str] = None
+) -> str:
+    """Create a signed JWT access token with UTC expiration and optional session id (sid)."""
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"exp": expire, "sub": str(subject)}
+    if sid:
+        to_encode["sid"] = str(sid)
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 

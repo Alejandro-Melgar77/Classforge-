@@ -7,6 +7,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { Diagram, ParticipantItem, DiagramParticipantsResponse } from '../models/diagram.model';
 import { Team } from '../../projects/models/team.model';
 import { FormsModule } from '@angular/forms';
+import { ToastService } from '../../../core/services/toast.service';
+import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
 @Component({
   selector: 'diagram-list',
@@ -18,6 +20,8 @@ export class DiagramListComponent implements OnInit {
   private diagramService = inject(DiagramService);
   private teamsService = inject(TeamsService);
   public authService = inject(AuthService);
+  private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmDialogService);
   private router = inject(Router);
 
   diagrams: Diagram[] = [];
@@ -203,7 +207,7 @@ export class DiagramListComponent implements OnInit {
 
   saveDiagramModal() {
     if (!this.diagramForm.name.trim()) {
-      alert('Por favor ingrese un nombre para el diagrama');
+      this.toastService.error('Por favor ingrese un nombre para el diagrama');
       return;
     }
 
@@ -219,16 +223,16 @@ export class DiagramListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success) {
+            this.toastService.success('Diagrama actualizado');
             this.closeDiagramModal();
             this.loadDiagrams();
           } else {
-            alert(res.message || 'Error al actualizar diagrama');
+            this.toastService.error(res.message || 'Error al actualizar diagrama');
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error al actualizar diagrama:', err);
-          alert('Error: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al actualizar diagrama');
         }
       });
     } else {
@@ -242,18 +246,18 @@ export class DiagramListComponent implements OnInit {
         next: (res) => {
           this.isSaving = false;
           if (res.success && res.data) {
+            this.toastService.success('Diagrama creado exitosamente');
             this.closeDiagramModal();
             const newId = res.data.id || (res.data as any)._id;
             this.router.navigate(['/diagrams', newId]);
           } else {
-            alert(res.message || 'Error al crear diagrama');
+            this.toastService.error(res.message || 'Error al crear diagrama');
             this.loadDiagrams();
           }
         },
         error: (err) => {
           this.isSaving = false;
-          console.error('Error al crear diagrama:', err);
-          alert('Error al crear diagrama: ' + (err.error?.detail || err.message));
+          this.toastService.error(err.error?.detail || err.message || 'Error al crear diagrama');
         }
       });
     }
@@ -279,8 +283,7 @@ export class DiagramListComponent implements OnInit {
       },
       error: (err) => {
         this.participantsLoading = false;
-        console.error('Error al obtener participantes:', err);
-        alert('Error al obtener participantes: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al obtener participantes');
       }
     });
   }
@@ -309,39 +312,43 @@ export class DiagramListComponent implements OnInit {
       next: (res) => {
         this.isSaving = false;
         if (res.success) {
+          this.toastService.success('Participantes actualizados');
           this.closeParticipantsModal();
           this.loadDiagrams();
         } else {
-          alert(res.message || 'Error al actualizar participantes');
+          this.toastService.error(res.message || 'Error al actualizar participantes');
         }
       },
       error: (err) => {
         this.isSaving = false;
-        console.error('Error al guardar participantes:', err);
-        alert('Error: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al guardar participantes');
       }
     });
   }
 
   // ═══ Actions ═══
 
-  deleteDiagram(diagram: Diagram, event?: Event) {
+  async deleteDiagram(diagram: Diagram, event?: Event) {
     if (event) event.stopPropagation();
-    if (!confirm(`¿Está seguro de que desea eliminar el diagrama "${diagram.name}"? Esta acción no se puede deshacer.`)) {
-      return;
-    }
+    const confirmed = await this.confirmService.confirm({
+      title: '¿Eliminar diagrama?',
+      message: `¿Está seguro de que desea eliminar el diagrama "${diagram.name}"? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar Diagrama',
+      danger: true
+    });
+    if (!confirmed) return;
 
     this.diagramService.deleteDiagram(diagram.id).subscribe({
       next: (res) => {
         if (res.success) {
+          this.toastService.success('Diagrama eliminado');
           this.loadDiagrams();
         } else {
-          alert(res.message || 'Error al eliminar diagrama');
+          this.toastService.error(res.message || 'Error al eliminar diagrama');
         }
       },
       error: (err) => {
-        console.error('Error al eliminar diagrama:', err);
-        alert('Error: ' + (err.error?.detail || err.message));
+        this.toastService.error(err.error?.detail || err.message || 'Error al eliminar diagrama');
       }
     });
   }

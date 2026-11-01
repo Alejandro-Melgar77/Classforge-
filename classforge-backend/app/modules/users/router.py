@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from typing import List, Optional
+
 from app.core.dependencies import get_current_user, require_role, get_user_repository
-from app.modules.users.schemas import StandardResponse, UserUpdate, RoleUpdate, UserCreateAdmin, UserResponseAdmin
-from app.modules.users.repository import UserRepository
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.core.security import get_password_hash
-from typing import List
+from app.core.utils import validate_object_id
+from app.modules.users.schemas import (
+    StandardResponse, UserUpdate, RoleUpdate, UserCreateAdmin, UserPublic
+)
+from app.modules.users.repository import UserRepository
 
 router = APIRouter()
+
 
 @router.post("", response_model=StandardResponse, include_in_schema=False)
 @router.post("/", response_model=StandardResponse)
@@ -17,7 +23,7 @@ async def create_user(
 ):
     existing = await user_repo.get_by_email(data.email)
     if existing:
-        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado")
+        raise ValidationError("El correo electrónico ya está registrado")
     
     user_data = {
         "name": data.name,
@@ -32,10 +38,34 @@ async def create_user(
     await user_repo.log_audit(str(current_user["_id"]), "CREATE_USER", "users", user_id, metadata={"role": user_data["role"]}, ip=request.client.host)
     return StandardResponse(success=True, message="Usuario creado exitosamente", data={"id": user_id})
 
+
 @router.get("", response_model=StandardResponse, include_in_schema=False)
 @router.get("/", response_model=StandardResponse)
-async def list_users(current_user = Depends(get_current_user), user_repo: UserRepository = Depends(get_user_repository)):
-    users = await user_repo.get_all()
+async def list_users(
+    response: Response,
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=100),
+    current_user = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    skip = (page - 1) * limit
+    if hasattr(user_repo, "count_all"):
+        total = await user_repo.count_all()
+    else:
+        total = 0
+
+    try:
+        users = await user_repo.get_all(skip=skip, limit=limit)
+    except TypeError:
+        users = await user_repo.get_all()
+        if not total:
+            total = len(users)
+
+    if not total and users:
+        total = len(users)
+
+    response.headers["X-Total-Count"] = str(total)
+    
     out = []
     for u in users:
         uid = str(u.pop("_id"))
@@ -52,40 +82,83 @@ async def list_users(current_user = Depends(get_current_user), user_repo: UserRe
         })
     return StandardResponse(success=True, message="Users listed", data=out)
 
+
 @router.get("/{user_id}", response_model=StandardResponse)
-async def get_user(user_id: str, current_user = Depends(get_current_user), user_repo: UserRepository = Depends(get_user_repository)):
+async def get_user(
+    user_id: str,
+    current_user = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    validate_object_id(user_id, "user_id")
     user = await user_repo.get_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user["id"] = str(user.pop("_id"))
-    return StandardResponse(success=True, message="User found", data=user)
+        raise NotFoundError("User not found")
+    user_public = UserPublic(
+        id=str(user.get("_id") or user.get("id")),
+        name=user.get("name", "Usuario"),
+        email=user.get("email", ""),
+        role=user.get("role", "dev"),
+        avatar_url=user.get("avatar_url"),
+        team_ids=[str(t) for t in user.get("team_ids", [])],
+        is_active=user.get("is_active", True),
+    )
+    return StandardResponse(success=True, message="User found", data=user_public.model_dump())
+
 
 @router.put("/{user_id}", response_model=StandardResponse)
-async def update_user(user_id: str, data: UserUpdate, request: Request, current_user = Depends(get_current_user), user_repo: UserRepository = Depends(get_user_repository)):
+async def update_user(
+    user_id: str,
+    data: UserUpdate,
+    request: Request,
+    current_user = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    validate_object_id(user_id, "user_id")
     if str(current_user["_id"]) != user_id and current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to update this user")
+        raise ForbiddenError("Not authorized to update this user")
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     await user_repo.update(user_id, update_data)
     await user_repo.log_audit(str(current_user["_id"]), "UPDATE_USER", "users", user_id, metadata=update_data, ip=request.client.host)
     return StandardResponse(success=True, message="User updated")
 
+
 @router.delete("/{user_id}", response_model=StandardResponse)
-async def delete_user(user_id: str, request: Request, current_user = Depends(require_role(["admin"])), user_repo: UserRepository = Depends(get_user_repository)):
+async def delete_user(
+    user_id: str,
+    request: Request,
+    current_user = Depends(require_role(["admin"])),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    validate_object_id(user_id, "user_id")
     await user_repo.soft_delete(user_id)
     await user_repo.log_audit(str(current_user["_id"]), "DELETE_USER", "users", user_id, ip=request.client.host)
     return StandardResponse(success=True, message="User deleted")
 
+
 @router.put("/{user_id}/role", response_model=StandardResponse)
-async def change_role(user_id: str, data: RoleUpdate, request: Request, current_user = Depends(require_role(["admin"])), user_repo: UserRepository = Depends(get_user_repository)):
+async def change_role(
+    user_id: str,
+    data: RoleUpdate,
+    request: Request,
+    current_user = Depends(require_role(["admin"])),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    validate_object_id(user_id, "user_id")
     if data.role not in ["admin", "scrum_master", "dev"]:
-        raise HTTPException(status_code=400, detail="Invalid role")
+        raise ValidationError("Invalid role")
     await user_repo.update(user_id, {"role": data.role})
     await user_repo.log_audit(str(current_user["_id"]), "CHANGE_ROLE", "users", user_id, metadata={"role": data.role}, ip=request.client.host)
     return StandardResponse(success=True, message="Role updated")
 
+
 @router.get("/{user_id}/audit-log", response_model=StandardResponse)
-async def get_audit_log(user_id: str, current_user = Depends(require_role(["admin"])), user_repo: UserRepository = Depends(get_user_repository)):
+async def get_audit_log(
+    user_id: str,
+    current_user = Depends(require_role(["admin"])),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    validate_object_id(user_id, "user_id")
     logs = await user_repo.get_audit_logs(user_id)
     out = []
     for log in logs:

@@ -1,8 +1,9 @@
 import { ApplicationConfig, importProvidersFrom } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { routes } from './app.routes';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
+import { geminiKeyInterceptor } from './core/interceptors/gemini-key.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { 
   LucideAngularModule, 
@@ -44,8 +45,8 @@ import {
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideRouter(routes),
-    provideHttpClient(withInterceptors([jwtInterceptor, errorInterceptor])),
+    provideRouter(routes, withComponentInputBinding()),
+    provideHttpClient(withInterceptors([jwtInterceptor, geminiKeyInterceptor, errorInterceptor])),
     importProvidersFrom(
       LucideAngularModule.pick({
         Plus,

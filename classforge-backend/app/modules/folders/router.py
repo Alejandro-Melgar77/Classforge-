@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.utils import validate_object_id
 from app.modules.auth.schemas import StandardResponse
 from app.modules.folders.schemas import FolderCreate, FolderUpdate, FolderResponse
 from app.modules.folders.service import FolderService
@@ -51,6 +52,7 @@ async def get_folder(
     current_user = Depends(get_current_user),
     service: FolderService = Depends(get_folder_service)
 ):
+    validate_object_id(folder_id, "folder_id")
     result = await service.get_folder(folder_id)
     data = {
         "folder": FolderResponse.from_mongo(result["folder"]),
@@ -65,6 +67,7 @@ async def rename_folder(
     current_user = Depends(get_current_user),
     service: FolderService = Depends(get_folder_service)
 ):
+    validate_object_id(folder_id, "folder_id")
     folder = await service.rename_folder(folder_id, data)
     return StandardResponse(success=True, message="Folder renamed", data=FolderResponse.from_mongo(folder))
 
@@ -74,5 +77,6 @@ async def delete_folder(
     current_user = Depends(get_current_user),
     service: FolderService = Depends(get_folder_service)
 ):
+    validate_object_id(folder_id, "folder_id")
     await service.delete_folder(folder_id)
     return StandardResponse(success=True, message="Folder deleted", data=None)

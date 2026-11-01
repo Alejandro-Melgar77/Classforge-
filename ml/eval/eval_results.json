@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-11-01T15:33:39Z",
+  "decision": "GO",
+  "rules": {
+    "rule_json_valid": true,
+    "rule_rel_f1": true,
+    "json_valid_pct": 99.0,
+    "model_rel_f1": 0.9433,
+    "heur_rel_f1": 0.9433,
+    "go_no_go": true
+  },
+  "metrics": {
+    "golden_model": {
+      "total_samples": 160,
+      "json_valid_pct": 99.38,
+      "schema_valid_pct": 99.38,
+      "classes_precision": 0.5943,
+      "classes_recall": 0.6937,
+      "classes_f1": 0.6272,
+      "attributes_f1": 0.6447,
+      "relations_precision": 0.6849,
+      "relations_recall": 0.6937,
+      "relations_f1": 0.6869,
+      "exact_match_pct": 48.75,
+      "latency_p50_ms": 10.0,
+      "latency_p95_ms": 15.3,
+      "throughput_tokens_sec": 786.3
+    },
+    "golden_heuristic": {
+      "total_samples": 160,
+      "json_valid_pct": 100.0,
+      "schema_valid_pct": 100.0,
+      "classes_precision": 0.5943,
+      "classes_recall": 0.6937,
+      "classes_f1": 0.6272,
+      "attributes_f1": 0.6447,
+      "relations_precision": 0.6911,
+      "relations_recall": 0.7,
+      "relations_f1": 0.6931,
+      "exact_match_pct": 48.75,
+      "latency_p50_ms": 0.1,
+      "latency_p95_ms": 0.1,
+      "throughput_tokens_sec": 109496.6
+    },
+    "holdout_model": {
+      "total_samples": 600,
+      "json_valid_pct": 99.0,
+      "schema_valid_pct": 99.0,
+      "classes_precision": 0.9542,
+      "classes_recall": 0.9567,
+      "classes_f1": 0.9547,
+      "attributes_f1": 0.7632,
+      "relations_precision": 0.9433,
+      "relations_recall": 0.9433,
+      "relations_f1": 0.9433,
+      "exact_match_pct": 90.67,
+      "latency_p50_ms": 10.4,
+      "latency_p95_ms": 15.0,
+      "throughput_tokens_sec": 799.1
+    },
+    "holdout_heuristic": {
+      "total_samples": 600,
+      "json_valid_pct": 100.0,
+      "schema_valid_pct": 100.0,
+      "classes_precision": 0.9625,
+      "classes_recall": 0.965,
+      "classes_f1": 0.963,
+      "attributes_f1": 0.7683,
+      "relations_precision": 0.9433,
+      "relations_recall": 0.9433,
+      "relations_f1": 0.9433,
+      "exact_match_pct": 91.5,
+      "latency_p50_ms": 0.1,
+      "latency_p95_ms": 0.1,
+      "throughput_tokens_sec": 118498.0
+    }
+  }
+}

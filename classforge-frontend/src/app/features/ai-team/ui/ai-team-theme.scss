@@ -1,0 +1,173 @@
+/**
+ * Sistema de Diseño y Skins por Rol ("Equipo IA")
+ *
+ * Provee variables CSS reactivas por atributo [data-role="..."]
+ * con contraste accesible (WCAG AA >= 4.5:1) tanto en tema oscuro como claro,
+ * formas de burbuja identificables sin color, e iconos semánticos.
+ * Respeta `prefers-reduced-motion`.
+ */
+
+/* ── Valores por Defecto (Dark Theme) ─────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --role-accent: #60a5fa;
+  --role-bg: #0f172a;
+  --role-border: #334155;
+  --role-text: #f1f5f9;
+}
+
+/* ── Rol: Arquitecto (Architect) ───────────────────────────────────────────
+   Identificador visual sin color: Esquinas rectas con barra lateral gruesa izquierda */
+[data-role="architect"] {
+  --role-accent: #3b82f6;
+  --role-bg: #0f172a;
+  --role-border: #2563eb;
+  --role-text: #dbeafe;
+  --role-bubble-radius: 2px 12px 12px 2px;
+  --role-bubble-border-style: solid;
+  --role-border-left-width: 4px;
+}
+
+/* ── Rol: Ingeniero de Calidad (QA) ────────────────────────────────────────
+   Identificador visual sin color: Borde discontinuo (dashed) con icono de check */
+[data-role="qa"] {
+  --role-accent: #10b981;
+  --role-bg: #064e3b;
+  --role-border: #059669;
+  --role-text: #d1fae5;
+  --role-bubble-radius: 12px;
+  --role-bubble-border-style: dashed;
+  --role-border-width: 2px;
+}
+
+/* ── Rol: Líder Técnico (Tech Lead) ────────────────────────────────────────
+   Identificador visual sin color: Borde angular / insignia hexagonal con acento dorado */
+[data-role="tech_lead"] {
+  --role-accent: #f59e0b;
+  --role-bg: #451a03;
+  --role-border: #d97706;
+  --role-text: #fef3c7;
+  --role-bubble-radius: 4px;
+  --role-bubble-border-style: double;
+  --role-border-width: 3px;
+}
+
+/* ── Rol: Mentor Pedagógico (Mentor) ───────────────────────────────────────
+   Identificador visual sin color: Burbuja redondeada suave con cola de diálogo */
+[data-role="mentor"] {
+  --role-accent: #a855f7;
+  --role-bg: #3b0764;
+  --role-border: #9333ea;
+  --role-text: #f3e8ff;
+  --role-bubble-radius: 18px 18px 4px 18px;
+  --role-bubble-border-style: solid;
+}
+
+/* ── Rol: Administrador de Datos (DBA) ─────────────────────────────────────
+   Identificador visual sin color: Esquinas cuadradas con doble borde */
+[data-role="dba"] {
+  --role-accent: #06b6d4;
+  --role-bg: #083344;
+  --role-border: #0891b2;
+  --role-text: #cffafe;
+  --role-bubble-radius: 6px;
+  --role-bubble-border-style: solid;
+  --role-border-top-width: 3px;
+}
+
+/* ── Rol: Especialista en Seguridad (Security) ─────────────────────────────
+   Identificador visual sin color: Borde biselado / corte protector */
+[data-role="security"] {
+  --role-accent: #ef4444;
+  --role-bg: #450a0a;
+  --role-border: #dc2626;
+  --role-text: #fee2e2;
+  --role-bubble-radius: 10px 0 10px 0;
+  --role-bubble-border-style: solid;
+  --role-border-width: 2px;
+}
+
+/* ── Rol: Analista de Negocio (Analyst) ────────────────────────────────────
+   Identificador visual sin color: Esquinas redondeadas asimétricas */
+[data-role="analyst"] {
+  --role-accent: #ec4899;
+  --role-bg: #500724;
+  --role-border: #db2777;
+  --role-text: #fce7f3;
+  --role-bubble-radius: 0 14px 14px 14px;
+  --role-bubble-border-style: solid;
+}
+
+/* ── Adaptaciones para Tema Claro (Light Theme) ───────────────────────────
+   Garantiza contraste >= 4.5:1 sobre fondo claro (#ffffff / #f8fafc) */
+[data-theme="light"] {
+  &[data-role="architect"] {
+    --role-accent: #1d4ed8;
+    --role-bg: #eff6ff;
+    --role-border: #93c5fd;
+    --role-text: #1e3a8a;
+  }
+  &[data-role="qa"] {
+    --role-accent: #047857;
+    --role-bg: #ecfdf5;
+    --role-border: #6ee7b7;
+    --role-text: #064e3b;
+  }
+  &[data-role="tech_lead"] {
+    --role-accent: #b45309;
+    --role-bg: #fffbeb;
+    --role-border: #fcd34d;
+    --role-text: #78350f;
+  }
+  &[data-role="mentor"] {
+    --role-accent: #7e22ce;
+    --role-bg: #faf5ff;
+    --role-border: #d8b4fe;
+    --role-text: #581c87;
+  }
+  &[data-role="dba"] {
+    --role-accent: #0e7490;
+    --role-bg: #ecfeff;
+    --role-border: #67e8f9;
+    --role-text: #164e63;
+  }
+  &[data-role="security"] {
+    --role-accent: #b91c1c;
+    --role-bg: #fef2f2;
+    --role-border: #fca5a5;
+    --role-text: #7f1d1d;
+  }
+  &[data-role="analyst"] {
+    --role-accent: #be185d;
+    --role-bg: #fdf2f8;
+    --role-border: #f472b6;
+    --role-text: #831843;
+  }
+}
+
+/* ── Clases Utilitarias de Burbujas por Rol ─────────────────────────────── */
+.role-bubble {
+  background-color: var(--role-bg);
+  border: var(--role-border-width, 1px) var(--role-bubble-border-style, solid) var(--role-border);
+  border-left-width: var(--role-border-left-width, var(--role-border-width, 1px));
+  border-top-width: var(--role-border-top-width, var(--role-border-width, 1px));
+  border-radius: var(--role-bubble-radius, 8px);
+  color: var(--role-text);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.role-badge {
+  background-color: var(--role-bg);
+  border: 1px solid var(--role-border);
+  color: var(--role-text);
+  font-weight: 600;
+}
+
+/* ── Respeto a Preferencias de Movimiento Reducido ───────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

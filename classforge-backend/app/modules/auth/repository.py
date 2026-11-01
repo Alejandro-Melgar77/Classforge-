@@ -7,7 +7,7 @@ class SessionRepository:
     """Repository handling persistence and revocation of refresh token sessions."""
 
     def __init__(self, db: Any) -> None:
-        self.collection = db["sessions"]
+        self.collection = db["sessions"] if db is not None else None
 
     async def create_session(
         self,
@@ -31,6 +31,19 @@ class SessionRepository:
         }
         result = await self.collection.insert_one(doc)
         return str(result.inserted_id)
+
+    async def get_by_id(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a session by its ObjectId string."""
+        if not session_id or not ObjectId.is_valid(session_id):
+            return None
+        return await self.collection.find_one({"_id": ObjectId(session_id)})
+
+    async def is_session_active(self, session_id: str) -> bool:
+        """Check if a session exists and is currently active."""
+        if not session_id or not ObjectId.is_valid(session_id):
+            return False
+        doc = await self.collection.find_one({"_id": ObjectId(session_id), "is_active": True})
+        return doc is not None
 
     async def get_active_session_by_hash(self, refresh_token_hash: str) -> Optional[Dict[str, Any]]:
         """Retrieve an active session by its hashed refresh token."""

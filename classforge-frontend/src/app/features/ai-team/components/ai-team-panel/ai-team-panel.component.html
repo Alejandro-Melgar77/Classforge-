@@ -1,0 +1,130 @@
+<div class="ai-team-panel flex flex-col h-full bg-slate-900 text-slate-200">
+  <!-- Shared Team Header (Bloque B) -->
+  <app-ai-team-header></app-ai-team-header>
+
+  <!-- Sub-Tabs Navigation Bar -->
+  <div class="flex items-center border-b border-slate-800 bg-slate-950/70 px-3 pt-2 select-none" role="tablist">
+    <!-- Tab 1: Chat -->
+    <button 
+      (click)="selectSubTab('chat')"
+      class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+      [ngClass]="activeSubTab() === 'chat' 
+        ? 'text-blue-400 border-blue-500' 
+        : 'text-slate-400 border-transparent hover:text-slate-200'"
+      role="tab"
+      [attr.aria-selected]="activeSubTab() === 'chat'"
+      aria-controls="subtab-chat"
+    >
+      <span>💬</span>
+      <span>{{ i18n.tabs.chat }}</span>
+      <span 
+        *ngIf="store.unreadCount().personal > 0"
+        class="px-1.5 py-0.2 rounded-full text-[9px] bg-blue-600 text-white font-bold"
+      >
+        {{ store.unreadCount().personal }}
+      </span>
+    </button>
+
+    <!-- Tab 2: Historial -->
+    <button 
+      (click)="selectSubTab('history')"
+      class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+      [ngClass]="activeSubTab() === 'history' 
+        ? 'text-purple-400 border-purple-500' 
+        : 'text-slate-400 border-transparent hover:text-slate-200'"
+      role="tab"
+      [attr.aria-selected]="activeSubTab() === 'history'"
+      aria-controls="subtab-history"
+    >
+      <span>📜</span>
+      <span>{{ i18n.tabs.history }}</span>
+      <span 
+        *ngIf="store.unreadCount().project > 0"
+        class="px-1.5 py-0.2 rounded-full text-[9px] bg-purple-600 text-white font-bold"
+      >
+        {{ store.unreadCount().project }}
+      </span>
+    </button>
+
+    <!-- Tab 3: Tareas -->
+    <button 
+      (click)="selectSubTab('tasks')"
+      class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+      [ngClass]="activeSubTab() === 'tasks' 
+        ? 'text-emerald-400 border-emerald-500' 
+        : 'text-slate-400 border-transparent hover:text-slate-200'"
+      role="tab"
+      [attr.aria-selected]="activeSubTab() === 'tasks'"
+      aria-controls="subtab-tasks"
+    >
+      <span>📋</span>
+      <span>{{ i18n.tabs.tasks }}</span>
+      <span 
+        *ngIf="store.tasks().length > 0"
+        class="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-800 text-slate-300 border border-slate-700 font-mono"
+      >
+        {{ store.tasks().length }}
+      </span>
+    </button>
+  </div>
+
+  <!-- Sub-Tabs Content -->
+  <div class="flex-1 overflow-hidden relative">
+    <!-- Chat View (Mi Hilo) -->
+    <section 
+      id="subtab-chat" 
+      *ngIf="activeSubTab() === 'chat'" 
+      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+      role="tabpanel"
+    >
+      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
+        <span class="text-3xl select-none">💬</span>
+        <h4 class="text-sm font-bold text-slate-200">Chat con el Equipo IA</h4>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+          Consulta individual y colaborativa con tus compañeros de IA especializados: Arquitecto, QA, Tech Lead, Mentor, DBA, Seguridad y Negocio.
+        </p>
+        <div class="text-[11px] text-blue-400 font-medium pt-2">
+          (Módulo de composición y renderizado de propuestas: Bloque C)
+        </div>
+      </div>
+    </section>
+
+    <!-- History View (Todos los integrantes) -->
+    <section 
+      id="subtab-history" 
+      *ngIf="activeSubTab() === 'history'" 
+      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+      role="tabpanel"
+    >
+      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
+        <span class="text-3xl select-none">📜</span>
+        <h4 class="text-sm font-bold text-slate-200">Historial de Colaboración de Proyecto</h4>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+          Feed cronológico de todos los hilos, propuestas aplicadas y publicaciones proactivas de los integrantes del equipo.
+        </p>
+        <div class="text-[11px] text-purple-400 font-medium pt-2">
+          (Feed virtual scroll con filtros por integrante y rol: Bloque D)
+        </div>
+      </div>
+    </section>
+
+    <!-- Tasks View -->
+    <section 
+      id="subtab-tasks" 
+      *ngIf="activeSubTab() === 'tasks'" 
+      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+      role="tabpanel"
+    >
+      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
+        <span class="text-3xl select-none">📋</span>
+        <h4 class="text-sm font-bold text-slate-200">Tablero de Tareas de IA</h4>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+          Asignación y seguimiento de tareas especializadas delegadas a roles de IA o compañeros de equipo.
+        </p>
+        <div class="text-[11px] text-emerald-400 font-medium pt-2">
+          (Tablero Kanban multi-columna reactivo: Bloque E)
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

@@ -7,17 +7,20 @@ import { CollaborationService } from '../services/collaboration.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="presence-bar">
+    <div class="presence-bar" role="region" aria-label="Colaboradores en tiempo real">
       <div class="status-indicator">
-        <span class="dot" [ngClass]="status()"></span>
-        <span class="count">{{ activeCount() }} colaborando</span>
+        <span class="dot" [ngClass]="status()" [title]="'Estado de conexión: ' + status()"></span>
+        <span class="count">{{ activeCount() }} {{ activeCount() === 1 ? 'colaborador' : 'colaboradores' }}</span>
       </div>
-      <div class="avatars">
+      <div class="avatars" aria-label="Lista de colaboradores conectados">
         <div *ngFor="let user of users()" 
              class="avatar-container"
-             [title]="user.name + ' (' + user.role + ') - ' + user.status">
-          <div class="avatar" [style.background-color]="user.color">
-            {{ getInitials(user.name) }}
+             [title]="user.name + ' (' + (user.is_ai ? 'IA ' + user.role : user.role) + ') - ' + user.status">
+          <div class="avatar" 
+               [style.background-color]="user.color"
+               [class.ai-avatar]="user.is_ai">
+            <span *ngIf="user.is_ai" class="ai-icon">🤖</span>
+            <span *ngIf="!user.is_ai">{{ getInitials(user.name) }}</span>
           </div>
           <div class="user-status-dot" [ngClass]="user.status"></div>
         </div>
@@ -28,8 +31,8 @@ import { CollaborationService } from '../services/collaboration.service';
     .presence-bar {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 4px 10px;
+      gap: 10px;
+      padding: 3px 8px;
       background: var(--surface-3);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -38,7 +41,7 @@ import { CollaborationService } from '../services/collaboration.service';
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-secondary);
       font-weight: 500;
     }
@@ -70,10 +73,23 @@ import { CollaborationService } from '../services/collaboration.service';
       justify-content: center;
       color: white;
       font-weight: bold;
-      font-size: 11px;
+      font-size: 10px;
       border: 2px solid var(--surface-2);
       cursor: pointer;
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform 0.15s ease;
+    }
+    .avatar:hover {
+      transform: scale(1.15);
+      z-index: 10;
+    }
+    .avatar.ai-avatar {
+      background: linear-gradient(135deg, #8B5CF6, #6366F1) !important;
+      border-color: #C4B5FD;
+      box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+    }
+    .ai-icon {
+      font-size: 12px;
     }
     .user-status-dot {
       position: absolute;
@@ -97,6 +113,7 @@ export class PresenceBarComponent {
   activeCount = computed(() => this.users().length);
 
   getInitials(name: string): string {
+    if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   }
 }

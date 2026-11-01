@@ -1,8 +1,9 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-login',
@@ -14,6 +15,8 @@ export class LoginComponent {
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private toastService = inject(ToastService);
 
   loginForm = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -30,10 +33,12 @@ export class LoginComponent {
     
     this.authService.login(this.loginForm.getRawValue()).subscribe({
       next: () => {
-        this.router.navigate(['/']);
+        const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/';
+        this.toastService.success('¡Bienvenido de vuelta!', 'Sesión iniciada');
+        this.router.navigateByUrl(returnUrl);
       },
       error: (err) => {
-        this.errorMessage = 'Login failed. Please check your credentials.';
+        this.errorMessage = 'Credenciales incorrectas o usuario no encontrado.';
         this.isLoading = false;
       }
     });

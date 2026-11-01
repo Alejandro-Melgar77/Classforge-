@@ -39,6 +39,8 @@ class ProjectRepository:
 
     async def get_by_id(self, project_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve an active project by its ObjectId string."""
+        if not project_id or not ObjectId.is_valid(str(project_id)):
+            return None
         return await self.collection.find_one({"_id": ObjectId(project_id), "is_deleted": False})
 
     async def get_list(

@@ -2,7 +2,7 @@
 """
 Plantillas de código para la generación de Backend FastAPI (Python 3.11+)
 con Clean Architecture, Pydantic v2, SQLAlchemy Async, soporte para despliegue en Render,
-Cloud Bridge hacia ClassForge y endpoints de Asistente de Voz.
+Cloud Bridge hacia ClassForge, soporte para Enums, Herencia y Relaciones (1-N, N-N).
 """
 
 MAIN_PY = """# -*- coding: utf-8 -*-
@@ -65,7 +65,7 @@ async def health_check():
 CONFIG_PY = """# -*- coding: utf-8 -*-
 import os
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "{project_name}"
@@ -89,9 +89,11 @@ class Settings(BaseSettings):
     CLASSFORGE_CLOUD_URL: str = os.getenv("CLASSFORGE_CLOUD_URL", "https://classforge-backend.onrender.com")
     CLASSFORGE_API_KEY: str = os.getenv("CLASSFORGE_API_KEY", "")
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        extra="allow"
+    )
 
 settings = Settings()
 """
@@ -139,42 +141,51 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 """
 
+ENUMS_PY = """# -*- coding: utf-8 -*-
+from enum import Enum
+
+{enums_content}
+"""
+
 MODEL_PY = """# -*- coding: utf-8 -*-
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Date, ForeignKey
+from typing import List, Optional
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Date, ForeignKey, Table, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from app.database import Base
+{extra_imports}
 
-class {class_name}(Base):
+{association_tables}
+class {class_name}({base_class}):
     __tablename__ = "{table_name}"
-
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+{mapper_args}
+{id_field}
 {fields}
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+{relationship_fields}
+{audit_fields}
 """
 
 SCHEMA_PY = """# -*- coding: utf-8 -*-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime, date
+{extra_imports}
 
 class {class_name}Base(BaseModel):
 {base_fields}
 
-class {class_name}Create({class_name}Base):
+class {class_name}Create({base_create_class}):
     pass
 
 class {class_name}Update(BaseModel):
 {update_fields}
 
-class {class_name}Response({class_name}Base):
+class {class_name}Response({base_response_class}):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 """
 
 ROUTER_PY = """# -*- coding: utf-8 -*-
@@ -258,52 +269,18 @@ router = APIRouter(
 @router.get("/status")
 async def check_cloud_status():
     \"\"\"Verifica la conectividad con el backend central en la nube de ClassForge.\"\"\"
-    cloud_url = settings.CLASSFORGE_CLOUD_URL
-    if not cloud_url:
-        return {"status": "disconnected", "message": "CLASSFORGE_CLOUD_URL no configurada"}
-    
+    if not settings.CLASSFORGE_CLOUD_URL:
+        return {"connected": False, "message": "CLASSFORGE_CLOUD_URL no configurada"}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{cloud_url}/health")
-            if resp.status_code == 200:
-                return {
-                    "status": "connected",
-                    "cloud_url": cloud_url,
-                    "response": resp.json()
-                }
+            resp = await client.get(f"{settings.CLASSFORGE_CLOUD_URL}/health")
             return {
-                "status": "degraded",
-                "cloud_url": cloud_url,
-                "status_code": resp.status_code
+                "connected": resp.status_code == 200,
+                "remote_status": resp.json() if resp.status_code == 200 else None,
+                "cloud_url": settings.CLASSFORGE_CLOUD_URL
             }
     except Exception as e:
-        return {
-            "status": "offline_fallback",
-            "cloud_url": cloud_url,
-            "error": str(e),
-            "mode": "Operando de forma local autónoma"
-        }
-
-@router.post("/voice-relay")
-async def relay_voice_command(payload: dict):
-    \"\"\"Reenvía un comando de voz recibido desde la App Móvil/Web hacia el backend central FastAPI para procesamiento NLU con Gemini.\"\"\"
-    cloud_url = settings.CLASSFORGE_CLOUD_URL
-    if not cloud_url:
-        raise HTTPException(status_code=503, detail="Cloud Bridge no disponible")
-        
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                f"{cloud_url}/api/v1/ai/generate",
-                json=payload,
-                headers={"Authorization": f"Bearer {settings.CLASSFORGE_API_KEY}"}
-            )
-            return resp.json()
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Error comunicando con el servicio de IA en la nube: {str(e)}"
-        )
+        return {"connected": False, "error": str(e), "cloud_url": settings.CLASSFORGE_CLOUD_URL}
 """
 
 REQUIREMENTS_TXT = """fastapi>=0.110.0
@@ -322,11 +299,12 @@ DOCKERFILE = """FROM python:3.11-slim
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \\
-    PYTHONUNBUFFERED=1 \\
-    PORT=8000
+    PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     curl \\
+    gcc \\
+    libpq-dev \\
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -336,13 +314,13 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
 
 RENDER_YAML = """services:
   - type: web
-    name: {project_slug}-fastapi
-    env: python
+    name: {project_slug}-backend
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -350,98 +328,61 @@ RENDER_YAML = """services:
         value: 3.11.8
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./app.db
-      - key: CLASSFORGE_CLOUD_URL
-        value: https://classforge-backend.onrender.com
-"""
-
-FASTAPI_README_MD = """# {project_name} - FastAPI Backend
-
-Backend RESTful asíncrono de alto rendimiento generado automáticamente por **ClassForge**.
-
----
-
-## 🚀 Inicio Rápido Local
-
-### 1. Requisitos
-- Python 3.10 o superior
-- Pip y Entorno Virtual
-
-### 2. Ejecutar con 1 Clic
-- **Windows:** Ejecuta el archivo `run.bat`
-- **Linux/Mac:** Ejecuta `./run.sh`
-
-### 3. Ejecución Manual por Terminal
-```bash
-# Crear y activar entorno virtual
-python -m venv venv
-# Windows:
-.\\venv\\Scripts\\activate
-# Linux/Mac:
-source venv/bin/activate
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Iniciar servidor en modo desarrollo
-uvicorn app.main:app --reload --port 8000
-```
-
----
-
-## 📖 Documentación Interactiva (Swagger / OpenAPI)
-Una vez iniciado, abre en tu navegador:
-- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
----
-
-## 🌐 Endpoints REST Generados
-{endpoints_list}
-
----
-
-## ☁️ Despliegue en 1 Clic en Render
-Este repositorio incluye `render.yaml` y `Dockerfile` listos para desplegar:
-1. Sube este proyecto a tu repositorio de GitHub.
-2. En [Render.com](https://render.com), haz clic en **New +** ➔ **Blueprint**.
-3. Selecciona tu repositorio y Render configurará el servicio automáticamente.
 """
 
 RUN_BAT = """@echo off
-echo ========================================================
-echo Iniciando {project_name} FastAPI Backend...
-echo ========================================================
+echo ===================================================
+echo Iniciando {project_name} Backend (FastAPI Asincrono)
+echo ===================================================
 
 if not exist venv (
     echo Creando entorno virtual Python...
     python -m venv venv
 )
 
-call venv\\Scripts\\activate
-
-echo Instalando dependencias...
+call venv\\Scripts\\activate.bat
 pip install -r requirements.txt
-
-echo.
-echo Servidor iniciando en: http://localhost:8000/docs
-echo Presiona Ctrl+C para detener.
-echo.
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-pause
 """
 
-RUN_SH = """#!/usr/bin/env bash
-echo "Iniciando {project_name} FastAPI Backend..."
+RUN_SH = """#!/bin/bash
+echo "==================================================="
+echo "Iniciando {project_name} Backend (FastAPI Asincrono)"
+echo "==================================================="
 
 if [ ! -d "venv" ]; then
-    echo "Creando entorno virtual..."
+    echo "Creando entorno virtual Python..."
     python3 -m venv venv
 fi
 
 source venv/bin/activate
 pip install -r requirements.txt
-
-echo ""
-echo "Servidor disponible en: http://localhost:8000/docs"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+"""
+
+FASTAPI_README_MD = """# {project_name} - Backend FastAPI Asíncrono
+
+Backend RESTful empresarial de alto rendimiento generado automáticamente por **ClassForge**.
+Implementado con **FastAPI**, **SQLAlchemy 2.0 (Async)**, **Pydantic v2** y arquitectura limpia.
+
+## 🚀 Inicio Rápido
+
+### En Windows:
+```cmd
+run.bat
+```
+
+### En Linux / macOS:
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+El servidor iniciará en: **http://localhost:8000**
+- **Documentación Swagger UI:** http://localhost:8000/docs
+- **Documentación ReDoc:** http://localhost:8000/redoc
+
+## 📦 Endpoints RESTful Generados
+
+{endpoints_list}
 """

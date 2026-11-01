@@ -1321,11 +1321,15 @@ export class NluParserService {
   }
 
   public normalize(str: string): string {
-    return (str || '')
+    let clean = (str || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .trim();
+    clean = clean.replace(/\bclses?\b/g, 'clase');
+    clean = clean.replace(/\bclaes?\b/g, 'clase');
+    clean = clean.replace(/\batribtos?\b/g, 'atributos');
+    return clean;
   }
 
   public capitalize(str: string): string {

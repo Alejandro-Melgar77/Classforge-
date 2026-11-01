@@ -10,6 +10,7 @@ from app.modules.auth.schemas import (
     TokenResponse,
     ChangePasswordRequest,
     UpdateProfileRequest,
+    UserPublic,
 )
 from app.modules.auth.repository import SessionRepository
 from app.modules.users.repository import UserRepository
@@ -56,13 +57,12 @@ async def login(request: Request, data: LoginRequest, user_repo: UserRepository 
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     
-    access_token = create_access_token(subject=str(user["_id"]))
     refresh_token = generate_refresh_token()
     refresh_hash = hash_refresh_token(refresh_token)
-    
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    await session_repo.create_session(str(user["_id"]), refresh_hash, data.device_info, request.client.host, expires_at)
+    session_id = await session_repo.create_session(str(user["_id"]), refresh_hash, data.device_info, request.client.host, expires_at)
+    access_token = create_access_token(subject=str(user["_id"]), sid=session_id)
     await user_repo.update_last_activity(str(user["_id"]))
     await user_repo.log_audit(str(user["_id"]), "LOGIN", "sessions", ip=request.client.host)
     
@@ -95,12 +95,12 @@ async def refresh(data: RefreshRequest, session_repo: SessionRepository = Depend
     await session_repo.invalidate_session(str(session["_id"]))
     
     user_id = str(session["user_id"])
-    access_token = create_access_token(subject=user_id)
     new_refresh = generate_refresh_token()
     new_hash = hash_refresh_token(new_refresh)
     
     expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    await session_repo.create_session(user_id, new_hash, session["device_info"], session["ip_address"], expires_at)
+    new_session_id = await session_repo.create_session(user_id, new_hash, session["device_info"], session["ip_address"], expires_at)
+    access_token = create_access_token(subject=user_id, sid=new_session_id)
     
     user = await user_repo.get_by_id(user_id)
     user_profile = None
@@ -118,7 +118,15 @@ async def refresh(data: RefreshRequest, session_repo: SessionRepository = Depend
     return StandardResponse(success=True, message="Token refreshed", data=token_data.model_dump())
 
 @router.post("/logout", response_model=StandardResponse)
-async def logout(request: Request, current_user = Depends(get_current_user), user_repo: UserRepository = Depends(get_user_repository)):
+async def logout(
+    request: Request,
+    current_user = Depends(get_current_user),
+    session_repo: SessionRepository = Depends(get_session_repo),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    sid = getattr(request.state, "sid", None)
+    if sid:
+        await session_repo.invalidate_session(sid)
     await user_repo.log_audit(str(current_user["_id"]), "LOGOUT", "sessions", ip=request.client.host)
     return StandardResponse(success=True, message="Logged out successfully")
 
@@ -130,9 +138,16 @@ async def logout_all(request: Request, current_user = Depends(get_current_user),
 
 @router.get("/me", response_model=StandardResponse)
 async def get_me(current_user = Depends(get_current_user)):
-    user_data = dict(current_user)
-    user_data["id"] = str(user_data.pop("_id"))
-    return StandardResponse(success=True, message="User profile", data=user_data)
+    user_public = UserPublic(
+        id=str(current_user.get("_id") or current_user.get("id")),
+        name=current_user.get("name", "Usuario"),
+        email=current_user.get("email", ""),
+        role=current_user.get("role", "dev"),
+        avatar_url=current_user.get("avatar_url"),
+        team_ids=[str(tid) for tid in current_user.get("team_ids", [])],
+        is_active=current_user.get("is_active", True),
+    )
+    return StandardResponse(success=True, message="User profile", data=user_public.model_dump())
 
 @router.get("/sessions", response_model=StandardResponse)
 async def get_sessions(current_user = Depends(get_current_user), session_repo: SessionRepository = Depends(get_session_repo)):
@@ -185,8 +200,18 @@ async def update_my_profile(
         await user_repo.log_audit(user_id, "UPDATE_PROFILE", "users", user_id, metadata=update_fields, ip=request.client.host)
 
     updated_user = await user_repo.get_by_id(user_id)
-    if updated_user:
-        updated_user["id"] = str(updated_user.pop("_id"))
+    if not updated_user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    return StandardResponse(success=True, message="Perfil actualizado correctamente", data=updated_user)
+    user_public = UserPublic(
+        id=str(updated_user.get("_id") or updated_user.get("id")),
+        name=updated_user.get("name", "Usuario"),
+        email=updated_user.get("email", ""),
+        role=updated_user.get("role", "dev"),
+        avatar_url=updated_user.get("avatar_url"),
+        team_ids=[str(tid) for tid in updated_user.get("team_ids", [])],
+        is_active=updated_user.get("is_active", True),
+    )
+
+    return StandardResponse(success=True, message="Perfil actualizado correctamente", data=user_public.model_dump())
 

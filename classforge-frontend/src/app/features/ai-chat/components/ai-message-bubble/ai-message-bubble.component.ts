@@ -12,7 +12,7 @@ import { AiRoleAvatarComponent } from '../ai-role-avatar/ai-role-avatar.componen
       <!-- AI Avatar -->
       <app-ai-role-avatar
         *ngIf="message.author_type === 'ai' && message.ai_role"
-        [role]="message.ai_role as AiRoleId"
+        [role]="roleId"
         class="avatar"
       ></app-ai-role-avatar>
 
@@ -139,6 +139,10 @@ export class AiMessageBubbleComponent {
   @Input() message!: AiMessage;
   @Output() applyToDiagram = new EventEmitter<AiMessage>();
   @Output() ignoreDiagramChanges = new EventEmitter<AiMessage>();
+
+  get roleId(): AiRoleId | null {
+    return (this.message?.ai_role as AiRoleId) ?? null;
+  }
 
   getAuthorColor(): string {
     if (this.message.author_type === 'user') return '#93C5FD';

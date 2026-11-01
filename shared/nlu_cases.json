@@ -1,0 +1,174 @@
+[
+  {
+    "id": "nlu-01",
+    "prompt": "crear clase Factura con id:long, monto:double",
+    "expected_action": "create_class",
+    "accepted_actions": ["create_class"],
+    "expected_classes": ["Factura"],
+    "expected_attributes": [
+      {"name": "id", "type": "long"},
+      {"name": "monto", "type": "double"}
+    ],
+    "category": "create_class_explicit_types"
+  },
+  {
+    "id": "nlu-02",
+    "prompt": "crear clase Usuario con atributos nombre, email",
+    "expected_action": "create_class",
+    "accepted_actions": ["create_class"],
+    "expected_classes": ["Usuario"],
+    "expected_attributes": [
+      {"name": "nombre", "type": "String"},
+      {"name": "email", "type": "String"}
+    ],
+    "category": "create_class_implicit_types"
+  },
+  {
+    "id": "nlu-03",
+    "prompt": "crear clase Producto con precio:Double, stock:Integer",
+    "expected_action": "create_class",
+    "accepted_actions": ["create_class"],
+    "expected_classes": ["Producto"],
+    "expected_attributes": [
+      {"name": "precio", "type": "Double"},
+      {"name": "stock", "type": "Integer"}
+    ],
+    "category": "create_class_pascal_types"
+  },
+  {
+    "id": "nlu-04",
+    "prompt": "eliminar clase DetallePedido",
+    "expected_action": "delete_element",
+    "accepted_actions": ["delete_element"],
+    "expected_classes": [],
+    "expected_deleted": ["DetallePedido"],
+    "category": "delete_element"
+  },
+  {
+    "id": "nlu-05",
+    "prompt": "borrar elemento Carrito",
+    "expected_action": "delete_element",
+    "accepted_actions": ["delete_element"],
+    "expected_classes": [],
+    "expected_deleted": ["Carrito"],
+    "category": "delete_element"
+  },
+  {
+    "id": "nlu-06",
+    "prompt": "agregar atributo email:string a la clase Usuario",
+    "expected_action": "add_attribute",
+    "accepted_actions": ["add_attribute", "update_class"],
+    "expected_classes": ["Usuario"],
+    "expected_attributes": [
+      {"name": "email", "type": "string"}
+    ],
+    "category": "update_class_attr"
+  },
+  {
+    "id": "nlu-07",
+    "prompt": "agregar metodo validarToken(token):boolean a la clase Auth",
+    "expected_action": "add_method",
+    "accepted_actions": ["add_method", "update_class"],
+    "expected_classes": ["Auth"],
+    "expected_methods": [
+      {"name": "validarToken", "return_type": "boolean"}
+    ],
+    "category": "update_class_method"
+  },
+  {
+    "id": "nlu-08",
+    "prompt": "hacer que Administrador herede de Usuario",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Administrador",
+      "target": "Usuario",
+      "type": "inheritance"
+    },
+    "category": "relation_inheritance"
+  },
+  {
+    "id": "nlu-09",
+    "prompt": "relacionar Factura con DetalleFactura como composicion",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Factura",
+      "target": "DetalleFactura",
+      "type": "composition"
+    },
+    "category": "relation_composition"
+  },
+  {
+    "id": "nlu-10",
+    "prompt": "relacionar Receta con Medicamento como agregacion",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Receta",
+      "target": "Medicamento",
+      "type": "aggregation"
+    },
+    "category": "relation_aggregation"
+  },
+  {
+    "id": "nlu-11",
+    "prompt": "relacionar Cliente con Pedido como asociacion",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Cliente",
+      "target": "Pedido",
+      "type": "association"
+    },
+    "category": "relation_association"
+  },
+  {
+    "id": "nlu-12",
+    "prompt": "conectar Doctor con Hospital por asociacion",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Doctor",
+      "target": "Hospital",
+      "type": "association"
+    },
+    "category": "relation_association"
+  },
+  {
+    "id": "nlu-13",
+    "prompt": "crear clse Cliente con ci:string, telefono:string",
+    "expected_action": "create_class",
+    "accepted_actions": ["create_class"],
+    "expected_classes": ["Cliente"],
+    "expected_attributes": [
+      {"name": "ci", "type": "string"},
+      {"name": "telefono", "type": "string"}
+    ],
+    "category": "typo_clse"
+  },
+  {
+    "id": "nlu-14",
+    "prompt": "nueva claes CuentaBancaria con numeroCuenta:string, saldo:double",
+    "expected_action": "create_class",
+    "accepted_actions": ["create_class"],
+    "expected_classes": ["CuentaBancaria"],
+    "expected_attributes": [
+      {"name": "numeroCuenta", "type": "string"},
+      {"name": "saldo", "type": "double"}
+    ],
+    "category": "typo_claes"
+  },
+  {
+    "id": "nlu-15",
+    "prompt": "hacer que Estudiante herede de Persona",
+    "expected_action": "create_relation",
+    "accepted_actions": ["create_relation", "add_relation"],
+    "expected_relation": {
+      "source": "Estudiante",
+      "target": "Persona",
+      "type": "inheritance"
+    },
+    "category": "relation_inheritance"
+  }
+]

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 from pydantic import BaseModel, EmailStr, Field
+from app.modules.auth.schemas import UserPublic
 
 
 class StandardResponse(BaseModel):

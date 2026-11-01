@@ -8,11 +8,12 @@ export const ADMIN_ROUTES: Routes = [
   {
     path: '',
     component: AdminShellComponent,
+    data: { breadcrumb: 'Administración' },
     children: [
       { path: '', redirectTo: 'users', pathMatch: 'full' },
-      { path: 'users', component: UserListComponent },
-      { path: 'teams', component: TeamListComponent },
-      { path: 'config', component: GlobalConfigComponent }
+      { path: 'users', component: UserListComponent, data: { breadcrumb: 'Usuarios' } },
+      { path: 'teams', component: TeamListComponent, data: { breadcrumb: 'Equipos' } },
+      { path: 'config', component: GlobalConfigComponent, data: { breadcrumb: 'Configuración' } }
     ]
   }
 ];

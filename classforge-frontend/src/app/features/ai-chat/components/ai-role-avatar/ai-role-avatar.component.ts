@@ -40,11 +40,11 @@ import { AiRoleId, AI_ROLE_THEMES, AiRoleTheme } from '../../models/ai-conversat
 })
 export class AiRoleAvatarComponent implements OnChanges {
   /** The AI role to display. Defaults to architect. */
-  @Input() role: AiRoleId = 'architect';
+  @Input() role: AiRoleId | null = 'architect';
 
   theme!: AiRoleTheme;
 
   ngOnChanges(): void {
-    this.theme = AI_ROLE_THEMES[this.role] ?? AI_ROLE_THEMES['architect'];
+    this.theme = (this.role ? AI_ROLE_THEMES[this.role] : null) ?? AI_ROLE_THEMES['architect'];
   }
 }

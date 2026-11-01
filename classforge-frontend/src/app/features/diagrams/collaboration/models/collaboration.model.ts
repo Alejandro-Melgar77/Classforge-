@@ -5,8 +5,12 @@ export interface WsMessage<T = any> {
   node_id?: string;
   edge_id?: string;
   data?: any;
+  element_id?: string;
+  reason?: string;
   sender_id?: string;
   timestamp?: number;
+  role?: string;
+  element_ids?: string[];
 }
 
 export interface Collaborator {
@@ -17,6 +21,9 @@ export interface Collaborator {
   status: 'online' | 'away' | 'busy';
   cursor?: { x: number; y: number };
   active_lock?: string;
+  is_ai?: boolean;
+  ai_role?: string;
+  avatar?: string;
 }
 
 export interface ChatMessage {

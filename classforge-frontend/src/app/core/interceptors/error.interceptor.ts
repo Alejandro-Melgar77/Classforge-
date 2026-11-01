@@ -17,7 +17,6 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
             return next(cloned);
           }),
           catchError((refreshErr) => {
-            authService.logout();
             return throwError(() => refreshErr);
           })
         );

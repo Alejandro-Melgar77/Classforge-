@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { AuthService } from './auth.service';
+import { ToastService } from './toast.service';
+import { SessionStateService } from './session-state.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,6 +13,8 @@ export class InactivityService {
   private readonly WARNING_MS = 25 * 60 * 1000; // 25 mins
   
   private authService = inject(AuthService);
+  private toastService = inject(ToastService);
+  private sessionState = inject(SessionStateService);
 
   constructor() {
     this.initListener();
@@ -30,11 +34,14 @@ export class InactivityService {
     clearTimeout(this.warningId);
     
     this.warningId = setTimeout(() => {
-      alert("You will be logged out in 5 minutes due to inactivity.");
+      this.toastService.warning(
+        'Tu sesión se cerrará en 5 minutos por inactividad. Mueve el cursor o interactúa para mantenerla activa.',
+        'Aviso de Inactividad'
+      );
     }, this.WARNING_MS);
     
     this.timeoutId = setTimeout(() => {
-      this.authService.logout();
+      this.sessionState.handleSessionExpired();
     }, this.TIMEOUT_MS);
   }
 }

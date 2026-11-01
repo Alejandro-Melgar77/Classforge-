@@ -12,8 +12,21 @@ import { UMLCommandResponse } from '../models/ai-command.model';
         <h4 class="text-xs font-bold text-purple-400 flex items-center gap-1.5 uppercase tracking-wider">
           <span>⚡</span> Propuesta de Cambios
         </h4>
-        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium">
-          Offline
+        <span 
+          class="text-[10px] px-2 py-0.5 rounded-full font-medium border flex items-center gap-1"
+          [ngClass]="{
+            'bg-purple-500/10 text-purple-300 border-purple-500/30': command.source === 'local',
+            'bg-blue-500/10 text-blue-300 border-blue-500/30': command.source === 'gemini' || command.source === 'backend_ai',
+            'bg-emerald-500/10 text-emerald-300 border-emerald-500/30': command.source === 'heuristic' || command.source === 'offline_nlu'
+          }"
+          [title]="'Origen de generación: ' + command.source"
+        >
+          <ng-container [ngSwitch]="command.source">
+            <span *ngSwitchCase="'local'">🖥️ Local</span>
+            <span *ngSwitchCase="'gemini'">✨ Gemini 3.8 Flash</span>
+            <span *ngSwitchCase="'backend_ai'">✨ Gemini 3.8 Flash</span>
+            <span *ngSwitchDefault>⚡ Heurístico</span>
+          </ng-container>
         </span>
       </div>
 

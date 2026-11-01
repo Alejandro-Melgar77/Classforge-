@@ -71,6 +71,11 @@ class LockReleasedMessage(WSMessage):
     element_id: str
     user_id: str
 
+class OpRejectedMessage(WSMessage):
+    type: str = "OP_REJECTED"
+    element_id: str
+    reason: str = "locked"
+
 class PingMessage(WSMessage):
     type: str = "PING"
 

@@ -1,4 +1,7 @@
-﻿venv/
+.git/
+.gitignore
+venv/
+.venv/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,6 +9,10 @@ __pycache__/
 .coverage
 htmlcov/
 .env
+.env.*
 tests/
 Dockerfile
 .dockerignore
+*.md
+.vscode/
+.idea/

@@ -3,12 +3,10 @@ import json
 import logging
 import re
 from typing import Dict, Any, List, Optional
-import httpx
-from app.core.config import settings
+from pydantic import SecretStr
+from app.llm import LlmMessage, LlmRequest, get_provider
 
 logger = logging.getLogger("classforge.codegen.prompt")
-
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 def _get_type_info(raw_type: str) -> Dict[str, str]:
     cleaned = str(raw_type).lower().strip()
@@ -422,26 +420,11 @@ async def generate_frontend_meta_prompt_with_gemini(
     model: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Synthesizes and enriches the frontend meta-prompt using Google Gemini API.
-    Falls back gracefully to the deterministic generator.
+    Synthesizes and enriches the frontend meta-prompt using LLM Provider (Gemini / Fake).
+    Falls back gracefully to the deterministic generator on failure.
     """
     base_prompt = generate_frontend_meta_prompt(graph_data, target_framework, theme)
-    key = api_key or settings.GEMINI_API_KEY
-    
-    if not key:
-        char_count = len(base_prompt)
-        return {
-            "prompt": base_prompt,
-            "character_count": char_count,
-            "estimated_tokens": max(1, char_count // 4),
-            "target_framework": target_framework,
-            "theme": theme,
-            "engine_used": "deterministic"
-        }
 
-    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash") or "gemini-3.8-flash"
-    url = f"{GEMINI_API_BASE}/{target_model}:generateContent?key={key}"
-    
     instruction = """You are a Senior Mobile & Frontend Architect.
 Enrich and refine the following Meta-Prompt for code generation LLMs (Claude, GPT-4, Cursor).
 Ensure it has:
@@ -452,35 +435,31 @@ Ensure it has:
 5. Exact 1-click APK compilation script.
 Output the complete, enriched Markdown prompt directly without backticks."""
 
-    payload = {
-        "contents": [
-            {"parts": [{"text": f"Enrich this architecture prompt:\n\n{base_prompt}"}]}
-        ],
-        "systemInstruction": {
-            "parts": [{"text": instruction}]
-        },
-        "generationConfig": {
-            "temperature": 0.3
-        }
-    }
+    provider = get_provider(purpose="codegen")
+
+    req = LlmRequest(
+        system=instruction,
+        messages=[LlmMessage(role="user", text=f"Enrich this architecture prompt:\n\n{base_prompt}")],
+        temperature=0.3,
+        purpose="codegen",
+        api_key=SecretStr(api_key) if api_key else None,
+        model=model,
+    )
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                char_count = len(text)
-                return {
-                    "prompt": text,
-                    "character_count": char_count,
-                    "estimated_tokens": max(1, char_count // 4),
-                    "target_framework": target_framework,
-                    "theme": theme,
-                    "engine_used": f"Google Gemini ({target_model})"
-                }
+        res = await provider.generate(req)
+        text = res.text.strip()
+        char_count = len(text)
+        return {
+            "prompt": text,
+            "character_count": char_count,
+            "estimated_tokens": max(1, char_count // 4),
+            "target_framework": target_framework,
+            "theme": theme,
+            "engine_used": f"Google Gemini ({res.model})",
+        }
     except Exception as e:
-        logger.warning(f"Gemini prompt generation failed ({e}). Using deterministic prompt.")
+        logger.warning(f"LLM frontend prompt generation failed ({e}). Using deterministic prompt.")
 
     char_count = len(base_prompt)
     return {

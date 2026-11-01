@@ -33,7 +33,7 @@ export interface UMLCommandResponse {
   relations: UMLRelationCommand[];
   deleted_elements: string[];
   explanation: string;
-  source: 'offline_nlu' | 'backend_ai';
+  source: 'offline_nlu' | 'backend_ai' | 'local' | 'gemini' | 'heuristic';
 }
 
 export interface AiHistoryEntry {

@@ -61,4 +61,8 @@ export class UsersAdminService {
   deleteUser(id: string): Observable<ApiResponse<void>> {
     return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/${id}`);
   }
+
+  getAuditLogs(userId: string): Observable<ApiResponse<any[]>> {
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/${userId}/audit-log`);
+  }
 }

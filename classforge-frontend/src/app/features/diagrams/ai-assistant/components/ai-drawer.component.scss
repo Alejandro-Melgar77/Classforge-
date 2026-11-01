@@ -1,0 +1,11 @@
+:host {
+  display: block;
+}
+
+.ai-drawer {
+  will-change: transform, width;
+}
+
+.resize-handle {
+  touch-action: none;
+}

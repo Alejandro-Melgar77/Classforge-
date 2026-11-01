@@ -29,6 +29,8 @@ class FolderRepository:
         return doc
 
     async def get_by_id(self, folder_id: str) -> Optional[dict]:
+        if not folder_id or not ObjectId.is_valid(str(folder_id)):
+            return None
         return await self.collection.find_one({"_id": ObjectId(folder_id), "is_deleted": False})
 
     async def get_by_owner_and_teams(self, owner_id: str, team_ids: List[str]) -> List[dict]:

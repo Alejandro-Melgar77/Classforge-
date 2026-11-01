@@ -1,51 +1,103 @@
-<div class="flex h-screen bg-[var(--surface-1)]">
-  <!-- Mobile overlay backdrop -->
-  <div *ngIf="isMobileOpen" (click)="toggleMobileMenu()" class="fixed inset-0 bg-black/50 z-40 md:hidden"></div>
+<!-- Accessible Skip Link -->
+<a
+  href="#main-content"
+  class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[99999] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:font-semibold focus:rounded-xl focus:shadow-xl focus:outline-hidden"
+>
+  Saltar al contenido principal
+</a>
 
-  <!-- Sidebar -->
-  <aside [class.translate-x-0]="isMobileOpen" [class.-translate-x-full]="!isMobileOpen"
-         [class.md:w-64]="isSidebarExpanded" [class.md:w-16]="!isSidebarExpanded"
-         class="fixed md:relative z-50 h-full bg-[var(--surface-2)] border-r border-[var(--border)] flex flex-col transition-all duration-300 transform md:translate-x-0 w-64 md:w-auto">
-    
-    <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border)]">
-      <div class="flex items-center gap-2 overflow-hidden" [class.opacity-0]="!isSidebarExpanded" [class.md:opacity-0]="!isSidebarExpanded && !isMobileOpen">
-        <div class="w-8 h-8 bg-primary rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-white">CF</div>
-        <span class="font-bold text-white text-xl whitespace-nowrap">ClassForge</span>
-      </div>
-      <button (click)="toggleSidebar()" class="hidden md:flex text-[var(--text-secondary)] hover:text-white absolute right-4">
-        ☰
-      </button>
-      <button (click)="toggleMobileMenu()" class="md:hidden text-[var(--text-secondary)] hover:text-white">
-        ✕
+<div class="flex h-screen bg-[var(--surface-1)] overflow-hidden">
+
+  <!-- ═══ DESKTOP & TABLET SIDEBAR ═══ -->
+  <aside
+    [class.md:w-64]="isSidebarExpanded"
+    [class.md:w-18]="!isSidebarExpanded"
+    class="hidden md:flex flex-col bg-[var(--surface-2)] border-r border-[var(--border)] transition-all duration-300 shrink-0 z-40 select-none"
+    role="navigation"
+    aria-label="Navegación principal"
+  >
+    <!-- Brand / Header -->
+    <div class="h-14 flex items-center justify-between px-3 border-b border-[var(--border)]">
+      <a routerLink="/dashboard" class="flex items-center gap-2.5 overflow-hidden focus:outline-hidden rounded-lg p-1">
+        <div class="w-8 h-8 bg-primary rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-white text-xs shadow-md shadow-primary/20">
+          CF
+        </div>
+        <span *ngIf="isSidebarExpanded" class="font-bold text-white text-base tracking-tight whitespace-nowrap">
+          ClassForge
+        </span>
+      </a>
+      <button
+        type="button"
+        (click)="toggleSidebar()"
+        class="text-[var(--text-secondary)] hover:text-white p-1.5 rounded-lg hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
+        [title]="isSidebarExpanded ? 'Colapsar barra lateral' : 'Expandir barra lateral'"
+        [attr.aria-expanded]="isSidebarExpanded"
+      >
+        <span class="text-xs">{{ isSidebarExpanded ? '◀' : '▶' }}</span>
       </button>
     </div>
 
-    <nav class="flex-1 py-4 overflow-y-auto overflow-x-hidden">
+    <!-- Navigation List -->
+    <nav class="flex-1 py-3 px-2 overflow-y-auto overflow-x-hidden space-y-1">
       <ng-container *ngFor="let item of navItems">
-        <div *ngIf="isMenuItemVisible(item)" class="mb-1 px-2">
-          
-          <a *ngIf="!item.children" [routerLink]="item.route" routerLinkActive="bg-primary text-white" [routerLinkActiveOptions]="{exact: false}"
-             [attr.data-tour]="item.route === '/diagrams' ? 'nav-diagrams' : (item.route === '/dashboard' ? 'nav-dashboard' : null)"
-             class="flex items-center gap-3 px-2 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors cursor-pointer"
-             [title]="!isSidebarExpanded ? item.label : ''">
-            <span class="w-6 text-center">⭐</span> <!-- Replace with Lucide icon -->
-            <span *ngIf="isSidebarExpanded" class="whitespace-nowrap">{{ item.label }}</span>
+        <div *ngIf="isMenuItemVisible(item)">
+
+          <!-- Regular Route Item -->
+          <a
+            *ngIf="item.route && !item.children"
+            [routerLink]="item.route"
+            routerLinkActive="bg-primary text-white shadow-xs"
+            [routerLinkActiveOptions]="{ exact: false }"
+            class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors cursor-pointer group"
+            [title]="!isSidebarExpanded ? item.label : ''"
+          >
+            <span class="text-base shrink-0 text-center w-5" aria-hidden="true">{{ item.icon }}</span>
+            <span *ngIf="isSidebarExpanded" class="whitespace-nowrap truncate">{{ item.label }}</span>
           </a>
 
-          <div *ngIf="item.children" class="flex flex-col" [attr.data-tour]="item.label === 'Repertorio' ? 'nav-repertoire' : null">
-            <div (click)="item.expanded = !item.expanded" 
-                 class="flex items-center justify-between px-2 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors cursor-pointer"
-                 [title]="!isSidebarExpanded ? item.label : ''">
-              <div class="flex items-center gap-3">
-                <span class="w-6 text-center">📁</span>
-                <span *ngIf="isSidebarExpanded" class="whitespace-nowrap">{{ item.label }}</span>
-              </div>
-              <span *ngIf="isSidebarExpanded" class="text-xs transition-transform" [class.rotate-180]="item.expanded">▼</span>
+          <!-- Action Item (Notifications / Profile) -->
+          <button
+            *ngIf="item.action"
+            type="button"
+            (click)="onNavItemClick(item)"
+            class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors cursor-pointer group"
+            [title]="!isSidebarExpanded ? item.label : ''"
+          >
+            <div class="flex items-center gap-3">
+              <span class="text-base shrink-0 text-center w-5" aria-hidden="true">{{ item.icon }}</span>
+              <span *ngIf="isSidebarExpanded" class="whitespace-nowrap truncate">{{ item.label }}</span>
             </div>
-            
-            <div *ngIf="item.expanded && isSidebarExpanded" class="pl-8 pr-2 mt-1 flex flex-col gap-1">
-              <a *ngFor="let child of item.children" [routerLink]="child.route" routerLinkActive="text-primary font-medium"
-                 class="px-2 py-1.5 rounded-lg text-sm text-[var(--text-muted)] hover:text-white hover:bg-[var(--surface-3)] transition-colors whitespace-nowrap">
+            <span
+              *ngIf="item.action === 'notifications' && unreadCount() > 0 && isSidebarExpanded"
+              class="px-1.5 py-0.2 bg-primary text-white text-[10px] font-bold rounded-full font-mono"
+            >
+              {{ unreadCount() }}
+            </span>
+          </button>
+
+          <!-- Accordion Item (Admin) -->
+          <div *ngIf="item.children" class="flex flex-col">
+            <button
+              type="button"
+              (click)="item.expanded = !item.expanded"
+              class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-3)] hover:text-white transition-colors cursor-pointer"
+              [title]="!isSidebarExpanded ? item.label : ''"
+              [attr.aria-expanded]="item.expanded"
+            >
+              <div class="flex items-center gap-3">
+                <span class="text-base shrink-0 text-center w-5" aria-hidden="true">{{ item.icon }}</span>
+                <span *ngIf="isSidebarExpanded" class="whitespace-nowrap truncate">{{ item.label }}</span>
+              </div>
+              <span *ngIf="isSidebarExpanded" class="text-[10px] transition-transform" [class.rotate-180]="item.expanded">▼</span>
+            </button>
+
+            <div *ngIf="item.expanded && isSidebarExpanded" class="pl-8 pr-1 mt-1 flex flex-col gap-1">
+              <a
+                *ngFor="let child of item.children"
+                [routerLink]="child.route"
+                routerLinkActive="text-primary font-bold bg-[var(--surface-3)]"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-3)] transition-colors whitespace-nowrap"
+              >
                 {{ child.label }}
               </a>
             </div>
@@ -55,41 +107,186 @@
       </ng-container>
     </nav>
 
-    <!-- User Profile Footer -->
-    <div *ngIf="user$ | async as user" class="border-t border-[var(--border)] p-4 flex items-center justify-between">
-      <div class="flex items-center gap-3 overflow-hidden">
-        <div class="w-9 h-9 rounded-full bg-[var(--surface-3)] flex items-center justify-center font-bold text-white flex-shrink-0">
+    <!-- Sidebar User Footer -->
+    <div
+      *ngIf="user$ | async as user"
+      class="border-t border-[var(--border)] p-2.5 bg-[var(--surface-3)] flex items-center justify-between"
+    >
+      <button
+        type="button"
+        (click)="openUserModal()"
+        class="flex items-center gap-2.5 overflow-hidden hover:opacity-85 transition-opacity text-left cursor-pointer flex-1 focus:outline-hidden"
+        title="Ver y editar perfil"
+      >
+        <div class="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center font-bold text-xs text-primary-light shrink-0">
           {{ getInitials(user.name) }}
         </div>
-        <div *ngIf="isSidebarExpanded" class="flex flex-col whitespace-nowrap">
-          <span class="text-sm font-medium text-white truncate max-w-[120px]" [title]="user.name">{{ user.name }}</span>
-          <span class="text-xs text-[var(--primary)]">{{ getRoleLabel(user.role) }}</span>
+        <div *ngIf="isSidebarExpanded" class="flex flex-col min-w-0">
+          <span class="text-xs font-semibold text-white truncate max-w-[120px]">{{ user.name }}</span>
+          <span class="text-[10px] text-primary-light font-mono">{{ getRoleLabel(user.role) }}</span>
         </div>
-      </div>
-      <button *ngIf="isSidebarExpanded" (click)="logout()" class="text-[var(--text-secondary)] hover:text-[var(--danger)]" title="Logout">
-        <span class="w-5 h-5 block text-center">🚪</span>
+      </button>
+
+      <button
+        *ngIf="isSidebarExpanded"
+        type="button"
+        (click)="openUserModal()"
+        class="text-[var(--text-muted)] hover:text-white p-1 rounded-md transition-colors cursor-pointer text-xs"
+        title="Ajustes de cuenta"
+      >
+        ⚙️
       </button>
     </div>
   </aside>
 
-  <!-- Main Content -->
-  <div class="flex-1 flex flex-col overflow-hidden w-full">
-    <!-- Header for mobile -->
-    <header class="md:hidden h-16 bg-[var(--surface-2)] border-b border-[var(--border)] flex items-center justify-between px-4 shrink-0">
-      <button (click)="toggleMobileMenu()" class="text-[var(--text-secondary)] hover:text-white">
-        ☰
-      </button>
-      <span class="font-bold text-white text-lg">ClassForge</span>
-      <div class="w-8"></div> <!-- spacer -->
+  <!-- ═══ MAIN WORKSPACE & HEADER ═══ -->
+  <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+
+    <!-- Global App Header -->
+    <header class="h-14 bg-[var(--surface-2)] border-b border-[var(--border)] flex items-center justify-between px-3 md:px-5 shrink-0 z-30 select-none">
+      
+      <!-- Left: Mobile Brand & Breadcrumbs -->
+      <div class="flex items-center gap-3 min-w-0">
+        <!-- Mobile Logo -->
+        <a routerLink="/dashboard" class="flex items-center gap-2 md:hidden">
+          <div class="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-bold text-white text-xs">
+            CF
+          </div>
+          <span class="font-bold text-white text-sm tracking-tight">ClassForge</span>
+        </a>
+
+        <div class="hidden md:block w-px h-4 bg-[var(--border)]"></div>
+
+        <!-- Breadcrumbs -->
+        <div class="overflow-hidden">
+          <app-breadcrumbs></app-breadcrumbs>
+        </div>
+      </div>
+
+      <!-- Right: Global Actions (Shortcuts, Notifications, User) -->
+      <div class="flex items-center gap-2 shrink-0">
+        <!-- Keyboard shortcuts button -->
+        <button
+          type="button"
+          (click)="openShortcuts()"
+          class="w-8 h-8 rounded-xl bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-[var(--text-secondary)] hover:text-white border border-[var(--border)] flex items-center justify-center text-xs font-mono font-bold transition-colors cursor-pointer"
+          title="Atajos de teclado (?)"
+          aria-label="Atajos de teclado"
+        >
+          ?
+        </button>
+
+        <!-- Notification Bell -->
+        <div class="relative">
+          <button
+            type="button"
+            (click)="toggleNotifications()"
+            class="relative w-8 h-8 rounded-xl bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-[var(--text-secondary)] hover:text-white border border-[var(--border)] flex items-center justify-center text-sm transition-colors cursor-pointer"
+            title="Notificaciones"
+            aria-label="Abrir notificaciones"
+            [attr.aria-expanded]="isNotificationsOpen"
+          >
+            🔔
+            <span
+              *ngIf="unreadCount() > 0"
+              class="absolute -top-1 -right-1 w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center font-mono border-2 border-[var(--surface-2)] shadow-xs"
+            >
+              {{ unreadCount() > 9 ? '9+' : unreadCount() }}
+            </span>
+          </button>
+
+          <!-- Notifications Floating Popover -->
+          <div
+            *ngIf="isNotificationsOpen"
+            class="absolute right-0 top-11 z-50 animate-in fade-in slide-in-from-top-2 duration-150 shadow-2xl"
+          >
+            <app-notifications-panel (close)="isNotificationsOpen = false"></app-notifications-panel>
+          </div>
+        </div>
+
+        <!-- User Profile Trigger -->
+        <button
+          *ngIf="user$ | async as user"
+          type="button"
+          (click)="openUserModal()"
+          class="flex items-center gap-2 p-1 rounded-xl hover:bg-[var(--surface-3)] transition-colors cursor-pointer focus:outline-hidden"
+          title="Mi cuenta"
+          aria-label="Menú de usuario"
+        >
+          <div class="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center font-bold text-xs text-primary-light">
+            {{ getInitials(user.name) }}
+          </div>
+          <span class="hidden lg:inline text-xs font-medium text-white max-w-[100px] truncate">
+            {{ user.name }}
+          </span>
+        </button>
+      </div>
     </header>
 
-    <!-- Main Router Outlet -->
-    <main class="flex-1 overflow-hidden bg-[var(--surface-1)]">
+    <!-- Main Content Outlet -->
+    <main id="main-content" class="flex-1 overflow-y-auto bg-[var(--surface-1)] pb-16 md:pb-0" tabindex="-1">
       <router-outlet></router-outlet>
     </main>
+
+    <!-- ═══ MOBILE BOTTOM NAVIGATION BAR (Visible on screens < md) ═══ -->
+    <nav
+      class="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[var(--surface-2)]/95 backdrop-blur-md border-t border-[var(--border)] flex items-center justify-around px-2 z-40 select-none shadow-2xl"
+      aria-label="Navegación móvil"
+    >
+      <a
+        routerLink="/dashboard"
+        routerLinkActive="text-primary font-bold"
+        class="flex flex-col items-center justify-center text-[10px] text-[var(--text-secondary)] hover:text-white py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <span class="text-base" aria-hidden="true">🏠</span>
+        <span>Inicio</span>
+      </a>
+
+      <a
+        routerLink="/projects"
+        routerLinkActive="text-primary font-bold"
+        class="flex flex-col items-center justify-center text-[10px] text-[var(--text-secondary)] hover:text-white py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <span class="text-base" aria-hidden="true">📁</span>
+        <span>Proyectos</span>
+      </a>
+
+      <a
+        routerLink="/diagrams"
+        routerLinkActive="text-primary font-bold"
+        class="flex flex-col items-center justify-center text-[10px] text-[var(--text-secondary)] hover:text-white py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <span class="text-base" aria-hidden="true">📊</span>
+        <span>Diagramas</span>
+      </a>
+
+      <a
+        routerLink="/projects/teams"
+        routerLinkActive="text-primary font-bold"
+        class="flex flex-col items-center justify-center text-[10px] text-[var(--text-secondary)] hover:text-white py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <span class="text-base" aria-hidden="true">👥</span>
+        <span>Equipos</span>
+      </a>
+
+      <button
+        type="button"
+        (click)="openUserModal()"
+        class="flex flex-col items-center justify-center text-[10px] text-[var(--text-secondary)] hover:text-white py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <span class="text-base" aria-hidden="true">👤</span>
+        <span>Perfil</span>
+      </button>
+    </nav>
   </div>
 
-  <!-- Fase 9: Asistente de Soporte en Tiempo Real y Spotlight Tour Overlay (Estilo Canva) -->
+  <!-- ═══ MODALS & OVERLAYS ═══ -->
+  <app-toast-container></app-toast-container>
+  <app-confirm-dialog></app-confirm-dialog>
+  <app-session-expired-modal></app-session-expired-modal>
+  <app-user-menu-modal *ngIf="isUserModalOpen" (close)="isUserModalOpen = false"></app-user-menu-modal>
+  <app-shortcuts-dialog *ngIf="isShortcutsOpen" (close)="isShortcutsOpen = false"></app-shortcuts-dialog>
   <app-tour-overlay></app-tour-overlay>
   <app-support-assistant></app-support-assistant>
+
 </div>

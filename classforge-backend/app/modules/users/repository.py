@@ -7,8 +7,8 @@ class UserRepository:
     """Repository for managing users and audit logs in MongoDB."""
 
     def __init__(self, db: Any):
-        self.collection = db["users"]
-        self.audit = db["audit_logs"]
+        self.collection = db["users"] if db is not None else None
+        self.audit = db["audit_logs"] if db is not None else None
 
     async def get_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Finds an active user by their email address."""
@@ -16,6 +16,8 @@ class UserRepository:
 
     async def get_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Finds an active user by their string ObjectId."""
+        if not user_id or not ObjectId.is_valid(str(user_id)):
+            return None
         return await self.collection.find_one({"_id": ObjectId(user_id), "is_deleted": False})
 
     async def create(self, user_data: dict) -> str:
@@ -44,10 +46,14 @@ class UserRepository:
             {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
         )
 
-    async def get_all(self) -> List[Dict[str, Any]]:
+    async def get_all(self, skip: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
         """Retrieves active users list."""
-        cursor = self.collection.find({"is_deleted": False})
-        return await cursor.to_list(length=100)
+        cursor = self.collection.find({"is_deleted": False}).skip(skip).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def count_all(self) -> int:
+        """Count active users."""
+        return await self.collection.count_documents({"is_deleted": False})
 
     async def update_last_activity(self, user_id: str) -> None:
         """Updates last_activity timestamp for session tracking."""

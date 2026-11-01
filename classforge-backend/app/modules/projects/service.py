@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from bson import ObjectId
-from fastapi import HTTPException
 
+from app.core.authz import can_access_project
+from app.core.errors import ForbiddenError, NotFoundError
 from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.schemas import ProjectCreate, ProjectStatusUpdate, ProjectUpdate
 from app.modules.teams.repository import TeamRepository
@@ -64,22 +65,14 @@ class ProjectService:
     async def get_project(self, project_id: str, current_user: dict):
         project = await self.repo.get_by_id(project_id)
         if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise NotFoundError("Project not found")
         
-        # Access control
-        user_id = str(current_user["_id"])
-        role = current_user.get("role")
-        if role != "admin" and str(project["owner_id"]) != user_id:
-            if project["team_id"]:
-                team = await self.team_repo.get_by_id(str(project["team_id"]))
-                if not team:
-                    raise HTTPException(status_code=403, detail="Access denied")
-                if role == "scrum_master" and str(team["scrum_master_id"]) != user_id:
-                    raise HTTPException(status_code=403, detail="Access denied")
-                if role == "dev" and ObjectId(user_id) not in team["member_ids"]:
-                    raise HTTPException(status_code=403, detail="Access denied")
-            else:
-                raise HTTPException(status_code=403, detail="Access denied")
+        team = None
+        if project.get("team_id"):
+            team = await self.team_repo.get_by_id(str(project["team_id"]))
+            
+        if not can_access_project(current_user, project, team):
+            raise ForbiddenError("Access denied")
                 
         return project
 
@@ -89,7 +82,7 @@ class ProjectService:
         role = current_user.get("role")
         user_id = str(current_user["_id"])
         if role not in ["admin", "scrum_master"] and str(project["owner_id"]) != user_id:
-            raise HTTPException(status_code=403, detail="Permission denied to update project")
+            raise ForbiddenError("Permission denied to update project")
             
         update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
         if update_dict:
@@ -112,6 +105,6 @@ class ProjectService:
     async def delete_project(self, project_id: str, admin_id: str):
         success = await self.repo.soft_delete(project_id)
         if not success:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise NotFoundError("Project not found")
         await self.user_repo.log_audit(admin_id, "PROJECT_DELETED", f"Deleted project {project_id}")
         return True

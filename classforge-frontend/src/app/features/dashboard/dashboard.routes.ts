@@ -4,6 +4,7 @@ import { DashboardComponent } from './dashboard.component';
 export const DASHBOARD_ROUTES: Routes = [
   {
     path: '',
-    component: DashboardComponent
+    component: DashboardComponent,
+    data: { breadcrumb: 'Inicio' }
   }
 ];

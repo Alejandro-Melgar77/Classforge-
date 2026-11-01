@@ -305,7 +305,7 @@ class OfflineNluService {
   }
 
   String _removeAccents(String str) {
-    return str
+    String clean = str
         .replaceAll('á', 'a')
         .replaceAll('é', 'e')
         .replaceAll('í', 'i')
@@ -319,6 +319,10 @@ class OfflineNluService {
         .replaceAll('ñ', 'n')
         .replaceAll('Ñ', 'N')
         .trim();
+    clean = clean.replaceAll(RegExp(r'\bclses?\b', caseSensitive: false), 'clase');
+    clean = clean.replaceAll(RegExp(r'\bclaes?\b', caseSensitive: false), 'clase');
+    clean = clean.replaceAll(RegExp(r'\batribtos?\b', caseSensitive: false), 'atributos');
+    return clean;
   }
 
   String _capitalize(String str) {

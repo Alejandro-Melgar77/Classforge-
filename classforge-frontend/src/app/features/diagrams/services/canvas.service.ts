@@ -9,7 +9,6 @@ import { Transform } from '@antv/x6-plugin-transform';
 import { Keyboard } from '@antv/x6-plugin-keyboard';
 import { Clipboard } from '@antv/x6-plugin-clipboard';
 import { Export } from '@antv/x6-plugin-export';
-import { jsPDF } from 'jspdf';
 import { registerUMLNodesAndEdges, applyUMLNodeAttrs, calculateNodeHeight, setUMLNodeTheme } from '../nodes/uml-nodes';
 import { GraphData, NodeType, UMLNodeData, DiagramNode, DiagramEdge, EdgeType } from '../models/diagram.model';
 
@@ -625,6 +624,7 @@ export class CanvasService {
   }
 
   async exportPdf(diagramName: string): Promise<void> {
+    const { jsPDF } = await import('jspdf');
     return new Promise((resolve) => {
       (this.graph as any)?.toPNG?.((dataUrl: string) => {
         const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1920, 1080] });

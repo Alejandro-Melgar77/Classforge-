@@ -3,11 +3,13 @@ import { Subject, Observable, Subscription } from 'rxjs';
 import { DiagramService } from '../../services/diagram.service';
 import { Collaborator, WsMessage, ChatMessage } from '../models/collaboration.model';
 import { environment } from '../../../../../environments/environment';
+import { ToastService } from '../../../../core/services/toast.service';
 
 @Injectable({ providedIn: 'root' })
 export class CollaborationService implements OnDestroy {
   private diagramService = inject(DiagramService);
-  
+  private toastService = inject(ToastService);
+
   private ws: WebSocket | null = null;
   private tokenSub: Subscription | null = null;
   private diagramId: string | null = null;
@@ -16,30 +18,49 @@ export class CollaborationService implements OnDestroy {
   public lockedElements = signal<Map<string, string>>(new Map());
   public connectionStatus = signal<'connected' | 'connecting' | 'disconnected'>('disconnected');
   public remoteCursors = signal<Map<string, { x: number; y: number; name: string; color: string }>>(new Map());
-  
+
   public chatMessages = signal<ChatMessage[]>([]);
   public myPresenceStatus = signal<'online' | 'away' | 'busy'>('online');
 
   private remoteOperationsSubj = new Subject<WsMessage>();
   public remoteOperations$: Observable<WsMessage> = this.remoteOperationsSubj.asObservable();
 
+  private opRejectedSubj = new Subject<{ element_id: string; reason: string }>();
+  public opRejected$: Observable<{ element_id: string; reason: string }> = this.opRejectedSubj.asObservable();
+
+  private aiFocusSubj = new Subject<{ element_ids: string[]; role?: string }>();
+  public aiFocus$: Observable<{ element_ids: string[]; role?: string }> = this.aiFocusSubj.asObservable();
+
   private reconnectAttempts = 0;
   private maxReconnects = 5;
+  private reconnectTimer: any = null;
   private lastCursorSend = 0;
   private pingInterval: ReturnType<typeof setInterval> | undefined = undefined;
 
+  // Cola local de operaciones pendientes mientras WS no esté conectado
+  private offlineQueue: any[] = [];
+
   connect(diagramId: string): void {
+    if (this.diagramId === diagramId && (this.ws?.readyState === WebSocket.OPEN || this.connectionStatus() === 'connecting')) {
+      return;
+    }
+
+    this.disconnect();
     this.diagramId = diagramId;
     this.connectionStatus.set('connecting');
+
     this.tokenSub = this.diagramService.getWsToken(diagramId).subscribe({
       next: (res) => {
         if (res.success && res.data) {
           this.initWebSocket(res.data.token);
         } else {
           this.connectionStatus.set('disconnected');
+          this.toastService.warning('No se pudo autenticar la conexión de colaboración en tiempo real');
         }
       },
-      error: () => this.connectionStatus.set('disconnected')
+      error: () => {
+        this.connectionStatus.set('disconnected');
+      }
     });
   }
 
@@ -52,20 +73,35 @@ export class CollaborationService implements OnDestroy {
       wsBase = `${protocol}//${window.location.host}${environment.apiUrl}`;
     }
     const url = `${wsBase}/ws/diagrams/${this.diagramId}?token=${token}`;
-    this.ws = new WebSocket(url);
+
+    try {
+      this.ws = new WebSocket(url);
+    } catch (e) {
+      console.error('Error inicializando WebSocket:', e);
+      this.connectionStatus.set('disconnected');
+      return;
+    }
 
     this.ws.onopen = () => {
       this.connectionStatus.set('connected');
       this.reconnectAttempts = 0;
-      // Send handshake JOIN message
-      this.sendRaw({ type: 'JOIN' });
-      // Restore my presence on reconnect
+
+      // 1. Handshake JOIN
+      this.sendDirect({ type: 'JOIN' });
+      // 2. Restaurar presencia
       this.setPresenceStatus(this.myPresenceStatus());
-      
-      // Keepalive ping every 30s
+
+      // 3. Reenviar cola offline ordenada
+      if (this.offlineQueue.length > 0) {
+        const queueCopy = [...this.offlineQueue];
+        this.offlineQueue = [];
+        queueCopy.forEach(msg => this.sendDirect(msg));
+      }
+
+      // 4. Ping keepalive cada 30s
       clearInterval(this.pingInterval);
       this.pingInterval = setInterval(() => {
-        this.sendRaw({ type: 'PING' });
+        this.sendDirect({ type: 'PING' });
       }, 30000);
     };
 
@@ -74,7 +110,7 @@ export class CollaborationService implements OnDestroy {
         const msg = JSON.parse(event.data);
         this.handleMessage(msg);
       } catch (e) {
-        console.error('WebSocket parse error:', e);
+        console.error('Error procesando mensaje WebSocket:', e);
       }
     };
 
@@ -93,7 +129,12 @@ export class CollaborationService implements OnDestroy {
     if (this.reconnectAttempts < this.maxReconnects && this.diagramId) {
       this.reconnectAttempts++;
       const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
-      setTimeout(() => this.connect(this.diagramId!), delay);
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = setTimeout(() => {
+        if (this.diagramId) {
+          this.connect(this.diagramId);
+        }
+      }, delay);
     }
   }
 
@@ -142,7 +183,7 @@ export class CollaborationService implements OnDestroy {
         });
         break;
       }
-      
+
       case 'USER_PRESENCE_UPDATED': {
         this.connectedUsers.update(users => {
           return users.map(u => {
@@ -154,7 +195,7 @@ export class CollaborationService implements OnDestroy {
         });
         break;
       }
-      
+
       case 'CHAT_MESSAGE': {
         this.chatMessages.update(msgs => {
           const newMsg: ChatMessage = {
@@ -201,6 +242,28 @@ export class CollaborationService implements OnDestroy {
         break;
       }
 
+      case 'LOCK_REJECTED': {
+        const owner = this.getLockOwner(msg.element_id);
+        const ownerName = owner ? owner.name : 'otro usuario';
+        this.toastService.info(`El elemento ya está siendo editado por ${ownerName}.`);
+        break;
+      }
+
+      case 'OP_REJECTED': {
+        const elementId = msg.element_id || msg.payload?.element_id || '';
+        const reason = msg.reason || msg.payload?.reason || 'locked';
+        this.toastService.warning('Operación rechazada: el elemento está bloqueado por otro usuario.');
+        this.opRejectedSubj.next({ element_id: elementId, reason });
+        break;
+      }
+
+      case 'AI_FOCUS': {
+        const elementIds = msg.element_ids || msg.payload?.element_ids || [];
+        const role = msg.role || msg.payload?.role;
+        this.aiFocusSubj.next({ element_ids: elementIds, role });
+        break;
+      }
+
       case 'NODE_OPERATION':
       case 'EDGE_OPERATION': {
         this.remoteOperationsSubj.next(msg);
@@ -218,58 +281,117 @@ export class CollaborationService implements OnDestroy {
     }
   }
 
+  getLockOwner(elementId: string): Collaborator | undefined {
+    const userId = this.lockedElements().get(elementId);
+    if (!userId) return undefined;
+    return this.connectedUsers().find(u => u.user_id === userId);
+  }
+
   sendCursor(x: number, y: number): void {
     const now = Date.now();
     if (now - this.lastCursorSend < 50) return; // throttle 50ms
     this.lastCursorSend = now;
-    this.sendRaw({ type: 'CURSOR_MOVE', x, y });
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendDirect({ type: 'CURSOR_MOVE', x, y });
+    }
   }
 
   sendNodeOperation(op: 'add' | 'update' | 'move' | 'delete', nodeId: string, data: any): void {
-    this.sendRaw({ type: 'NODE_OPERATION', op, node_id: nodeId, data });
+    this.sendWithOfflineQueue({ type: 'NODE_OPERATION', op, node_id: nodeId, data });
   }
 
   sendEdgeOperation(op: 'add' | 'update' | 'delete', edgeId: string, data: any): void {
-    this.sendRaw({ type: 'EDGE_OPERATION', op, edge_id: edgeId, data });
+    this.sendWithOfflineQueue({ type: 'EDGE_OPERATION', op, edge_id: edgeId, data });
   }
 
   acquireLock(elementId: string): void {
-    this.sendRaw({ type: 'LOCK_ACQUIRE', element_id: elementId });
+    this.sendWithOfflineQueue({ type: 'LOCK_ACQUIRE', element_id: elementId });
   }
 
   releaseLock(elementId: string): void {
-    this.sendRaw({ type: 'LOCK_RELEASE', element_id: elementId });
-  }
-  
-  sendChatMessage(content: string): void {
-    this.sendRaw({ type: 'CHAT_MESSAGE', content });
-  }
-  
-  setPresenceStatus(status: 'online' | 'away' | 'busy'): void {
-    this.myPresenceStatus.set(status);
-    this.sendRaw({ type: 'PRESENCE_STATUS', status });
+    this.sendWithOfflineQueue({ type: 'LOCK_RELEASE', element_id: elementId });
   }
 
-  private sendRaw(data: any): void {
+  sendChatMessage(content: string): void {
+    this.sendWithOfflineQueue({ type: 'CHAT_MESSAGE', content });
+  }
+
+  setPresenceStatus(status: 'online' | 'away' | 'busy'): void {
+    this.myPresenceStatus.set(status);
+    this.sendDirect({ type: 'PRESENCE_STATUS', status });
+  }
+
+  private sendWithOfflineQueue(data: any): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendDirect(data);
+    } else {
+      // Guardar en cola local para enviar inmediatamente al reconectar
+      this.offlineQueue.push(data);
+    }
+  }
+
+  private sendDirect(data: any): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
   }
 
+  /**
+   * Agrega o remueve el miembro virtual de la IA en la barra de presencia (P5)
+   */
+  setAiMemberPresence(isActive: boolean, role: string = 'architect'): void {
+    const aiId = `ai:${role}`;
+    this.connectedUsers.update(users => {
+      const filtered = users.filter(u => !u.is_ai);
+      if (!isActive) return filtered;
+
+      const roleLabels: Record<string, string> = {
+        architect: 'Arquitecto IA',
+        qa: 'QA Linter IA',
+        tech_lead: 'Tech Lead IA',
+        mentor: 'Mentor IA',
+        dba: 'DBA IA',
+        security: 'Security IA'
+      };
+
+      const aiMember: Collaborator = {
+        user_id: aiId,
+        name: roleLabels[role] || 'Asistente IA',
+        role: role,
+        color: '#8B5CF6',
+        status: 'online',
+        is_ai: true,
+        ai_role: role
+      };
+      return [...filtered, aiMember];
+    });
+  }
+
   disconnect(): void {
     clearInterval(this.pingInterval);
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+
     if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
       this.ws.close();
       this.ws = null;
     }
     if (this.tokenSub) {
       this.tokenSub.unsubscribe();
+      this.tokenSub = null;
     }
     this.connectionStatus.set('disconnected');
     this.diagramId = null;
+    this.lockedElements.set(new Map());
+    this.remoteCursors.set(new Map());
   }
 
   ngOnDestroy(): void {
     this.disconnect();
+    this.remoteOperationsSubj.complete();
+    this.opRejectedSubj.complete();
+    this.aiFocusSubj.complete();
   }
 }

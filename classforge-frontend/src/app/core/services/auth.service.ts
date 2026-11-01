@@ -5,6 +5,7 @@ import { BehaviorSubject, Observable, tap, catchError, throwError } from 'rxjs';
 import { User, UserRole } from '../models/user.model';
 import { AuthResponse, AuthResponseData } from '../models/api-response.model';
 import { Router } from '@angular/router';
+import { SessionStateService } from './session-state.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +13,7 @@ import { Router } from '@angular/router';
 export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private sessionState = inject(SessionStateService);
   private apiUrl = `${environment.apiUrl}/auth`;
 
   private currentUserSubject = new BehaviorSubject<User | null>(null);
@@ -74,6 +76,27 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/logout-all`, {});
   }
 
+  updateProfile(data: { name?: string; avatar_url?: string }): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/profile`, data).pipe(
+      tap(res => {
+        if (res.success && res.data) {
+          const user = res.data;
+          sessionStorage.setItem('cf_user', JSON.stringify(user));
+          localStorage.setItem('cf_user', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
+      })
+    );
+  }
+
+  changePassword(data: { old_password: string; new_password: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/change-password`, data);
+  }
+
+  getSessions(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/sessions`);
+  }
+
   /**
    * Exchange a refresh token for a new access token.
    * Implements token rotation: the old refresh token is invalidated and a new
@@ -83,6 +106,7 @@ export class AuthService {
     const refreshToken = sessionStorage.getItem('cf_refresh_token') || localStorage.getItem('cf_refresh_token');
     if (!refreshToken) {
       this.clearAuthData();
+      this.sessionState.handleSessionExpired();
       return throwError(() => new Error('No refresh token available'));
     }
     return this.http.post<AuthResponse>(`${this.apiUrl}/refresh`, { refresh_token: refreshToken }).pipe(
@@ -93,7 +117,7 @@ export class AuthService {
       }),
       catchError(err => {
         this.clearAuthData();
-        this.router.navigate(['/auth/login']);
+        this.sessionState.handleSessionExpired();
         return throwError(() => err);
       })
     );

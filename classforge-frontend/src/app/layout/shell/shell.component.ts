@@ -1,32 +1,58 @@
-import { Component, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { InactivityService } from '../../core/services/inactivity.service';
+import { NotificationService } from '../../core/services/notification.service';
+import { BreadcrumbService } from '../../core/services/breadcrumb.service';
 import { UserRole } from '../../core/models/user.model';
 
-export interface NavItem {
+import { BreadcrumbsComponent } from '../../shared/components/breadcrumbs/breadcrumbs.component';
+import { ToastContainerComponent } from '../../shared/components/toast-container/toast-container.component';
+import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { SessionExpiredModalComponent } from '../../shared/components/session-expired-modal/session-expired-modal.component';
+import { UserMenuModalComponent } from './user-menu-modal/user-menu-modal.component';
+import { ShortcutsDialogComponent } from './shortcuts-dialog/shortcuts-dialog.component';
+import { NotificationsPanelComponent } from './notifications-panel/notifications-panel.component';
+import { TourOverlayComponent } from '../../features/support/components/tour-overlay/tour-overlay.component';
+import { SupportAssistantComponent } from '../../features/support/components/support-assistant/support-assistant.component';
+
+export interface ShellNavItem {
   icon: string;
   label: string;
   route?: string;
-  children?: NavItem[];
+  action?: 'notifications' | 'profile';
+  children?: ShellNavItem[];
   roles?: UserRole[];
   expanded?: boolean;
 }
 
-import { TourOverlayComponent } from '../../features/support/components/tour-overlay/tour-overlay.component';
-import { SupportAssistantComponent } from '../../features/support/components/support-assistant/support-assistant.component';
-
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, TourOverlayComponent, SupportAssistantComponent],
+  imports: [
+    CommonModule,
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    BreadcrumbsComponent,
+    ToastContainerComponent,
+    ConfirmDialogComponent,
+    SessionExpiredModalComponent,
+    UserMenuModalComponent,
+    ShortcutsDialogComponent,
+    NotificationsPanelComponent,
+    TourOverlayComponent,
+    SupportAssistantComponent
+  ],
   templateUrl: './shell.component.html'
 })
 export class ShellComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private inactivityService = inject(InactivityService);
+  private notificationService = inject(NotificationService);
+  private breadcrumbService = inject(BreadcrumbService);
   private router = inject(Router);
   private routerSub: Subscription | null = null;
 
@@ -35,47 +61,83 @@ export class ShellComponent implements OnInit, OnDestroy {
   isMobileOpen = false;
   isFullscreenMode = false;
 
-  navItems: NavItem[] = [
-    { icon: 'home', label: 'Dashboard', route: '/dashboard' },
+  isNotificationsOpen = false;
+  isUserModalOpen = false;
+  isShortcutsOpen = false;
+
+  unreadCount = this.notificationService.unreadCount;
+
+  navItems: ShellNavItem[] = [
+    { icon: '🏠', label: 'Inicio', route: '/dashboard' },
+    { icon: '📁', label: 'Proyectos', route: '/projects' },
+    { icon: '📊', label: 'Diagramas', route: '/diagrams' },
+    { icon: '👥', label: 'Mis Equipos', route: '/projects/teams' },
+    { icon: '🔔', label: 'Notificaciones', action: 'notifications' },
+    { icon: '👤', label: 'Perfil', action: 'profile' },
     {
-      icon: 'folder',
-      label: 'Repertorio',
-      expanded: false,
-      children: [
-        { icon: 'folder-open', label: 'Mis Proyectos', route: '/projects/mine' },
-        { icon: 'users', label: 'Equipos', route: '/projects/teams' }
-      ]
-    },
-    { icon: 'layout', label: 'Diagramas', route: '/diagrams' },
-    {
-      icon: 'settings',
+      icon: '🛡️',
       label: 'Administración',
       roles: ['admin'],
       expanded: false,
       children: [
-        { icon: 'user', label: 'Usuarios', route: '/admin/users' },
-        { icon: 'users', label: 'Equipos', route: '/admin/teams' },
-        { icon: 'sliders', label: 'Configuración', route: '/admin/config' }
+        { icon: '👤', label: 'Usuarios', route: '/admin/users' },
+        { icon: '👥', label: 'Equipos', route: '/admin/teams' },
+        { icon: '⚙️', label: 'Configuración', route: '/admin/config' }
       ]
     }
   ];
 
-  ngOnInit() {
+  @HostListener('window:keydown', ['$event'])
+  handleGlobalShortcuts(event: KeyboardEvent): void {
+    if (event.key === '?' && !this.isInputElement(event.target)) {
+      event.preventDefault();
+      this.isShortcutsOpen = !this.isShortcutsOpen;
+      return;
+    }
+    if (event.key === 'Escape') {
+      if (this.isShortcutsOpen) { this.isShortcutsOpen = false; return; }
+      if (this.isNotificationsOpen) { this.isNotificationsOpen = false; return; }
+      if (this.isUserModalOpen) { this.isUserModalOpen = false; return; }
+    }
+    if (event.altKey && !event.ctrlKey && !event.shiftKey) {
+      if (event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        this.router.navigate(['/dashboard']);
+      } else if (event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        this.router.navigate(['/projects']);
+      } else if (event.key.toLowerCase() === 'u') {
+        event.preventDefault();
+        this.router.navigate(['/diagrams']);
+      }
+    }
+  }
+
+  private isInputElement(target: EventTarget | null): boolean {
+    if (!target) return false;
+    const el = target as HTMLElement;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+  }
+
+  ngOnInit(): void {
     this.checkFullscreenMode(this.router.url);
 
     this.routerSub = this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd)
     ).subscribe(event => {
       this.checkFullscreenMode(event.urlAfterRedirects || event.url);
+      this.isMobileOpen = false;
+      this.isNotificationsOpen = false;
     });
+
+    this.notificationService.loadNotifications().subscribe();
   }
 
-  ngOnDestroy() {
+  ngOnDestroy(): void {
     this.routerSub?.unsubscribe();
   }
 
-  private checkFullscreenMode(url: string) {
-    // Auto-collapse sidebar when editing a specific diagram (/diagrams/:id)
+  private checkFullscreenMode(url: string): void {
     const isDiagramEditor = /\/diagrams\/[a-f0-9]+/.test(url);
     this.isFullscreenMode = isDiagramEditor;
     if (isDiagramEditor) {
@@ -83,19 +145,35 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
   }
 
-  logout() {
-    this.authService.logout();
+  onNavItemClick(item: ShellNavItem): void {
+    if (item.action === 'notifications') {
+      this.isNotificationsOpen = !this.isNotificationsOpen;
+    } else if (item.action === 'profile') {
+      this.isUserModalOpen = true;
+    }
   }
 
-  toggleSidebar() {
+  toggleSidebar(): void {
     this.isSidebarExpanded = !this.isSidebarExpanded;
   }
 
-  toggleMobileMenu() {
+  toggleMobileMenu(): void {
     this.isMobileOpen = !this.isMobileOpen;
   }
 
-  isMenuItemVisible(item: NavItem): boolean {
+  toggleNotifications(): void {
+    this.isNotificationsOpen = !this.isNotificationsOpen;
+  }
+
+  openUserModal(): void {
+    this.isUserModalOpen = true;
+  }
+
+  openShortcuts(): void {
+    this.isShortcutsOpen = true;
+  }
+
+  isMenuItemVisible(item: ShellNavItem): boolean {
     if (!item.roles || item.roles.length === 0) {
       return true;
     }
@@ -103,15 +181,15 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   getInitials(name: string): string {
-    if (!name) return '';
+    if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   }
 
   getRoleLabel(role: string): string {
     const labels: Record<string, string> = {
-      'admin': 'Administrador',
+      'admin': 'Admin',
       'scrum_master': 'Scrum Master',
-      'dev': 'Desarrollador'
+      'dev': 'Dev'
     };
     return labels[role] || role;
   }
