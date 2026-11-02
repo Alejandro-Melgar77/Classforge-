@@ -48,8 +48,8 @@ class AiChatService:
         self.state_repo = AiProjectStateRepository(db)
         self.task_repo = AiTaskRepository(db)
         self.digest_service = ProjectDigestService(db)
-        from app.ai_team.application.triggers import TriggersManager
-        self.triggers = TriggersManager(db)
+        from app.ai_team.application.triggers import get_triggers
+        self.triggers = get_triggers(db)
 
     async def send_message_with_role(
         self,
@@ -159,19 +159,9 @@ class AiChatService:
                 model=request.model,
             )
 
-            # 2. Fire and forget in-process processing
-            asyncio.create_task(
-                self._process_ai_response(
-                    ai_msg_id=saved_ai_msg["id"],
-                    project_id=project_id,
-                    role_def=role_def,
-                    user_id=user_id,
-                    trigger_text=content_text,
-                    diagram_id=request.diagram_id,
-                    api_key=request.api_key,
-                    model=request.model,
-                )
-            )
+            # 2. Single execution path: the durable job above is the only owner
+            # of the answer. Running it in-process as well doubled every LLM call
+            # and produced concurrent writes to the same message document.
 
         return AiSendMessageResponse(
             message=saved_user_msg,
@@ -404,8 +394,8 @@ class AiChatService:
             origin="human",
         )
 
-        # Launch in-process execution
-        asyncio.create_task(self._run_task_background(task_id, project_id))
+        # The durable `run_task` job enqueued above is the only execution owner;
+        # launching it in-process too caused every task to run twice.
 
         return {
             "task_id": task_id,

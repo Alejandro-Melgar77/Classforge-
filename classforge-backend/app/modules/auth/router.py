@@ -11,6 +11,7 @@ from app.modules.auth.schemas import (
     ChangePasswordRequest,
     UpdateProfileRequest,
     UserPublic,
+    SessionPublic,
 )
 from app.modules.auth.repository import SessionRepository
 from app.modules.users.repository import UserRepository
@@ -91,28 +92,45 @@ async def refresh(data: RefreshRequest, session_repo: SessionRepository = Depend
         session_expires = session_expires.replace(tzinfo=timezone.utc)
     if session_expires < now:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-    
-    await session_repo.invalidate_session(str(session["_id"]))
-    
+
     user_id = str(session["user_id"])
+    user = await user_repo.get_by_id(user_id)
+
+    # Refresh must not resurrect a disabled/deleted account nor bypass the
+    # inactivity timeout that get_current_user enforces on every other route.
+    if not user or user.get("is_deleted", False) or not user.get("is_active", True):
+        await session_repo.invalidate_session(str(session["_id"]))
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    last_activity = user.get("last_activity")
+    if last_activity is not None:
+        if isinstance(last_activity, str):
+            last_activity = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=timezone.utc)
+        if now - last_activity > timedelta(minutes=settings.INACTIVITY_TIMEOUT_MINUTES):
+            await session_repo.invalidate_session(str(session["_id"]))
+            raise HTTPException(status_code=401, detail="Session expired due to inactivity")
+
+    await session_repo.invalidate_session(str(session["_id"]))
+
     new_refresh = generate_refresh_token()
     new_hash = hash_refresh_token(new_refresh)
     
     expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     new_session_id = await session_repo.create_session(user_id, new_hash, session["device_info"], session["ip_address"], expires_at)
     access_token = create_access_token(subject=user_id, sid=new_session_id)
-    
-    user = await user_repo.get_by_id(user_id)
-    user_profile = None
-    if user:
-        user_profile = {
-            "id": str(user["_id"]),
-            "name": user.get("name", "Usuario"),
-            "email": user.get("email"),
-            "role": user.get("role", "dev"),
-            "avatar_url": user.get("avatar_url"),
-            "team_ids": [str(tid) for tid in user.get("team_ids", [])]
-        }
+
+    await user_repo.update_last_activity(user_id)
+
+    user_profile = {
+        "id": str(user["_id"]),
+        "name": user.get("name", "Usuario"),
+        "email": user.get("email"),
+        "role": user.get("role", "dev"),
+        "avatar_url": user.get("avatar_url"),
+        "team_ids": [str(tid) for tid in user.get("team_ids", [])]
+    }
     
     token_data = TokenResponse(access_token=access_token, refresh_token=new_refresh, user=user_profile)
     return StandardResponse(success=True, message="Token refreshed", data=token_data.model_dump())
@@ -150,13 +168,25 @@ async def get_me(current_user = Depends(get_current_user)):
     return StandardResponse(success=True, message="User profile", data=user_public.model_dump())
 
 @router.get("/sessions", response_model=StandardResponse)
-async def get_sessions(current_user = Depends(get_current_user), session_repo: SessionRepository = Depends(get_session_repo)):
+async def get_sessions(
+    request: Request,
+    current_user = Depends(get_current_user),
+    session_repo: SessionRepository = Depends(get_session_repo)
+):
     sessions = await session_repo.get_user_sessions(str(current_user["_id"]))
+    current_sid = getattr(request.state, "sid", None)
     sess_list = []
     for s in sessions:
-        s["id"] = str(s.pop("_id"))
-        s["user_id"] = str(s["user_id"])
-        sess_list.append(s)
+        sess_list.append(SessionPublic(
+            id=str(s["_id"]),
+            device_info=s.get("device_info"),
+            ip_address=s.get("ip_address"),
+            created_at=s.get("created_at"),
+            last_used=s.get("last_used"),
+            expires_at=s.get("expires_at"),
+            is_active=s.get("is_active", True),
+            current=bool(current_sid) and str(s["_id"]) == str(current_sid),
+        ).model_dump())
     return StandardResponse(success=True, message="Active sessions", data=sess_list)
 
 
@@ -165,18 +195,21 @@ async def change_password(
     data: ChangePasswordRequest,
     request: Request,
     current_user = Depends(get_current_user),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    session_repo: SessionRepository = Depends(get_session_repo)
 ):
     user_id = str(current_user["_id"])
     user = await user_repo.get_by_id(user_id)
     if not user or not verify_password(data.old_password, user.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
-
     new_hash = get_password_hash(data.new_password)
     await user_repo.update(user_id, {"password_hash": new_hash})
+
+    # Rotate credentials everywhere: keep only the session that made the change.
+    current_sid = getattr(request.state, "sid", None)
+    await session_repo.invalidate_all_except(user_id, current_sid)
+
     await user_repo.log_audit(user_id, "CHANGE_PASSWORD", "users", user_id, ip=request.client.host)
     return StandardResponse(success=True, message="Contraseña actualizada exitosamente")
 

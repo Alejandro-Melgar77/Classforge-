@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from bson import ObjectId
 
+from app.core.errors import NotFoundError
 from app.modules.ai_chat.domain.models import AiMessage
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,21 @@ class AiMessageRepository:
     ) -> Optional[dict]:
         """Sets status ('applied' | 'dismissed') for a specific proposal inside a message."""
         try:
+            message = await self.find_by_id(message_id)
+            if not message:
+                return None
+
+            # Writing proposal_state for an id that does not exist used to answer
+            # 200 with a phantom audit entry.
+            proposals = message.get("proposals") or []
+            proposal_ids = {
+                str(p.get("id"))
+                for p in proposals
+                if isinstance(p, dict) and p.get("id") is not None
+            }
+            if str(proposal_id) not in proposal_ids:
+                raise NotFoundError(f"Propuesta {proposal_id} no encontrada en el mensaje")
+
             now = datetime.now(timezone.utc)
             state_record = {
                 "status": status,
@@ -168,6 +184,8 @@ class AiMessageRepository:
                 {"$set": {field_key: state_record, "updated_at": now}}
             )
             return await self.find_by_id(message_id)
+        except NotFoundError:
+            raise
         except Exception as e:
             logger.error(f"[AiMsgRepo] update_proposal_state error: {e}")
             return None
@@ -180,11 +198,17 @@ class AiMessageRepository:
         limit: int = 50,
         member: Optional[str] = None,
         role: Optional[str] = None,
+        order: str = "asc",
     ) -> Tuple[List[dict], int, Optional[str]]:
         """Cursor-paginated query of all project messages (group history).
         
         Returns:
             (messages, total_matching, next_cursor)
+
+        ``order="desc"`` returns the newest messages first; ``"asc"`` returns the
+        oldest. Callers that need "the most recent window" (e.g. the digest) must
+        use ``desc`` — the default used to hand back the first 50 messages ever
+        written.
         """
         limit = max(1, min(limit, 100))
         query: Dict[str, Any] = {"project_id": str(project_id)}
@@ -198,7 +222,6 @@ class AiMessageRepository:
         if role:
             query["ai_role"] = role
 
-        sort_dir = 1
         if before:
             try:
                 dt_before = datetime.fromisoformat(before) if isinstance(before, str) else before
@@ -213,8 +236,12 @@ class AiMessageRepository:
             except Exception:
                 pass
             sort_dir = 1
+        else:
+            sort_dir = -1 if order == "desc" else 1
 
-        total = await self.col.count_documents({"project_id": str(project_id)})
+        # The total must honour the same filters as the page (it was counting
+        # every message of the project).
+        total = await self.col.count_documents(query)
 
         cursor = self.col.find(query).sort("created_at", sort_dir).limit(limit)
         docs = await cursor.to_list(length=limit)

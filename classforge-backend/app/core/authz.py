@@ -146,3 +146,52 @@ async def require_diagram_access(
         raise ForbiddenError("No tienes acceso a este diagrama")
 
     return diagram
+
+
+def _as_object_id(value: Any) -> Optional[ObjectId]:
+    """Best-effort conversion of a stored reference to ObjectId."""
+    if isinstance(value, ObjectId):
+        return value
+    if value and ObjectId.is_valid(str(value)):
+        return ObjectId(str(value))
+    return None
+
+
+async def require_folder_access(
+    folder_id: str = Path(..., description="Folder ObjectId"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> Dict[str, Any]:
+    """Dependency ensuring the authenticated user may read/modify a folder.
+
+    Access is granted to admins, the folder owner, members of the folder's team
+    and users with access to the folder's project. Without this check every
+    authenticated user could read, rename and delete any folder by id.
+    """
+    oid = validate_object_id(folder_id, "folder_id")
+    folder = await db["folders"].find_one({"_id": oid, "is_deleted": False})
+    if not folder:
+        raise NotFoundError("Carpeta no encontrada")
+
+    user_id = str(current_user.get("_id") or current_user.get("id"))
+    if current_user.get("role") == "admin":
+        return folder
+    if str(folder.get("owner_id")) == user_id:
+        return folder
+
+    team: Optional[Dict[str, Any]] = None
+    team_oid = _as_object_id(folder.get("team_id"))
+    if team_oid:
+        team = await db["teams"].find_one({"_id": team_oid, "is_deleted": False})
+        if team:
+            team_members = [str(m) for m in team.get("member_ids", [])]
+            if str(team.get("scrum_master_id")) == user_id or user_id in team_members:
+                return folder
+
+    project_oid = _as_object_id(folder.get("project_id"))
+    if project_oid:
+        project = await db["projects"].find_one({"_id": project_oid, "is_deleted": False})
+        if project and can_access_project(current_user, project, team):
+            return folder
+
+    raise ForbiddenError("No tienes acceso a esta carpeta")

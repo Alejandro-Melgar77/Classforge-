@@ -54,7 +54,8 @@ class FolderRepository:
             {"_id": ObjectId(folder_id)},
             {"$set": {"name": name, "updated_at": datetime.now(timezone.utc)}}
         )
-        return result.modified_count > 0
+        # Idempotent: renaming to the same value is a success, not a 404.
+        return result.matched_count > 0
 
     async def soft_delete(self, folder_id: str) -> bool:
         """Soft-deletes a folder by setting is_deleted to True."""
@@ -63,4 +64,4 @@ class FolderRepository:
             {"_id": ObjectId(folder_id)},
             {"$set": {"is_deleted": True, "deleted_at": now, "updated_at": now}}
         )
-        return result.modified_count > 0
+        return result.matched_count > 0

@@ -68,9 +68,29 @@ async def get_project_daily_usage(
         return 0, 0
 
 
+_SHARED_TRIGGERS: Optional["TriggersManager"] = None
+
+
+def get_triggers(db) -> "TriggersManager":
+    """Returns the process-wide TriggersManager for a database handle.
+
+    The debounce registry lives on the instance, so building a manager per
+    request meant concurrent saves could each schedule their own review.
+    """
+    global _SHARED_TRIGGERS
+    if _SHARED_TRIGGERS is None or _SHARED_TRIGGERS.db is not db:
+        _SHARED_TRIGGERS = TriggersManager(db)
+    return _SHARED_TRIGGERS
+
+
+def reset_triggers() -> None:
+    """Drops the shared instance (used by tests)."""
+    global _SHARED_TRIGGERS
+    _SHARED_TRIGGERS = None
+
+
 class TriggersManager:
     """Orchestrates event triggers, debounce timers, and autonomy guards."""
-
     def __init__(self, db, clock: Optional[Callable[[], datetime]] = None):
         self.db = db
         self._clock = clock or (lambda: datetime.now(timezone.utc))

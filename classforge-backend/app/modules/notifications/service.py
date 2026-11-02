@@ -55,9 +55,10 @@ class NotificationService:
 
             recipient_ids = set()
             
-            # 1. Creador del proyecto
-            if "created_by" in project and project["created_by"]:
-                recipient_ids.add(str(project["created_by"]))
+            # 1. Dueño del proyecto (projects store `owner_id`, not `created_by`)
+            owner_ref = project.get("owner_id") or project.get("created_by")
+            if owner_ref:
+                recipient_ids.add(str(owner_ref))
             
             # 2. Miembros del equipo asignado
             team_id = project.get("team_id")
@@ -67,9 +68,10 @@ class NotificationService:
                 if team and "member_ids" in team:
                     for mid in team["member_ids"]:
                         recipient_ids.add(str(mid))
-                # También el Scrum Master / Lead del equipo
-                if team and "lead_id" in team and team["lead_id"]:
-                    recipient_ids.add(str(team["lead_id"]))
+                # También el Scrum Master del equipo (no existe `lead_id`)
+                lead_ref = team.get("scrum_master_id") if team else None
+                if lead_ref:
+                    recipient_ids.add(str(lead_ref))
 
             # 3. Colaboradores de los diagramas del proyecto
             if diagram_id:
@@ -142,7 +144,8 @@ class NotificationService:
             {"_id": n_oid, "$or": [{"user_id": u_oid}, {"user_id": str(user_id)}]},
             {"$set": {"is_read": True}}
         )
-        return res.modified_count > 0
+        # Idempotent: marking an already-read notification is a success, not a 404.
+        return res.matched_count > 0
 
     async def mark_all_as_read(self, user_id: str) -> int:
         """Marca todas las notificaciones del usuario como leídas."""

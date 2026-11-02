@@ -531,6 +531,13 @@ async def delete_task(
     if str(task.get("project_id", "")) != str(project_id):
         raise ForbiddenError("La tarea no pertenece a este proyecto")
 
+    # Only the creator or an admin may delete a task; any project member could
+    # previously delete someone else's work.
+    assigned_by = str(task.get("assigned_by") or "")
+    is_creator = assigned_by == str(current_user["_id"])
+    if not is_creator and current_user.get("role") != "admin":
+        raise ForbiddenError("Solo el creador de la tarea o un administrador puede eliminarla")
+
     await repo.delete_task(task_id)
 
     await manager.broadcast(f"project:{project_id}", {

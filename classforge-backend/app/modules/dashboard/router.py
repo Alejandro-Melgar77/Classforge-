@@ -82,11 +82,15 @@ async def get_dashboard_stats(
     # Format activity
     formatted_activity = []
     for log in recent_activity:
+        created_at = log.get("created_at") or log.get("timestamp")
+        meta = log.get("metadata") or log.get("details") or {}
         formatted_activity.append({
             "action": log.get("action"),
             "user_id": str(log.get("user_id")),
-            "details": log.get("details"),
-            "timestamp": log.get("timestamp")
+            "metadata": meta,
+            "details": meta,
+            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else created_at,
+            "timestamp": created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
         })
         
     # My projects and teams (limit 5 with projections for high performance)
@@ -105,13 +109,13 @@ async def get_dashboard_stats(
         "projects_by_status": projects_by_status,
         "my_teams": [{
             "id": str(t["_id"]),
-            "name": t["name"],
+            "name": t.get("name", "Equipo"),
             "avatar_color": t.get("avatar_color", "#2D6BE4")
         } for t in my_teams],
         "recent_projects": [{
             "id": str(p["_id"]),
-            "name": p["name"],
-            "status": p["status"],
+            "name": p.get("name", "Sin nombre"),
+            "status": p.get("status", "active"),
             "team_id": str(p["team_id"]) if p.get("team_id") else None,
             "updated_at": p.get("updated_at").isoformat() if p.get("updated_at") else None
         } for p in my_projects]

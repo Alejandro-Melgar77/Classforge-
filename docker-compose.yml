@@ -1,4 +1,10 @@
-﻿version: '3.8'
+version: '3.8'
+
+# Para levantar el stack crea un archivo .env junto a este compose con:
+#   SECRET_KEY=<cadena larga y aleatoria>
+#   MONGO_USER=classforge
+#   MONGO_PASSWORD=<contraseña fuerte>
+# `SECRET_KEY` es obligatoria: el backend la valida en producción.
 
 services:
   mongodb:
@@ -7,6 +13,8 @@ services:
     restart: always
     environment:
       MONGO_INITDB_DATABASE: classforge
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-classforge}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-classforge_dev_password}
     ports:
       - "27017:27017"
     volumes:
@@ -22,11 +30,14 @@ services:
     restart: always
     environment:
       - PROJECT_NAME=ClassForge
+      - ENVIRONMENT=production
       - API_V1_STR=/api/v1
-      - SECRET_KEY=super-secret-key-change-me-in-production
+      # Obligatoria: si falta, docker compose se detiene en vez de arrancar con
+      # una clave conocida.
+      - SECRET_KEY=${SECRET_KEY:?Define SECRET_KEY en el .env del proyecto}
       - ACCESS_TOKEN_EXPIRE_MINUTES=60
       - REFRESH_TOKEN_EXPIRE_DAYS=7
-      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_URL=mongodb://${MONGO_USER:-classforge}:${MONGO_PASSWORD:-classforge_dev_password}@mongodb:27017/?authSource=admin
       - DATABASE_NAME=classforge
       - INACTIVITY_TIMEOUT_MINUTES=30
       - CORS_ORIGINS=http://localhost,http://localhost:80,http://localhost:4200

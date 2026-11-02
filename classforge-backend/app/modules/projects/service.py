@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from bson import ObjectId
 
 from app.core.authz import can_access_project
-from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.schemas import ProjectCreate, ProjectStatusUpdate, ProjectUpdate
 from app.modules.teams.repository import TeamRepository
@@ -20,17 +20,17 @@ class ProjectService:
         
         if data.type == "team":
             if not data.team_id:
-                raise HTTPException(status_code=400, detail="team_id is required for team projects")
+                raise ValidationError("team_id is required for team projects")
             team = await self.team_repo.get_by_id(data.team_id)
             if not team:
-                raise HTTPException(status_code=404, detail="Team not found")
+                raise NotFoundError("Team not found")
             if current_user.get("role") not in ["admin", "scrum_master"]:
-                raise HTTPException(status_code=403, detail="Only admin or scrum_master can create team projects")
+                raise ForbiddenError("Only admin or scrum_master can create team projects")
             if current_user.get("role") == "scrum_master" and str(team["scrum_master_id"]) != user_id:
-                raise HTTPException(status_code=403, detail="You are not the scrum master of this team")
-        
+                raise ForbiddenError("You are not the scrum master of this team")
+
         project = await self.repo.create(data.model_dump(), user_id)
-        await self.user_repo.log_audit(user_id, "PROJECT_CREATED", f"Created project {project['_id']}")
+        await self.user_repo.log_audit(user_id, "PROJECT_CREATED", "projects", str(project["_id"]))
         return project
 
     async def list_projects(self, current_user: dict, team_id: str = None, status: str = None, type: str = None, page: int = 1, limit: int = 20, sort_by: str = "created_at", order: str = "desc"):
@@ -87,7 +87,7 @@ class ProjectService:
         update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
         if update_dict:
             await self.repo.update(project_id, update_dict)
-            await self.user_repo.log_audit(user_id, "PROJECT_UPDATED", f"Updated project {project_id}")
+            await self.user_repo.log_audit(user_id, "PROJECT_UPDATED", "projects", project_id)
             
         return await self.repo.get_by_id(project_id)
 
@@ -99,12 +99,12 @@ class ProjectService:
             update_dict["completed_at"] = datetime.now(timezone.utc)
             
         await self.repo.update(project_id, update_dict)
-        await self.user_repo.log_audit(str(current_user["_id"]), "PROJECT_STATUS_UPDATED", f"Updated status of project {project_id} to {data.status}")
+        await self.user_repo.log_audit(str(current_user["_id"]), "PROJECT_STATUS_UPDATED", "projects", project_id, metadata={"status": data.status})
         return await self.repo.get_by_id(project_id)
 
     async def delete_project(self, project_id: str, admin_id: str):
         success = await self.repo.soft_delete(project_id)
         if not success:
             raise NotFoundError("Project not found")
-        await self.user_repo.log_audit(admin_id, "PROJECT_DELETED", f"Deleted project {project_id}")
+        await self.user_repo.log_audit(admin_id, "PROJECT_DELETED", "projects", project_id)
         return True

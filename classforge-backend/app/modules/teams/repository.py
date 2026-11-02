@@ -86,7 +86,8 @@ class TeamRepository:
                 "$set": {"updated_at": datetime.now(timezone.utc)}
             }
         )
-        return result.modified_count > 0
+        # Idempotent: removing someone who is not a member is a success, not a 404.
+        return result.matched_count > 0
 
     async def soft_delete(self, team_id: str) -> bool:
         now = datetime.now(timezone.utc)

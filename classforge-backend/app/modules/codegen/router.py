@@ -27,6 +27,7 @@ from app.modules.codegen.generator import generate_spring_boot_project
 from app.modules.codegen.schemas import CodegenPreviewRequest, FrontendPromptRequest
 from app.modules.codegen.webhook import notify_n8n_webhook
 from app.modules.codegen.zip_service import create_project_zip
+from app.modules.codegen.verification import verify_generated_project
 
 router = APIRouter()
 
@@ -70,6 +71,8 @@ async def preview_code(
             files = generate_fastapi_project(graph_data)
         else:
             files = generate_spring_boot_project(graph_data)
+
+    verify_generated_project(files)
 
     await notify_n8n_webhook(
         event_type="codegen_preview",
@@ -119,6 +122,7 @@ async def download_code(
         else:
             files = generate_spring_boot_project(graph_data)
 
+    verify_generated_project(files)
     zip_bytes = create_project_zip(files)
 
     raw_name = diagram.get("name", "diagram")

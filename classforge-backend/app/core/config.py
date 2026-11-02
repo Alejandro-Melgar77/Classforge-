@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Comma-separated origins. For dev: "http://localhost:4200"
     # Rule R03: Never use ["*"] in production — configure per environment via .env
     CORS_ORIGINS: str = "http://localhost:4200,http://localhost:4201"
+    # Comma-separated CIDRs of reverse proxies allowed to set X-Forwarded-For /
+    # CF-Connecting-IP. Empty means "trust no proxy headers" (safe default).
+    TRUSTED_PROXIES: str = ""
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:1.5b"
     OLLAMA_TIMEOUT_S: float = 12.0
@@ -103,6 +106,11 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         """Returns the parsed list of allowed CORS origins."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def trusted_proxies_list(self) -> List[str]:
+        """Returns the parsed list of trusted reverse-proxy CIDRs."""
+        return [p.strip() for p in self.TRUSTED_PROXIES.split(",") if p.strip()]
 
     @property
     def gemini_models_list(self) -> List[str]:

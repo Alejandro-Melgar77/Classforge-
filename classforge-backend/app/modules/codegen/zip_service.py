@@ -6,12 +6,16 @@ and denial-of-service / resource exhaustion limits.
 import io
 import posixpath
 import re
+import time
 import zipfile
 from typing import Dict, Union
 
 MAX_ZIP_FILES = 500
 MAX_FILE_BYTES = 10 * 1024 * 1024       # 10 MB per file
 MAX_TOTAL_BYTES = 50 * 1024 * 1024      # 50 MB total uncompressed
+
+# Files that must stay executable once the project is unzipped.
+EXECUTABLE_FILES = {"run.sh", "mvnw"}
 
 class ZipSecurityError(ValueError):
     """Raised when a zip entry violates path safety or size restrictions."""
@@ -73,6 +77,11 @@ def create_project_zip(files: Dict[str, Union[str, bytes]], root_dir: str = "cla
                 raise ZipSecurityError(f"El proyecto supera el límite de descompresión total de {MAX_TOTAL_BYTES} bytes")
 
             archive_path = f"{root_dir}/{safe_rel_path}" if root_dir else safe_rel_path
-            zip_file.writestr(archive_path, content_bytes)
+            info = zipfile.ZipInfo(archive_path)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.date_time = time.localtime()[:6]
+            mode = 0o755 if posixpath.basename(safe_rel_path) in EXECUTABLE_FILES else 0o644
+            info.external_attr = mode << 16
+            zip_file.writestr(info, content_bytes)
 
     return zip_buffer.getvalue()

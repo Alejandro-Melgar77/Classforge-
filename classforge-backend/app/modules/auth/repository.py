@@ -66,6 +66,13 @@ class SessionRepository:
             {"$set": {"is_active": False}}
         )
 
+    async def invalidate_all_except(self, user_id: str, keep_session_id: Optional[str]) -> None:
+        """Deactivate every session of the user except the one currently in use."""
+        query: Dict[str, Any] = {"user_id": ObjectId(user_id), "is_active": True}
+        if keep_session_id and ObjectId.is_valid(str(keep_session_id)):
+            query["_id"] = {"$ne": ObjectId(str(keep_session_id))}
+        await self.collection.update_many(query, {"$set": {"is_active": False}})
+
     async def get_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
         """Retrieve all currently active sessions for a user."""
         cursor = self.collection.find({"user_id": ObjectId(user_id), "is_active": True})

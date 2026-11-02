@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Response, HTTPException, Request, Header
+from fastapi.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -18,6 +19,8 @@ from app.modules.diagrams.service import DiagramService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+MAX_XMI_BYTES = 10 * 1024 * 1024  # 10 MB uploaded XMI limit
 
 def get_diagram_service(db = Depends(get_db)):
     return DiagramService(db)
@@ -147,10 +150,10 @@ async def save_graph(
         raise NotFoundError("Diagram not found")
 
     if diagram.get("project_id"):
-        from app.ai_team.application.triggers import TriggersManager
-        import asyncio
-        triggers = TriggersManager(service.db)
-        asyncio.create_task(triggers.on_diagram_changed(
+        from app.ai_team.application.triggers import get_triggers
+        from app.core.tasks import spawn
+        triggers = get_triggers(service.db)
+        spawn(triggers.on_diagram_changed(
             project_id=str(diagram["project_id"]),
             diagram_id=diagram_id,
             origin="human",
@@ -220,11 +223,15 @@ async def restore_history_version(
 
     await service.db["audit_logs"].insert_one({
         "action": "RESTORE_VERSION",
-        "diagram_id": ObjectId(diagram_id),
         "user_id": ObjectId(current_user["_id"]),
-        "restored_version": version,
-        "new_version": updated.get("version") if updated else None,
-        "timestamp": datetime.now(timezone.utc)
+        "resource": "diagrams",
+        "resource_id": str(diagram_id),
+        "diagram_id": ObjectId(diagram_id),
+        "metadata": {
+            "restored_version": version,
+            "new_version": updated.get("version") if updated else None,
+        },
+        "created_at": datetime.now(timezone.utc)
     })
 
     return StandardResponse(
@@ -269,23 +276,30 @@ async def import_xmi(
     diagram = await service.get_diagram(diagram_id, current_user)
     if not diagram:
         raise NotFoundError("Diagram not found")
-        
+
+    content = await file.read(MAX_XMI_BYTES + 1)
+    if len(content) > MAX_XMI_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo XMI supera el límite de 10 MB")
+
     try:
-        content = await file.read()
         xmi_str = content.decode("utf-8")
-        graph_data = service.parse_xmi(xmi_str)
-        save_data = SaveGraph(graph_data=graph_data, comment="Imported from XMI")
-        updated = await service.save_graph(diagram_id, save_data, current_user)
-        return StandardResponse(
-            success=True,
-            message="XMI imported successfully",
-            data=DiagramResponseFull.from_mongo(updated).model_dump()
-        )
-    except (ForbiddenError, NotFoundError, ValidationError):
-        raise
-    except Exception as e:
-        logger.error(f"Failed to parse XMI: {e}")
-        raise ValidationError("Error al procesar el archivo XMI")
+    except UnicodeDecodeError as exc:
+        raise ValidationError("El archivo XMI debe estar codificado en UTF-8") from exc
+
+    graph_data = await run_in_threadpool(service.parse_xmi, xmi_str)
+
+    # Never overwrite a diagram with an import that produced nothing: that used to
+    # happen silently when the uploaded XML was malformed.
+    if not graph_data.get("nodes") and not graph_data.get("edges"):
+        raise ValidationError("El archivo XMI no contiene clases ni relaciones importables")
+
+    save_data = SaveGraph(graph_data=graph_data, comment="Imported from XMI")
+    updated = await service.save_graph(diagram_id, save_data, current_user)
+    return StandardResponse(
+        success=True,
+        message="XMI imported successfully",
+        data=DiagramResponseFull.from_mongo(updated).model_dump()
+    )
 
 @router.get("/{diagram_id}/ws-token", response_model=StandardResponse)
 async def get_ws_token(

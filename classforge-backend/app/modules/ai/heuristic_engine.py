@@ -25,9 +25,10 @@ def capitalize_name(name: str) -> str:
 def infer_type_from_name(name: str) -> str:
     n = name.lower()
     if n == 'id' or n.endswith('id'): return 'Long'
+    if n in ('codigo', 'código') or n.endswith('_codigo') or n.startswith('codigo_') or n.startswith('codigo'): return 'Long'
     if any(k in n for k in ['precio', 'total', 'monto', 'saldo', 'costo', 'descuento', 'subtotal', 'sueldo', 'salario', 'tarifa', 'iva', 'importe', 'interes']): return 'Double'
     if any(k in n for k in ['stock', 'cantidad', 'edad', 'numero', 'nro', 'orden', 'anio', 'puntos', 'intentos', 'semestre', 'piso', 'capacidad']): return 'Integer'
-    if any(k in n for k in ['fecha', 'created', 'updated', 'date', 'nacimiento', 'hora']): return 'Date'
+    if any(k in n for k in ['fecha', 'created', 'creado', 'creada', 'updated', 'date', 'nacimiento', 'hora']): return 'Date'
     if n.startswith('es') or n.startswith('is') or any(k in n for k in ['activo', 'habilitado', 'bloqueado', 'valido', 'disponible', 'pagado']): return 'Boolean'
     return 'String'
 
@@ -99,7 +100,11 @@ def parse_cardinality_str(card: Optional[str]) -> Tuple[str, str]:
     if '..' in c:
         parts = [p.strip().upper() for p in c.split('..', 1)]
         if len(parts) == 2:
-            return (parts[0], f"{parts[0]}..{parts[1]}")
+            lower, upper = parts
+            # Reject impossible ranges like "2..1" by normalising them.
+            if lower.isdigit() and upper.isdigit() and int(lower) > int(upper):
+                lower, upper = upper, lower
+            return (lower, f"{lower}..{upper}")
     
     if ' a ' in c:
         parts = [p.strip() for p in c.split(' a ', 1)]
@@ -230,6 +235,54 @@ def parse_heuristic(prompt: str) -> Optional[UMLCommandResponse]:
             action="create_relation",
             relations=[UMLRelationCommand(source=source_class, target=target_class, type="inheritance")],
             explanation=f"Herencia: {source_class} hereda de {target_class}.",
+            source="nlu_heuristic"
+        )
+
+    # 6a. Explicit relation described before the endpoints:
+    #     "crear relacion uno a muchos entre Cliente y Pedido"
+    #     "relacion muchos a muchos entre Estudiante y Curso"
+    #     "crear una relacion de composicion entre Factura y Cliente"
+    rel_kw_pattern = re.compile(
+        r"(?:(?:crea(?:r|me)?|genera(?:r)?|haz(?:me)?)\s+)?(?:una?\s+)?"
+        r"(?:relacion|asociacion|composicion|agregacion|dependencia|herencia)"
+        r"(?:\s+de(?:\s+tipo)?)?"
+        r"(?:\s+(?:relacion|asociacion|composicion|agregacion|dependencia|herencia))?"
+        r"(?:\s+(uno a muchos|muchos a uno|muchos a muchos|uno a uno|cero a muchos|0 a 1|1 a \*|0 a \*|\* a \*|\* a 1|1 a 1))?"
+        r"\s+(?:entre|de)\s+([a-zA-Z0-9_]+)\s+(?:y|a|con)\s+([a-zA-Z0-9_]+)",
+        re.IGNORECASE,
+    )
+    m = rel_kw_pattern.search(norm)
+    if m:
+        card = m.group(1)
+        source_class = capitalize_name(m.group(2))
+        target_class = capitalize_name(m.group(3))
+
+        # The relation type may appear as the head noun or as a "de <tipo>"
+        # qualifier; scan the matched fragment for the strongest signal.
+        fragment = m.group(0).lower()
+        rel_type = "association"
+        for keyword, mapped in (
+            ("herencia", "inheritance"),
+            ("composicion", "composition"),
+            ("agregacion", "aggregation"),
+            ("dependencia", "dependency"),
+        ):
+            if keyword in fragment:
+                rel_type = mapped
+                break
+
+        src_mult, tgt_mult = parse_cardinality_str(card)
+
+        return UMLCommandResponse(
+            action="create_relation",
+            relations=[UMLRelationCommand(
+                source=source_class,
+                target=target_class,
+                type=rel_type,
+                source_multiplicity=src_mult,
+                target_multiplicity=tgt_mult
+            )],
+            explanation=f"Relación {rel_type} creada entre {source_class} y {target_class}.",
             source="nlu_heuristic"
         )
 
@@ -499,25 +552,17 @@ def parse_heuristic(prompt: str) -> Optional[UMLCommandResponse]:
             source="nlu_heuristic"
         )
 
-    # 10. Fallback extractor
-    words = re.findall(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]{3,}', prompt)
-    stop_words = {'para', 'como', 'este', 'esta', 'estos', 'estas', 'sistema', 'aplicacion', 'quiero', 'necesito', 'crear', 'crea', 'creame', 'genera', 'un', 'una', 'el', 'la', 'los', 'las', 'con', 'por', 'que', 'del', 'al', 'tabla', 'clase', 'entidad', 'modelo'}
-    candidates = [capitalize_name(w) for w in words if w.lower() not in stop_words]
-    unique = list(dict.fromkeys(candidates))[:4]
-    
-    if unique:
-        classes = [UMLClassCommand(name=name, attributes=[UMLAttribute(name="id", type="Long"), UMLAttribute(name="nombre", type="String")]) for name in unique]
-        return UMLCommandResponse(
-            action="generate_system",
-            classes=classes,
-            relations=[],
-            explanation=f"Entidades generadas: {', '.join(unique)}.",
-            source="nlu_heuristic"
-        )
-
+    # 10. No confident interpretation: never invent classes out of random words.
+    # ("hola buenas tardes" used to produce classes Hola/Buenas/Tardes/Tal)
     return UMLCommandResponse(
-        action="create_class",
-        classes=[UMLClassCommand(name="NuevaClase", attributes=[UMLAttribute(name="id", type="Long"), UMLAttribute(name="nombre", type="String")])],
-        explanation="Se ha creado una nueva clase.",
+        action="unknown",
+        classes=[],
+        relations=[],
+        deleted_elements=[],
+        explanation=(
+            "No se pudo interpretar el comando con certeza. Probá con: "
+            "'crear clase Producto con atributos precio, stock', "
+            "'relacionar Cliente con Pedido' o 'eliminar clase Temporal'."
+        ),
         source="nlu_heuristic"
     )

@@ -59,17 +59,32 @@ def reset_providers() -> None:
 
 def get_provider(purpose: str = "chat", custom_provider: Optional[str] = None) -> LlmProvider:
     """
-    Returns an LlmProvider instance based on configuration and optional override.
-    
-    Settings:
-        LLM_PROVIDER: "gemini" | "fake" | "ollama" (default: "gemini", but "fake" mandatory in tests/E2E).
+    Returns an LlmProvider instance for the requested purpose.
+
+    Resolution order:
+        1. Explicit global override (tests / E2E).
+        2. ``custom_provider`` when given.
+        3. First provider of ``LLM_ROUTING[purpose]`` (e.g. "ollama" for uml_command).
+        4. ``LLM_PROVIDER`` as the final fallback.
+
+    Honouring ``purpose`` is what makes ``LLM_ROUTING`` meaningful; it used to be
+    ignored, so every purpose silently used ``LLM_PROVIDER``.
     """
     global _GLOBAL_PROVIDER
 
     if _GLOBAL_PROVIDER is not None:
         return _GLOBAL_PROVIDER
 
-    provider_name = (custom_provider or settings.LLM_PROVIDER or "gemini").strip().lower()
+    provider_name = (custom_provider or "").strip().lower()
+
+    if not provider_name:
+        chain = resolve_routing_chain(purpose)
+        candidate = chain[0] if chain else ""
+        if candidate in ("gemini", "ollama", "local", "fake"):
+            provider_name = candidate
+
+    if not provider_name:
+        provider_name = (settings.LLM_PROVIDER or "gemini").strip().lower()
 
     if provider_name == "fake":
         return get_fake_provider()

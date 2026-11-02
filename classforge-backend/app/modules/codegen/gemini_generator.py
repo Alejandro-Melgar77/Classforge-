@@ -36,7 +36,7 @@ def parse_diagram_semantics(graph_data: Dict[str, Any]) -> Dict[str, Any]:
 
     for node in nodes:
         node_type = (node.get("type") or node.get("shape") or "").lower().replace("uml-", "").replace("-", "")
-        if node_type in ["class", "abstract", "entity", "classnode"] or "class" in node_type or "entity" in node_type:
+        if node_type in ["class", "abstract", "entity", "classnode", "interface", "interfacenode"] or "class" in node_type or "entity" in node_type or "interface" in node_type:
             data = node.get("data", {})
             raw_name = data.get("name") or "Entity"
             clean_name = re.sub(r"[^a-zA-Z0-9_]", "", str(raw_name))
@@ -98,9 +98,9 @@ def ensure_vscode_and_runner_files(files: Dict[str, str], package_name: str = "c
     if ".vscode/launch.json" not in files:
         files[".vscode/launch.json"] = templates.VSCODE_LAUNCH_JSON.format(package_name=package_name)
     if ".vscode/settings.json" not in files:
-        files[".vscode/settings.json"] = templates.VSCODE_SETTINGS_JSON
+        files[".vscode/settings.json"] = templates.VSCODE_SETTINGS_JSON.format()
     if ".vscode/extensions.json" not in files:
-        files[".vscode/extensions.json"] = templates.VSCODE_EXTENSIONS_JSON
+        files[".vscode/extensions.json"] = templates.VSCODE_EXTENSIONS_JSON.format()
     if "run.bat" not in files:
         files["run.bat"] = templates.RUN_BAT
     if "run.sh" not in files:
@@ -270,8 +270,8 @@ Ensure all entities, schemas, routers/controllers, services, configuration, and 
         return {
             "files": fallback_files,
             "total_files": len(fallback_files),
-            "engine_used": f"deterministic (fallback due to: {exc})",
-            "summary": f"Generación realizada con motor determinista de contingencia. (Aviso: {exc})",
+            "engine_used": "deterministic",
+            "summary": "Generación realizada con el motor determinista de contingencia tras un fallo del proveedor LLM.",
         }
 
 

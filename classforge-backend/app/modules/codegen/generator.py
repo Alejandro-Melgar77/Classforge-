@@ -158,8 +158,10 @@ def generate_spring_boot_project(graph_data: dict, package_name: str = "com.clas
 
     # VS Code Configurations & 1-Click Launchers
     files[".vscode/launch.json"] = templates.VSCODE_LAUNCH_JSON.format(package_name=package_name)
-    files[".vscode/settings.json"] = templates.VSCODE_SETTINGS_JSON
-    files[".vscode/extensions.json"] = templates.VSCODE_EXTENSIONS_JSON
+    # These templates escape every brace for .format(); without the call the
+    # generated files contain "{{" and are invalid JSON.
+    files[".vscode/settings.json"] = templates.VSCODE_SETTINGS_JSON.format()
+    files[".vscode/extensions.json"] = templates.VSCODE_EXTENSIONS_JSON.format()
     files["run.bat"] = templates.RUN_BAT
     files["run.sh"] = templates.RUN_SH
     files["mvnw.cmd"] = templates.MVNW_CMD
@@ -207,7 +209,7 @@ def generate_spring_boot_project(graph_data: dict, package_name: str = "com.clas
         node_type = (node.get("type") or node.get("shape") or "").lower().replace("uml-", "").replace("-", "")
         if "enum" in node_type:
             continue
-        if node_type in ["class", "abstract", "entity", "classnode"] or "class" in node_type or "entity" in node_type:
+        if node_type in ["class", "abstract", "entity", "classnode", "interface", "interfacenode"] or "class" in node_type or "entity" in node_type or "interface" in node_type:
             data = node.get("data", {})
             raw_name = data.get("name") or "Entity"
             clean_name = sanitize_class_name(raw_name)
@@ -230,8 +232,8 @@ def generate_spring_boot_project(graph_data: dict, package_name: str = "com.clas
         rel_type = (edge.get("type") or edge.get("shape") or "").lower().replace("uml-", "").replace("-", "")
 
         edge_data = edge.get("data", {}) if isinstance(edge.get("data"), dict) else {}
-        s_mult = str(edge_data.get("sourceMultiplicity") or "")
-        t_mult = str(edge_data.get("targetMultiplicity") or "")
+        s_mult = str(edge_data.get("sourceMultiplicity") or edge.get("source_multiplicity") or "")
+        t_mult = str(edge_data.get("targetMultiplicity") or edge.get("target_multiplicity") or "")
 
         if source_id in classes and target_id in classes:
             source_name = classes[source_id]["name"]

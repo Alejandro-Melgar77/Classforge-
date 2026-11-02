@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from app.core.config import settings
 from app.core.errors import ValidationError
+from app.core.tasks import spawn
 from app.llm.errors import (
     LlmBadResponse,
     LlmError,
@@ -73,6 +74,11 @@ class CircuitBreaker:
                     )
                 else:
                     logger.info("[CircuitBreaker] Tiempo de enfriamiento concluido. Estado: HALF_OPEN.")
+                    # Grant a single probe window: concurrent callers wait for the
+                    # recovery period again unless this probe succeeds and closes
+                    # the circuit. Without this, every caller stormed through at
+                    # once the moment the cooldown elapsed.
+                    self.last_failure_time = time.monotonic()
 
     async def record_success(self) -> None:
         """Resets the failure counter upon successful execution."""
@@ -228,11 +234,24 @@ class GeminiProvider:
         candidates_tokens = meta.get("candidatesTokenCount", 0)
         total_tokens = meta.get("totalTokenCount", prompt_tokens + candidates_tokens)
 
-        # Reasoning tokens if present in metadata
+        # Reasoning tokens if present in metadata. The REST API returns
+        # `candidatesTokensDetails` as a LIST; older payloads used a dict.
+        details = meta.get("candidatesTokensDetails")
+        details_thoughts = None
+        if isinstance(details, dict):
+            details_thoughts = details.get("thoughtsTokenCount")
+        elif isinstance(details, list):
+            for item in details:
+                if isinstance(item, dict):
+                    candidate = item.get("thoughtsTokenCount") or item.get("reasoningTokenCount")
+                    if candidate:
+                        details_thoughts = candidate
+                        break
+
         thoughts_tokens = (
             meta.get("thoughtsTokenCount")
             or meta.get("reasoningTokenCount")
-            or meta.get("candidatesTokensDetails", {}).get("thoughtsTokenCount")
+            or details_thoughts
         )
 
         return LlmUsage(
@@ -361,7 +380,17 @@ class GeminiProvider:
                     if resp.status_code in (401, 403):
                         err_msg = resp.text[:200]
                         logger.error(f"[GeminiProvider] Autenticación rechazada (HTTP {resp.status_code}): {err_msg}")
+                        # Invalid credentials must trip the breaker too, otherwise
+                        # every request keeps retrying a credential that will never work.
+                        await self.circuit_breaker.record_failure()
                         raise LlmUnavailable(f"Error de autenticación/autorización con Gemini (HTTP {resp.status_code})")
+
+                    # Model not available (renamed/deprecated): skip this model
+                    # immediately instead of burning every retry on a 404.
+                    if resp.status_code == 404:
+                        logger.error(f"[GeminiProvider] Modelo no disponible (404) en {model_name}: {resp.text[:200]}")
+                        last_exception = LlmBadResponse(f"Modelo '{model_name}' no disponible (HTTP 404)")
+                        break
 
                     # Retryable rate limits
                     if resp.status_code == 429:
@@ -413,8 +442,9 @@ class GeminiProvider:
                         latency_ms = (time.perf_counter() - start_time) * 1000.0
                         await self.circuit_breaker.record_success()
 
-                        # Telemetry to ai_usage
-                        await record_ai_usage(
+                        # Telemetry to ai_usage (fire-and-forget: never add a
+                        # Mongo write to the latency of the model call).
+                        spawn(record_ai_usage(
                             project_id=req.project_id,
                             user_id=req.user_id,
                             purpose=req.purpose,
@@ -422,7 +452,7 @@ class GeminiProvider:
                             tokens=usage,
                             latency_ms=latency_ms,
                             ok=True,
-                        )
+                        ))
 
                         return LlmResponse(
                             text=text,
@@ -431,6 +461,12 @@ class GeminiProvider:
                             raw_json=parsed_json,
                             latency_ms=latency_ms,
                         )
+
+                    # Any other status is not a success: fail this model fast
+                    # instead of silently exhausting the retry budget.
+                    logger.error(f"[GeminiProvider] HTTP inesperado {resp.status_code} en {model_name}: {resp.text[:200]}")
+                    last_exception = LlmBadResponse(f"Respuesta inesperada de Gemini (HTTP {resp.status_code})")
+                    break
 
                 except (httpx.TimeoutException, httpx.NetworkError) as net_err:
                     logger.warning(f"[GeminiProvider] Fallo de red/timeout en {model_name}: {net_err}")
@@ -456,7 +492,7 @@ class GeminiProvider:
         await self.circuit_breaker.record_failure()
         latency_ms = (time.perf_counter() - start_time) * 1000.0
 
-        await record_ai_usage(
+        spawn(record_ai_usage(
             project_id=req.project_id,
             user_id=req.user_id,
             purpose=req.purpose,
@@ -465,14 +501,23 @@ class GeminiProvider:
             latency_ms=latency_ms,
             ok=False,
             error=str(last_exception),
-        )
+        ))
 
         if isinstance(last_exception, (LlmUnavailable, LlmRateLimited, LlmBadResponse, LlmQuotaExceeded)):
             raise last_exception
         raise LlmUnavailable(f"Todos los modelos de Gemini fallaron: {last_exception}")
 
     async def stream(self, req: LlmRequest) -> AsyncIterator[str]:
-        """Streams content tokens using streamGenerateContent endpoint."""
+        """Streams content tokens using streamGenerateContent endpoint.
+
+        Walks the same model chain as ``generate``: a stream that fails before
+        emitting anything falls back to the next configured model. Once tokens
+        have been yielded the stream is never retried (that would duplicate
+        output).
+
+        NOTE (M6): Actualmente este método no tiene consumidor activo en los endpoints,
+        pero se mantiene con fallback entre modelos para uso futuro.
+        """
         await self.circuit_breaker.check()
         api_key = self._resolve_api_key(req)
         models_to_try = self._build_model_chain(req.model)
@@ -483,29 +528,46 @@ class GeminiProvider:
             "Content-Type": "application/json",
         }
 
-        target_model = models_to_try[0]
-        url = f"{GEMINI_BASE_URL}/{target_model}:streamGenerateContent?alt=sse"
+        last_error: Optional[Exception] = None
+        emitted = False
 
-        try:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                if response.status_code != 200:
-                    err_body = await response.aread()
-                    raise LlmUnavailable(f"Streaming falló (HTTP {response.status_code}): {err_body.decode('utf-8', errors='ignore')}")
+        for target_model in models_to_try:
+            url = f"{GEMINI_BASE_URL}/{target_model}:streamGenerateContent?alt=sse"
+            try:
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        err_body = await response.aread()
+                        last_error = LlmUnavailable(
+                            f"Streaming falló en {target_model} (HTTP {response.status_code}): "
+                            f"{err_body.decode('utf-8', errors='ignore')[:200]}"
+                        )
+                        logger.warning(f"[GeminiProvider] {last_error}")
+                        continue
 
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            chunk_json = json.loads(data_str)
-                            chunk_text = self._extract_text(chunk_json)
-                            if chunk_text:
-                                yield chunk_text
-                        except Exception:
-                            continue
-        except (LlmError, ValidationError):
-            raise
-        except Exception as exc:
-            logger.error(f"[GeminiProvider] Error de streaming: {exc}")
-            raise LlmUnavailable(f"Fallo durante streaming de Gemini: {exc}")
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk_json = json.loads(data_str)
+                                chunk_text = self._extract_text(chunk_json)
+                                if chunk_text:
+                                    emitted = True
+                                    yield chunk_text
+                            except Exception:
+                                continue
+
+                    await self.circuit_breaker.record_success()
+                    return
+            except (LlmError, ValidationError):
+                raise
+            except Exception as exc:
+                logger.error(f"[GeminiProvider] Error de streaming con {target_model}: {exc}")
+                last_error = LlmUnavailable(f"Fallo durante streaming de Gemini: {exc}")
+                if emitted:
+                    raise last_error
+                continue
+
+        await self.circuit_breaker.record_failure()
+        raise last_error or LlmUnavailable("Streaming de Gemini no disponible en ningún modelo configurado")

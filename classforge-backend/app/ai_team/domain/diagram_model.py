@@ -80,11 +80,19 @@ class Diagram(BaseModel):
 
     def to_graph_data(self) -> Dict[str, Any]:
         """Serializes back to canonical ClassForge GraphData format."""
+        shape_by_type = {
+            "class": "uml-class",
+            "interface": "uml-interface",
+            "abstract": "uml-abstract",
+            "enum": "uml-enum",
+        }
         return {
             "nodes": [
                 {
                     "id": n.id,
                     "type": n.type,
+                    # Keep the X6 shape so AI-written nodes render on the canvas.
+                    "shape": shape_by_type.get(n.type, "uml-class"),
                     "position": n.position,
                     "size": n.size,
                     "data": {

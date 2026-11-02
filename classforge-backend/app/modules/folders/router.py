@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from app.core.authz import require_folder_access
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.utils import validate_object_id
@@ -50,6 +51,7 @@ async def get_folder_tree(
 async def get_folder(
     folder_id: str,
     current_user = Depends(get_current_user),
+    folder = Depends(require_folder_access),
     service: FolderService = Depends(get_folder_service)
 ):
     validate_object_id(folder_id, "folder_id")
@@ -65,6 +67,7 @@ async def rename_folder(
     folder_id: str,
     data: FolderUpdate,
     current_user = Depends(get_current_user),
+    folder = Depends(require_folder_access),
     service: FolderService = Depends(get_folder_service)
 ):
     validate_object_id(folder_id, "folder_id")
@@ -75,6 +78,7 @@ async def rename_folder(
 async def delete_folder(
     folder_id: str,
     current_user = Depends(get_current_user),
+    folder = Depends(require_folder_access),
     service: FolderService = Depends(get_folder_service)
 ):
     validate_object_id(folder_id, "folder_id")

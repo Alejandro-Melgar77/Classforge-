@@ -57,14 +57,14 @@ async def test_save_graph_creates_version_in_diagram_versions(repo):
     assert updated["graph_data"] == new_graph
     assert "history" not in updated or not updated["history"]
 
-    # Verify document in diagram_versions collection
+    # The snapshot must describe the state that was just saved (audit C7).
     version_doc = await repo.versions_collection.find_one({
         "diagram_id": ObjectId(diagram_id),
-        "version": 1
+        "version": 2
     })
     assert version_doc is not None
     assert version_doc["comment"] == "Agregado nodo n2"
-    assert version_doc["graph_data"] == {"nodes": [{"id": "n1"}], "edges": []}
+    assert version_doc["graph_data"] == new_graph
 
 
 @pytest.mark.asyncio
@@ -88,18 +88,23 @@ async def test_list_and_get_history_entry(repo):
     # List history
     history = await repo.list_history(diagram_id)
     assert len(history) == 2
-    # Verify descending version order
-    assert history[0]["version"] == 2
-    assert history[1]["version"] == 1
+    # Verify descending version order (snapshots 2 and 3 hold states v2 and v3)
+    assert history[0]["version"] == 3
+    assert history[1]["version"] == 2
     # graph_data should NOT be present in list_history projection
     assert "graph_data" not in history[0]
 
     # Get single history entry (must include graph_data)
-    entry_v1 = await repo.get_history_entry(diagram_id, 1)
-    assert entry_v1 is not None
-    assert entry_v1["version"] == 1
-    assert entry_v1["graph_data"] == {"v": 1}
-    assert entry_v1["comment"] == "Versión 2"
+    entry_v2 = await repo.get_history_entry(diagram_id, 2)
+    assert entry_v2 is not None
+    assert entry_v2["version"] == 2
+    assert entry_v2["graph_data"] == {"v": 2}
+    assert entry_v2["comment"] == "Versión 2"
+
+    # The current diagram state is always reachable from the history.
+    current = await repo.get_by_id(diagram_id)
+    latest = await repo.get_history_entry(diagram_id, current["version"])
+    assert latest["graph_data"] == current["graph_data"]
 
 
 @pytest.mark.asyncio

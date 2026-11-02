@@ -8,6 +8,99 @@ from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.modules.diagrams.repository import DiagramRepository
 from app.modules.diagrams.schemas import CreateDiagram, UpdateDiagram, SaveGraph
 
+UML_NODE_TYPE_MAP = {
+    'class': 'uml:Class',
+    'interface': 'uml:Interface',
+    'abstract': 'uml:Class',
+    'enum': 'uml:Enumeration',
+    'package': 'uml:Package',
+}
+
+
+def node_kind(node: Dict[str, Any]) -> str:
+    """Resolves the UML kind of a graph node from ``type`` or the X6 ``shape``.
+
+    Diagrams produced by the canvas carry ``shape`` (``classNode``, ``enumNode``…)
+    and often no ``type``; reading only ``type`` silently exported every element
+    as ``uml:Class``.
+    """
+    raw = str(node.get("type") or node.get("shape") or "").strip().lower()
+    if not raw:
+        return "class"
+    if "interface" in raw:
+        return "interface"
+    if "enum" in raw:
+        return "enum"
+    if "abstract" in raw:
+        return "abstract"
+    if "package" in raw:
+        return "package"
+    if "note" in raw:
+        return "note"
+    return "class"
+
+
+def split_multiplicity(raw: Any) -> Optional[tuple]:
+    """Splits a UML multiplicity string into (lower, upper).
+
+    ``"0..*"`` -> ``("0", "*")``; ``"1"`` -> ``("1", "1")``; ``"*"`` -> ``("0", "*")``.
+    Returns ``None`` when the value is empty.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    if text == "*":
+        return ("0", "*")
+    if ".." in text:
+        lower, upper = text.split("..", 1)
+        lower = lower.strip() or "0"
+        upper = upper.strip() or "*"
+        return (lower, upper)
+    return (text, text)
+
+
+def node_geometry(node: Dict[str, Any]) -> tuple:
+    """Returns ``(x, y, width, height)`` tolerating both graph formats."""
+    position = node.get("position") or {}
+    size = node.get("size") or {}
+    x = position.get("x", node.get("x", 0))
+    y = position.get("y", node.get("y", 0))
+    width = size.get("width", node.get("width", 220))
+    height = size.get("height", node.get("height", 140))
+    return x, y, width, height
+
+
+def edge_multiplicities(edge: Dict[str, Any]) -> tuple:
+    """Reads multiplicities from either the nested ``data`` or the flat format."""
+    data = edge.get("data") or {}
+    source = data.get("sourceMultiplicity") or edge.get("source_multiplicity")
+    target = data.get("targetMultiplicity") or edge.get("target_multiplicity")
+    return source, target
+
+
+def _add_multiplicity(end_element: Any, raw: Any) -> None:
+    """Writes lowerValue/upperValue with their proper UML literal types."""
+    parts = split_multiplicity(raw)
+    if not parts:
+        return
+    lower, upper = parts
+
+    lower_elem = ET.SubElement(end_element, 'lowerValue', {
+        '{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralInteger',
+    })
+    try:
+        lower_elem.set('value', str(int(lower)))
+    except (TypeError, ValueError):
+        lower_elem.set('value', '0')
+
+    upper_elem = ET.SubElement(end_element, 'upperValue', {
+        '{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralUnlimitedNatural',
+    })
+    upper_elem.set('value', upper if upper == '*' else str(upper))
+
+
 class DiagramService:
     def __init__(self, db):
         self.repository = DiagramRepository(db)
@@ -101,8 +194,11 @@ class DiagramService:
         await self.db["audit_logs"].insert_one({
             "action": "CREATE_DIAGRAM",
             "user_id": user_id,
+            "resource": "diagrams",
+            "resource_id": str(diagram["_id"]),
             "diagram_id": diagram["_id"],
-            "timestamp": datetime.now(timezone.utc)
+            "metadata": {"name": diagram.get("name")},
+            "created_at": datetime.now(timezone.utc)
         })
         
         return diagram
@@ -121,20 +217,37 @@ class DiagramService:
         if role == "admin":
             # Admin sees all non-deleted diagrams
             pass
-        elif role == "scrum_master":
-            # Scrum master sees diagrams of teams they lead, diagrams they created, or diagrams where they are assigned as participant
-            teams = await self.db["teams"].find({"scrum_master_id": user_id}).to_list(length=None)
+        elif role in ("scrum_master", "dev"):
+            # The listing must match `can_access_diagram`: creator, explicit
+            # participant, member/SM of the diagram's team, or access to the
+            # parent project. Filtering only by member/creator hid diagrams the
+            # user could still open by id.
+            if role == "scrum_master":
+                teams = await self.db["teams"].find(
+                    {"scrum_master_id": user_id, "is_deleted": False}
+                ).to_list(length=None)
+            else:
+                teams = await self.db["teams"].find(
+                    {"member_ids": user_id, "is_deleted": False}
+                ).to_list(length=None)
+
             team_ids = [t["_id"] for t in teams]
+
             conditions = [{"created_by": user_id}, {"member_ids": user_id}]
             if team_ids:
                 conditions.append({"team_id": {"$in": team_ids}})
+
+            project_conditions = [{"owner_id": user_id}]
+            if team_ids:
+                project_conditions.append({"team_id": {"$in": team_ids}})
+            projects = await self.db["projects"].find(
+                {"$or": project_conditions, "is_deleted": False}, {"_id": 1}
+            ).to_list(length=1000)
+            project_ids = [p["_id"] for p in projects]
+            if project_ids:
+                conditions.append({"project_id": {"$in": project_ids}})
+
             query["$or"] = conditions
-        elif role == "dev":
-            # Dev sees diagrams where they have been explicitly assigned as a participant, or created by them
-            query["$or"] = [
-                {"member_ids": user_id},
-                {"created_by": user_id}
-            ]
         else:
             query["created_by"] = user_id
                 
@@ -205,7 +318,7 @@ class DiagramService:
     async def get_diagram_participants(self, diagram_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         diagram = await self.get_diagram(diagram_id, user)
         if not diagram:
-            raise ValueError("Diagram not found")
+            raise NotFoundError("Diagram not found")
         
         team_id = diagram.get("team_id")
         team = await self._get_team(str(team_id)) if team_id else None
@@ -256,7 +369,7 @@ class DiagramService:
     async def update_diagram_participants(self, diagram_id: str, member_ids: List[str], user: Dict[str, Any]) -> Dict[str, Any]:
         diagram = await self.get_diagram(diagram_id, user)
         if not diagram:
-            raise ValueError("Diagram not found")
+            raise NotFoundError("Diagram not found")
         
         role = user.get("role")
         user_id = str(user["_id"])
@@ -265,15 +378,43 @@ class DiagramService:
         is_sm = team and str(team.get("scrum_master_id")) == user_id
         
         if role != "admin" and not is_sm and not is_creator:
-            raise PermissionError("Only Admin or Scrum Master can manage participants")
+            raise ForbiddenError("Only Admin or Scrum Master can manage participants")
             
+        previous_ids = {str(m) for m in diagram.get("member_ids", [])}
         obj_ids = [ObjectId(m) for m in member_ids if ObjectId.is_valid(m)]
         await self.repository.update(diagram_id, {"member_ids": obj_ids})
+
+        added_ids = [str(m) for m in obj_ids if str(m) not in previous_ids]
+        if added_ids:
+            from app.modules.notifications.service import NotificationService
+            notif_service = NotificationService(self.db)
+            for member_id in added_ids:
+                await notif_service.create_notification(
+                    user_id=member_id,
+                    title="Te asignaron a un diagrama",
+                    message=(
+                        f"{user.get('name', 'Un usuario')} te agregó como participante "
+                        f"en '{diagram.get('name', 'un diagrama')}'."
+                    ),
+                    type="diagram_assignment",
+                    diagram_id=str(diagram_id),
+                )
+
+        await self.db["audit_logs"].insert_one({
+            "action": "UPDATE_PARTICIPANTS",
+            "user_id": ObjectId(user["_id"]),
+            "resource": "diagrams",
+            "resource_id": str(diagram_id),
+            "diagram_id": ObjectId(diagram_id),
+            "metadata": {"added": added_ids, "total": len(obj_ids)},
+            "created_at": datetime.now(timezone.utc)
+        })
+
         return await self.get_diagram_participants(diagram_id, user)
 
     async def delete_diagram(self, diagram_id: str, user: Dict[str, Any]) -> bool:
         if user.get("role") != "admin":
-            raise PermissionError("Only admins can delete diagrams")
+            raise ForbiddenError("Only admins can delete diagrams")
             
         diagram = await self.repository.get_by_id(diagram_id)
         if not diagram:
@@ -284,8 +425,11 @@ class DiagramService:
             await self.db["audit_logs"].insert_one({
                 "action": "DELETE_DIAGRAM",
                 "user_id": ObjectId(user["_id"]),
+                "resource": "diagrams",
+                "resource_id": str(diagram_id),
                 "diagram_id": ObjectId(diagram_id),
-                "timestamp": datetime.now(timezone.utc)
+                "metadata": {"name": diagram.get("name")},
+                "created_at": datetime.now(timezone.utc)
             })
         return success
 
@@ -299,8 +443,11 @@ class DiagramService:
         await self.db["audit_logs"].insert_one({
             "action": "SAVE_GRAPH",
             "user_id": ObjectId(user["_id"]),
+            "resource": "diagrams",
+            "resource_id": str(diagram_id),
             "diagram_id": ObjectId(diagram_id),
-            "timestamp": datetime.now(timezone.utc)
+            "metadata": {"comment": data.comment},
+            "created_at": datetime.now(timezone.utc)
         })
         
         return updated_diagram
@@ -329,13 +476,8 @@ class DiagramService:
             'name': diagram.get("name", "Untitled")
         })
         
-        node_type_map = {
-            'class': 'uml:Class',
-            'interface': 'uml:Interface',
-            'abstract': 'uml:Class',
-            'enum': 'uml:Enumeration'
-        }
-        
+        node_elements = {}
+
         vis_map = {
             '+': 'public',
             '-': 'private',
@@ -343,13 +485,12 @@ class DiagramService:
             '~': 'package'
         }
         
-        node_elements = {}
-        
         for node in nodes:
-            ntype = node.get("type", "class")
-            if ntype in ["note", "package"]: continue
+            ntype = node_kind(node)
+            if ntype == "note":
+                continue
             
-            xmi_type = node_type_map.get(ntype, 'uml:Class')
+            xmi_type = UML_NODE_TYPE_MAP.get(ntype, 'uml:Class')
             elem = ET.SubElement(model, 'packagedElement', {
                 '{http://www.omg.org/spec/XMI/20131001}type': xmi_type,
                 '{http://www.omg.org/spec/XMI/20131001}id': node["id"],
@@ -421,12 +562,15 @@ class DiagramService:
                     '{http://www.omg.org/spec/XMI/20131001}type': 'uml:Association',
                     '{http://www.omg.org/spec/XMI/20131001}id': edge["id"]
                 })
-                ET.SubElement(assoc_elem, 'memberEnd', {'{http://www.omg.org/spec/XMI/20131001}idref': f"{edge['id']}_src"})
-                ET.SubElement(assoc_elem, 'memberEnd', {'{http://www.omg.org/spec/XMI/20131001}idref': f"{edge['id']}_tgt"})
+                # memberEnd is a space-separated idref list in the UML/XMI
+                # serialization, not a sequence of child elements.
+                assoc_elem.set('memberEnd', f"{edge['id']}_src {edge['id']}_tgt")
                 
                 agg_kind = 'none'
                 if etype == 'aggregation': agg_kind = 'shared'
                 elif etype == 'composition': agg_kind = 'composite'
+
+                src_mult, tgt_mult = edge_multiplicities(edge)
                 
                 src_end = ET.SubElement(assoc_elem, 'ownedEnd', {
                     '{http://www.omg.org/spec/XMI/20131001}type': 'uml:Property',
@@ -434,9 +578,7 @@ class DiagramService:
                     'type': source_id,
                     'association': edge["id"]
                 })
-                if edge.get("source_multiplicity"):
-                    ET.SubElement(src_end, 'lowerValue', {'{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralString', 'value': edge.get("source_multiplicity")})
-                    ET.SubElement(src_end, 'upperValue', {'{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralString', 'value': edge.get("source_multiplicity")})
+                _add_multiplicity(src_end, src_mult)
                     
                 tgt_end = ET.SubElement(assoc_elem, 'ownedEnd', {
                     '{http://www.omg.org/spec/XMI/20131001}type': 'uml:Property',
@@ -445,9 +587,7 @@ class DiagramService:
                     'association': edge["id"],
                     'aggregation': agg_kind
                 })
-                if edge.get("target_multiplicity"):
-                    ET.SubElement(tgt_end, 'lowerValue', {'{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralString', 'value': edge.get("target_multiplicity")})
-                    ET.SubElement(tgt_end, 'upperValue', {'{http://www.omg.org/spec/XMI/20131001}type': 'uml:LiteralString', 'value': edge.get("target_multiplicity")})
+                _add_multiplicity(tgt_end, tgt_mult)
                     
             elif etype == 'dependency':
                 ET.SubElement(model, 'packagedElement', {
@@ -460,14 +600,13 @@ class DiagramService:
         extension = ET.SubElement(xmi_root, '{http://www.omg.org/spec/XMI/20131001}Extension', {'extender': 'ClassForge'})
         elements = ET.SubElement(extension, 'elements')
         for node in nodes:
-            pos = node.get("position", {"x": 0, "y": 0})
-            size = node.get("size", {"width": 200, "height": 120})
+            node_x, node_y, node_w, node_h = node_geometry(node)
             ET.SubElement(elements, 'element', {
                 '{http://www.omg.org/spec/XMI/20131001}idref': node["id"],
-                'x': str(pos.get("x", 0)),
-                'y': str(pos.get("y", 0)),
-                'width': str(size.get("width", 200)),
-                'height': str(size.get("height", 120))
+                'x': str(node_x),
+                'y': str(node_y),
+                'width': str(node_w),
+                'height': str(node_h)
             })
             
         xml_str = ET.tostring(xmi_root, encoding='utf-8', method='xml').decode('utf-8')
@@ -476,8 +615,10 @@ class DiagramService:
     def parse_xmi(self, xmi_content: str) -> Dict[str, Any]:
         try:
             root = ET.fromstring(xmi_content)
-        except ET.ParseError:
-            root = ET.Element('empty')
+        except ET.ParseError as exc:
+            # Silently returning an empty graph here used to wipe diagrams on a
+            # malformed upload while still answering 200.
+            raise ValidationError(f"XMI inválido: {exc}") from exc
             
         # Clean namespaces to ease parsing
         for elem in root.iter():

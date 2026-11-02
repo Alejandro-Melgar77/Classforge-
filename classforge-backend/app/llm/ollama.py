@@ -266,7 +266,11 @@ class OllamaProvider:
         )
 
     async def stream(self, req: LlmRequest) -> AsyncIterator[str]:
-        """Streams text chunks from Ollama /api/chat."""
+        """Streams text chunks from Ollama /api/chat.
+
+        NOTE (M6): Actualmente este método no tiene consumidor activo en los endpoints,
+        pero se mantiene implementado para uso futuro.
+        """
         await self.circuit_breaker.check()
         messages = self._build_messages(req)
         payload = {

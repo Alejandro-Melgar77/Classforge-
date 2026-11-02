@@ -152,6 +152,13 @@ class AiWorker:
 
     async def _execute_job(self, job: AiJob) -> None:
         """Routes and executes a specific AiJob."""
+        # The autonomy switch is authoritative even for jobs already queued:
+        # turning it off must stop spend immediately, not after the queue drains.
+        if not settings.AI_AUTONOMY_ENABLED:
+            logger.info(f"[AiWorker] Autonomía deshabilitada; job {job.id} omitido.")
+            await self.job_repo.complete(job.id, result_ref={"skipped": "autonomy_disabled"})
+            return
+
         logger.info(f"[AiWorker] Executing job {job.id} (kind={job.kind}, role={job.role_id})")
         try:
             if job.kind == "answer_message":
@@ -517,7 +524,9 @@ class AiWorker:
 
     async def _handle_summarize_digest(self, job: AiJob) -> None:
         """Periodically compiles executive project digest."""
-        await self.digest_service.generate_digest(job.project_id)
+        # ProjectDigestService exposes summarize_digest; generate_digest never
+        # existed, so every digest job failed with AttributeError.
+        await self.digest_service.summarize_digest(job.project_id)
         await self.job_repo.complete(job.id)
 
     def _serialize_task(self, doc: dict) -> dict:

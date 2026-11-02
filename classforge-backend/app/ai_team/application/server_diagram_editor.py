@@ -103,17 +103,33 @@ class ServerDiagramEditor:
 
         # 5. Acquire locks on affected elements
         locked_elements: List[str] = []
+        blocked_elements: List[str] = []
         try:
             for c_cmd in command.classes:
                 existing_node = canonical.get_node_by_name(c_cmd.name)
                 el_id = existing_node.id if existing_node else f"new_{c_cmd.name}"
                 if manager.acquire_lock(diagram_id, bot_user_id, el_id):
                     locked_elements.append(el_id)
+                else:
+                    blocked_elements.append(el_id)
 
             for r_cmd in command.relations:
                 rel_id = f"rel_{r_cmd.source}_{r_cmd.target}"
                 if manager.acquire_lock(diagram_id, bot_user_id, rel_id):
                     locked_elements.append(rel_id)
+                else:
+                    blocked_elements.append(rel_id)
+
+            # A human editing one of the affected elements always wins: the AI
+            # must never overwrite a change someone is making right now.
+            if blocked_elements:
+                return (
+                    False,
+                    0,
+                    "Operación pospuesta: "
+                    + ", ".join(blocked_elements)
+                    + " están siendo editados por otra persona en este momento.",
+                )
 
             # 6. Apply changes and broadcast WS operations
             applied_ops = 0
@@ -179,8 +195,8 @@ class ServerDiagramEditor:
 
             # 7. Persist to MongoDB with snapshot in history
             comment = f"IA {role_id.capitalize()}: {title}"
-            # Use system or bot identifier as saved_by
-            saved_by = "000000000000000000000000"
+            # Attribute the snapshot to the bot identity instead of a zero ObjectId.
+            saved_by = bot_user_id
             await self.repo.save_graph(diagram_id, new_graph, saved_by=saved_by, comment=comment)
 
             # Optional AI_FOCUS event (TODO P7b / lienzo highlighting)
@@ -230,10 +246,13 @@ class ServerDiagramEditor:
                 ))
 
         # 2. Relations
+        missing: List[str] = []
         for r in cmd.relations:
             src_node = diagram.get_node_by_name(r.source) or diagram.get_node(r.source)
             tgt_node = diagram.get_node_by_name(r.target) or diagram.get_node(r.target)
             if not src_node or not tgt_node:
+                # Silently dropping these hid broken proposals from the user.
+                missing.append(f"{r.source}->{r.target}")
                 continue
 
             # Check if relation already exists between these endpoints
@@ -251,5 +270,8 @@ class ServerDiagramEditor:
                     source_multiplicity=r.source_multiplicity,
                     target_multiplicity=r.target_multiplicity,
                 ))
+
+        if missing:
+            return False, f"La propuesta referencia clases inexistentes: {', '.join(missing)}"
 
         return True, "Simulation ok"

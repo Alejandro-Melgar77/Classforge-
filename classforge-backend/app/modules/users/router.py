@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from typing import List, Optional
+from bson import ObjectId
 
+from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role, get_user_repository
 from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.core.security import get_password_hash
@@ -45,7 +47,7 @@ async def list_users(
     response: Response,
     page: int = Query(1, ge=1),
     limit: int = Query(100, ge=1, le=100),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_role(["admin"])),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     skip = (page - 1) * limit
@@ -83,6 +85,51 @@ async def list_users(
     return StandardResponse(success=True, message="Users listed", data=out)
 
 
+@router.get("/directory", response_model=StandardResponse)
+async def user_directory(
+    current_user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Minimal user directory for participant pickers.
+
+    Only ``id``, ``name`` and ``role`` are exposed. Non-admin callers see just the
+    people they share a team with (plus themselves), never the full user table.
+    """
+    query: dict = {"is_deleted": False, "is_active": True}
+
+    if current_user.get("role") != "admin":
+        user_id = current_user.get("_id") or current_user.get("id")
+        team_refs = []
+        for raw_team_id in current_user.get("team_ids", []):
+            if ObjectId.is_valid(str(raw_team_id)):
+                team_refs.append(ObjectId(str(raw_team_id)))
+
+        visible_ids = {user_id} if user_id else set()
+        if team_refs:
+            teams = await db["teams"].find(
+                {"_id": {"$in": team_refs}, "is_deleted": False},
+                {"member_ids": 1, "scrum_master_id": 1},
+            ).to_list(length=100)
+            for team in teams:
+                if team.get("scrum_master_id"):
+                    visible_ids.add(team["scrum_master_id"])
+                for member_id in team.get("member_ids", []):
+                    visible_ids.add(member_id)
+
+        query["_id"] = {"$in": list(visible_ids)}
+
+    users = await db["users"].find(query, {"name": 1, "role": 1}).sort("name", 1).to_list(length=500)
+    data = [
+        {
+            "id": str(u["_id"]),
+            "name": u.get("name", "Usuario"),
+            "role": u.get("role", "dev"),
+        }
+        for u in users
+    ]
+    return StandardResponse(success=True, message="Directory retrieved", data=data)
+
+
 @router.get("/{user_id}", response_model=StandardResponse)
 async def get_user(
     user_id: str,
@@ -116,10 +163,23 @@ async def update_user(
     validate_object_id(user_id, "user_id")
     if str(current_user["_id"]) != user_id and current_user.get("role") != "admin":
         raise ForbiddenError("Not authorized to update this user")
-    
-    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    await user_repo.update(user_id, update_data)
-    await user_repo.log_audit(str(current_user["_id"]), "UPDATE_USER", "users", user_id, metadata=update_data, ip=request.client.host)
+
+    is_admin = current_user.get("role") == "admin"
+    provided = {k: v for k, v in data.model_dump().items() if v is not None}
+
+    # Privilege escalation guard: self-service only allows name/avatar_url.
+    privileged = {"role", "is_active", "email"}
+    attempted = sorted(privileged.intersection(provided))
+    if attempted and not is_admin:
+        raise ForbiddenError(
+            "Solo un administrador puede modificar: " + ", ".join(attempted)
+        )
+
+    if "role" in provided and provided["role"] not in ["admin", "scrum_master", "dev"]:
+        raise ValidationError("Rol inválido")
+
+    await user_repo.update(user_id, provided)
+    await user_repo.log_audit(str(current_user["_id"]), "UPDATE_USER", "users", user_id, metadata=provided, ip=request.client.host)
     return StandardResponse(success=True, message="User updated")
 
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
@@ -75,7 +76,9 @@ class ConnectionManager:
             
         user_id = str(user.get("_id", user.get("id")))
         palette = ["#2D6BE4", "#00C896", "#F5A623", "#E74C3C", "#9B51E0", "#00B4D8", "#F72585", "#7209B7"]
-        user_color = user.get("color") or palette[abs(hash(user_id)) % len(palette)]
+        # hashlib (not hash()) so the colour is stable across processes/restarts.
+        digest = hashlib.sha1(user_id.encode("utf-8")).hexdigest()
+        user_color = user.get("color") or palette[int(digest[:8], 16) % len(palette)]
         self.rooms[key][user_id] = {
             "websocket": websocket,
             "user_id": user_id,
@@ -92,10 +95,13 @@ class ConnectionManager:
         if room_data and user_id in room_data:
             del room_data[user_id]
             if not room_data:
-                try:
-                    del self.rooms[key]
-                except KeyError:
-                    pass
+                # Release per-room state along with the room itself; otherwise
+                # locks/chat history of closed rooms leak for the process lifetime.
+                for mapping in (self.rooms, self.locks, self.chat_history):
+                    try:
+                        del mapping[key]
+                    except KeyError:
+                        pass
         
         self.release_all_user_locks(room_id, user_id)
 
@@ -128,6 +134,11 @@ class ConnectionManager:
                 "status": user_data.get("status", "online")
             })
         return users
+
+    def get_locks(self, room_id: str) -> Dict[str, str]:
+        """Returns a copy of the active element locks for a room."""
+        key = self._resolve_room_key(room_id)
+        return dict(self.locks.get(key) or {})
 
     def is_locked_by_other(self, diagram_id: str, element_id: str, user_id: str) -> bool:
         key = self._resolve_room_key(diagram_id)

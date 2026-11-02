@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.database import connect_to_mongo, close_mongo_connection
+from app.core.database import connect_to_mongo, close_mongo_connection, db_instance
 from app.core.errors import DomainError
 from app.core.middleware import limiter, rate_limit_exceeded_handler, RateLimitExceeded
 from app.llm.gemini import set_shared_client
@@ -44,15 +44,34 @@ async def lifespan(app: FastAPI):
     set_shared_client(llm_client)
 
     await connect_to_mongo()
-    from app.ai_team.application.worker import AiWorker
-    worker = AiWorker(db_instance.db)
-    worker.start()
-    app.state.ai_worker = worker
-    yield
-    await worker.stop()
-    await close_mongo_connection()
-    await llm_client.aclose()
-    set_shared_client(None)
+
+    # The autonomous AI worker is optional infrastructure: a failure here must
+    # never prevent the API from starting (see audit C1/Fase 1).
+    worker = None
+    app.state.ai_worker = None
+    if settings.AI_AUTONOMY_ENABLED and db_instance.db is not None:
+        try:
+            from app.ai_team.application.worker import AiWorker
+
+            worker = AiWorker(db_instance.db)
+            worker.start()
+            app.state.ai_worker = worker
+        except Exception as exc:
+            logger.error("[Lifespan] No se pudo iniciar el AiWorker: %s", exc, exc_info=True)
+            worker = None
+            app.state.ai_worker = None
+
+    try:
+        yield
+    finally:
+        if worker is not None:
+            try:
+                await worker.stop()
+            except Exception as exc:
+                logger.error("[Lifespan] Error al detener el AiWorker: %s", exc, exc_info=True)
+        await close_mongo_connection()
+        await llm_client.aclose()
+        set_shared_client(None)
 
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
@@ -122,6 +141,21 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "code": code
         },
         headers=exc.headers
+    )
+
+
+@app.exception_handler(PermissionError)
+async def permission_error_handler(request: Request, exc: PermissionError):
+    """Maps a native PermissionError to the canonical 403 payload (defence in depth)."""
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.warning(f"PermissionError [request_id={request_id}]: {exc}")
+    return JSONResponse(
+        status_code=403,
+        content={
+            "success": False,
+            "message": str(exc) or "Not enough permissions",
+            "code": "FORBIDDEN"
+        }
     )
 
 

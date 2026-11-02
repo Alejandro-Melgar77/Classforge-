@@ -19,10 +19,26 @@ class DiagramRepository:
         data["is_public"] = data.get("is_public", False)
         data["version"] = 1
         data["graph_data"] = data.get("graph_data", {"nodes": [], "edges": [], "viewport": {"x": 0, "y": 0, "zoom": 1.0}})
-        data["xmi_data"] = None
         data["thumbnail_url"] = None
         
         result = await self.collection.insert_one(data)
+
+        # Persist the initial state as version 1 so that "the current state is
+        # always in the history" holds from the very first save onwards.
+        now = data["created_at"]
+        await self.versions_collection.update_one(
+            {"diagram_id": result.inserted_id, "version": 1},
+            {"$setOnInsert": {
+                "diagram_id": result.inserted_id,
+                "version": 1,
+                "graph_data": data["graph_data"],
+                "saved_by": data.get("created_by"),
+                "saved_at": now,
+                "created_at": now,
+                "comment": "Creación inicial",
+            }},
+            upsert=True,
+        )
         return await self.get_by_id(str(result.inserted_id))
 
     async def get_by_id(self, diagram_id: str) -> Optional[Dict[str, Any]]:
@@ -54,27 +70,35 @@ class DiagramRepository:
         return await self.get_by_id(diagram_id)
 
     async def save_graph(self, diagram_id: str, graph_data: Dict[str, Any], saved_by: str, comment: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Persist a new graph state and snapshot it as the next version.
+
+        Invariant: ``diagram.version`` equals the highest snapshot version and
+        both hold the same ``graph_data``. Previously the snapshot stored the
+        *previous* state and the diagram was bumped to ``N+1``, so the current
+        state was never reachable from the history.
+        """
         diagram = await self.get_by_id(diagram_id)
         if not diagram:
             return None
 
         now = datetime.now(timezone.utc)
-        current_version = diagram.get("version", 1)
-        new_version = current_version + 1
+        current_version = int(diagram.get("version", 1) or 1)
+        new_version = max(current_version + 1, 1)
 
-        # 1. Insert/upsert into diagram_versions collection
         saved_by_oid = ObjectId(saved_by) if ObjectId.is_valid(str(saved_by)) else str(saved_by)
         version_entry = {
             "diagram_id": ObjectId(diagram_id),
-            "version": current_version,
-            "graph_data": diagram.get("graph_data", {}),
+            "version": new_version,
+            "graph_data": graph_data,
             "saved_by": saved_by_oid,
             "saved_at": now,
             "created_at": now,
             "comment": comment
         }
+        # Snapshot first: an interrupted save must at worst leave an extra
+        # version, never a diagram state that no version can restore.
         await self.versions_collection.update_one(
-            {"diagram_id": ObjectId(diagram_id), "version": current_version},
+            {"diagram_id": ObjectId(diagram_id), "version": new_version},
             {"$set": version_entry},
             upsert=True
         )
@@ -95,8 +119,7 @@ class DiagramRepository:
                 "$set": {
                     "graph_data": graph_data,
                     "version": new_version,
-                    "updated_at": now,
-                    "xmi_data": None
+                    "updated_at": now
                 },
                 "$unset": {
                     "history": ""
@@ -111,12 +134,6 @@ class DiagramRepository:
             {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
         )
         return result.modified_count > 0
-
-    async def save_xmi(self, diagram_id: str, xmi_content: str):
-        await self.collection.update_one(
-            {"_id": ObjectId(diagram_id)},
-            {"$set": {"xmi_data": xmi_content}}
-        )
 
     async def list_history(self, diagram_id: str) -> List[Dict[str, Any]]:
         cursor = self.versions_collection.find(

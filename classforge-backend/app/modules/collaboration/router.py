@@ -6,8 +6,9 @@ from typing import Optional
 from bson import ObjectId
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
-from app.core.authz import can_access_project
+from app.core.authz import can_access_diagram, can_access_project
 from app.core.database import get_db
+from app.core.tasks import spawn
 from app.modules.collaboration.connection_manager import manager
 from app.modules.collaboration.service import (
     verify_ws_token,
@@ -31,8 +32,8 @@ async def _trigger_diagram_changed_helper(diagram_id: str, user_id: str):
             diag = await db["diagrams"].find_one({"_id": obj_id}, {"project_id": 1})
             if diag and diag.get("project_id"):
                 origin = "ai" if user_id.startswith("ai:") else "human"
-                from app.ai_team.application.triggers import TriggersManager
-                triggers = TriggersManager(db)
+                from app.ai_team.application.triggers import get_triggers
+                triggers = get_triggers(db)
                 await triggers.on_diagram_changed(str(diag["project_id"]), diagram_id, origin=origin)
     except Exception as err:
         logger.debug(f"[DiagramWS] Failed to trigger diagram_changed: {err}")
@@ -44,6 +45,37 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
     if not user:
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
+
+    # Re-validate resource access: a short-lived token must not outlive a
+    # permission change (the token alone used to be the only gate).
+    db = get_db()
+    if db is not None:
+        try:
+            oid = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
+            diagram = await db["diagrams"].find_one({"_id": oid, "is_deleted": False})
+            if not diagram:
+                await websocket.close(code=4003, reason="Diagram not found")
+                return
+
+            team = None
+            if diagram.get("team_id"):
+                team_oid = ObjectId(str(diagram["team_id"]))
+                team = await db["teams"].find_one({"_id": team_oid, "is_deleted": False})
+
+            project = None
+            if diagram.get("project_id"):
+                project_oid = ObjectId(str(diagram["project_id"]))
+                project = await db["projects"].find_one({"_id": project_oid, "is_deleted": False})
+                if project and not team and project.get("team_id"):
+                    team = await db["teams"].find_one({"_id": ObjectId(str(project["team_id"])), "is_deleted": False})
+
+            if not can_access_diagram(user, diagram, team, project):
+                await websocket.close(code=4003, reason="Forbidden")
+                return
+        except Exception as exc:
+            logger.error(f"[DiagramWS] Error verifying authorization: {exc}")
+            await websocket.close(code=4003, reason="Forbidden")
+            return
 
     await manager.connect(diagram_id, user, websocket)
     user_id = str(user.get("_id", user.get("id")))
@@ -94,6 +126,7 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 room_state = {
                     "type": "ROOM_STATE",
                     "users": users,
+                    "locks": manager.get_locks(diagram_id),
                     "chat_history": chat_history
                 }
                 await websocket.send_json(room_state)
@@ -125,6 +158,19 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         })
                         continue
 
+                    # Persist before broadcasting: if the write fails the other
+                    # clients must not apply a change that was never stored.
+                    try:
+                        await update_diagram_graph_data(diagram_id, node_id, op, node_data, "node")
+                    except Exception as exc:
+                        logger.error(f"[DiagramWS] Failed to persist NODE_OPERATION: {exc}")
+                        await websocket.send_json({
+                            "type": "OP_REJECTED",
+                            "element_id": node_id,
+                            "reason": "persist_failed"
+                        })
+                        continue
+
                     broadcast_msg = {
                         "type": "NODE_OPERATION",
                         "op": op,
@@ -133,8 +179,7 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         "user_id": user_id
                     }
                     await manager.broadcast(diagram_id, broadcast_msg, exclude_user_id=user_id)
-                    await update_diagram_graph_data(diagram_id, node_id, op, node_data, "node")
-                    asyncio.create_task(_trigger_diagram_changed_helper(diagram_id, user_id))
+                    spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
 
             elif msg_type == "EDGE_OPERATION":
                 op = message.get("op")
@@ -150,6 +195,17 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         })
                         continue
 
+                    try:
+                        await update_diagram_graph_data(diagram_id, edge_id, op, edge_data, "edge")
+                    except Exception as exc:
+                        logger.error(f"[DiagramWS] Failed to persist EDGE_OPERATION: {exc}")
+                        await websocket.send_json({
+                            "type": "OP_REJECTED",
+                            "element_id": edge_id,
+                            "reason": "persist_failed"
+                        })
+                        continue
+
                     broadcast_msg = {
                         "type": "EDGE_OPERATION",
                         "op": op,
@@ -158,8 +214,7 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         "user_id": user_id
                     }
                     await manager.broadcast(diagram_id, broadcast_msg, exclude_user_id=user_id)
-                    await update_diagram_graph_data(diagram_id, edge_id, op, edge_data, "edge")
-                    asyncio.create_task(_trigger_diagram_changed_helper(diagram_id, user_id))
+                    spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
 
             elif msg_type == "LOCK_ACQUIRE":
                 element_id = message.get("element_id")

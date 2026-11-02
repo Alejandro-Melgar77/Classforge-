@@ -75,8 +75,11 @@ class ProjectDigestService:
         project_doc = await self._get_project(project_id)
         team_members = await self._get_team_members(project_doc)
 
-        # 2. Fetch recent messages across all threads of the project
-        msgs, _, _ = await self.msg_repo.get_history(project_id, limit=50)
+        # 2. Fetch the most recent messages across all threads of the project
+        # (descending, then reversed to chronological order so `msgs[-1]` is the
+        # newest and `covers_until` advances correctly).
+        msgs, _, _ = await self.msg_repo.get_history(project_id, limit=50, order="desc")
+        msgs = list(reversed(msgs))
         if not msgs:
             return ""
 

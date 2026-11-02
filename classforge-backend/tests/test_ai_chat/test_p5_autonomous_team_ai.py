@@ -580,10 +580,11 @@ async def test_bloque_e_history_restore_endpoint(async_client: AsyncClient):
     assert diag["version"] == 3
     assert diag["graph_data"]["nodes"][0]["name"] == "V1Class"
 
-    # Check audit log
+    # Check audit log (canonical schema: action-specific data lives in metadata)
     audit = await db["audit_logs"].find_one({"action": "RESTORE_VERSION", "diagram_id": ObjectId(diagram_id)})
     assert audit is not None
-    assert audit["restored_version"] == 1
+    assert audit["metadata"]["restored_version"] == 1
+    assert audit["created_at"] is not None
 
 
 # ── Bloque F: Tareas Extendidas ───────────────────────────────────────────────

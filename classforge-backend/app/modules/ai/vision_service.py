@@ -111,6 +111,104 @@ VISION_JSON_SCHEMA = {
 }
 
 
+_X6_NODE_SHAPES = {
+    "class": "uml-class",
+    "interface": "uml-interface",
+    "abstract": "uml-abstract",
+    "enum": "uml-enum",
+}
+
+
+def cells_to_graph_data(cells: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Converts X6 cells into the canonical ClassForge graph (nodes/edges).
+
+    The canvas, the linter and the code generators all consume ``graph_data``
+    with ``nodes``/``edges`` and X6-registered shapes (``uml-class`` and friends).
+    Emitting ``cells`` with ``class-node`` produced diagrams the canvas could not
+    render and that were persisted as an empty graph.
+    """
+    nodes: List[Dict[str, Any]] = []
+    edges: List[Dict[str, Any]] = []
+
+    for cell in cells:
+        data = cell.get("data") or {}
+
+        if cell.get("shape") == "edge":
+            source = cell.get("source")
+            target = cell.get("target")
+            if isinstance(source, dict):
+                source = source.get("cell")
+            if isinstance(target, dict):
+                target = target.get("cell")
+            if not source or not target:
+                continue
+            edges.append({
+                "id": cell.get("id"),
+                "source": source,
+                "target": target,
+                "type": data.get("type") or "association",
+                "data": {
+                    "sourceMultiplicity": data.get("sourceMultiplicity") or "",
+                    "targetMultiplicity": data.get("targetMultiplicity") or "",
+                    "label": data.get("label") or "",
+                },
+            })
+            continue
+
+        is_interface = bool(data.get("isInterface"))
+        node_type = "interface" if is_interface else str(data.get("type") or "class").lower()
+        if node_type not in _X6_NODE_SHAPES:
+            node_type = "class"
+
+        attributes = []
+        for attr in data.get("attributes", []) or []:
+            attributes.append({
+                "name": attr.get("name", ""),
+                "type": attr.get("type", "String"),
+                "visibility": attr.get("visibility", "+"),
+                "is_static": attr.get("is_static", False),
+            })
+
+        methods = []
+        for method in data.get("methods", []) or []:
+            raw_params = method.get("params", method.get("parameters", ""))
+            if isinstance(raw_params, list):
+                params = ", ".join(
+                    f"{p.get('name', '')}: {p.get('type', 'String')}" if isinstance(p, dict) else str(p)
+                    for p in raw_params
+                )
+            else:
+                params = str(raw_params or "")
+            methods.append({
+                "name": method.get("name", ""),
+                "params": params,
+                "return_type": method.get("return_type") or method.get("returnType") or "void",
+                "visibility": method.get("visibility", "+"),
+                "is_abstract": method.get("is_abstract", False),
+            })
+
+        nodes.append({
+            "id": cell.get("id"),
+            "type": node_type,
+            "shape": _X6_NODE_SHAPES[node_type],
+            "position": cell.get("position") or {"x": 0, "y": 0},
+            "size": cell.get("size") or {"width": 240, "height": 140},
+            "data": {
+                "name": data.get("name", "Clase"),
+                "stereotype": "interface" if is_interface else None,
+                "attributes": attributes,
+                "methods": methods,
+                "notes": None,
+            },
+        })
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "viewport": {"x": 0, "y": 0, "zoom": 1.0},
+    }
+
+
 def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]:
     """
     Transforms extracted semantic classes and relationships into AntV/X6 ClassForge cells.
@@ -236,7 +334,7 @@ def convert_semantics_to_graph_data(semantics: Dict[str, Any]) -> Dict[str, Any]
             }
             cells.append(edge_cell)
 
-    return {"cells": cells}
+    return cells_to_graph_data(cells)
 
 
 async def generate_diagram_from_image(

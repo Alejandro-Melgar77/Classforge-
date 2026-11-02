@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, List, Optional
-from pydantic import BaseModel, EmailStr, Field
-from app.modules.auth.schemas import UserPublic
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from app.modules.auth.schemas import UserPublic, validate_password_strength
 
 
 class StandardResponse(BaseModel):
@@ -18,7 +18,19 @@ class UserCreateAdmin(BaseModel):
     role: str = "dev"
     team_ids: Optional[List[str]] = []
 
+    @field_validator("password")
+    @classmethod
+    def _check_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
+
 class UserUpdate(BaseModel):
+    """Fields accepted by PUT /users/{id}.
+
+    ``role``, ``is_active`` and ``email`` are privileged: the router rejects them
+    for non-admin callers (self-service only allows name/avatar_url).
+    """
+
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None

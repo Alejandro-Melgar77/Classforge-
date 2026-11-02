@@ -1,9 +1,11 @@
 import re
 import logging
-from typing import Optional
+import time
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone
+from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.errors import DomainError, ExternalServiceError
 from app.core.middleware import limiter
@@ -42,19 +44,11 @@ async def generate_uml(
             data=result.model_dump(),
             message="Prompt procesado exitosamente"
         )
-    except DomainError as e:
-        return StandardResponse(
-            success=False,
-            data=None,
-            message=e.message
-        )
+    except DomainError:
+        raise
     except Exception as e:
         logger.error(f"[AI] Error generating UML from prompt: {e}")
-        return StandardResponse(
-            success=False,
-            data=None,
-            message="Error al procesar el prompt con el servicio de IA"
-        )
+        raise ExternalServiceError("Error al procesar el prompt con el servicio de IA")
 
 @router.post("/generate-from-image", response_model=StandardResponse)
 @limiter.limit("10/minute")
@@ -83,26 +77,39 @@ async def generate_from_image(
             data=result,
             message="Diagrama generado exitosamente a partir de la imagen mediante Gemini Vision"
         )
-    except DomainError as e:
-        return StandardResponse(
-            success=False,
-            data=None,
-            message=e.message
-        )
+    except DomainError:
+        raise
     except Exception as e:
         logger.error(f"[AI] Error generating from image: {e}")
-        return StandardResponse(
-            success=False,
-            data=None,
-            message="Error al procesar la imagen con el servicio de IA"
-        )
+        raise ExternalServiceError("Error al procesar la imagen con el servicio de IA")
+
+
+_HEALTH_CACHE: Dict[str, Any] = {"at": 0.0, "info": None}
+_HEALTH_TTL_SECONDS = 30.0
 
 
 @router.get("/health")
-async def ai_health():
+@limiter.limit("30/minute")
+async def ai_health(
+    request: Request,
+    current_user = Depends(get_current_user),
+):
+    """Reports provider/routing health.
+
+    Requires authentication and caches the upstream probe: it used to be a public
+    endpoint performing a 2-second outbound request on every call.
+    """
     from app.llm.registry import get_ollama_provider
-    provider = get_ollama_provider()
-    health_info = await provider.check_health(timeout_s=2.0)
+
+    now = time.monotonic()
+    cached = _HEALTH_CACHE["info"]
+    if cached is None or (now - _HEALTH_CACHE["at"]) > _HEALTH_TTL_SECONDS:
+        provider = get_ollama_provider()
+        cached = await provider.check_health(timeout_s=2.0)
+        _HEALTH_CACHE["at"] = now
+        _HEALTH_CACHE["info"] = cached
+
+    health_info = cached
     local_ok = health_info.get("available", False)
 
     return {
@@ -123,6 +130,7 @@ async def ai_health():
 async def submit_ai_feedback(
     payload: FeedbackCorrectionRequest,
     current_user = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     if not payload.allow_feedback:
         raise HTTPException(
@@ -147,15 +155,18 @@ async def submit_ai_feedback(
         "project_id": payload.project_id,
         "comment": clean_comment,
         "status": "pending_review",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc),
     }
 
+    # A success response is only truthful if the correction was actually stored.
+    if db is None:
+        raise ExternalServiceError("El almacenamiento de feedback no está disponible")
+
     try:
-        from app.core.database import db
-        if db is not None:
-            await db.ai_feedback.insert_one(feedback_doc)
+        await db["ai_feedback"].insert_one(feedback_doc)
     except Exception as e:
-        logger.warning(f"No fue posible guardar feedback en MongoDB: {e}")
+        logger.error(f"[AI] No fue posible guardar feedback en MongoDB: {e}")
+        raise ExternalServiceError("No se pudo registrar la corrección para revisión")
 
     return StandardResponse(
         success=True,

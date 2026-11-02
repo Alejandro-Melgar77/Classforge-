@@ -157,7 +157,7 @@ def generate_fastapi_project(graph_data: dict) -> Dict[str, str]:
         node_type = (node.get("type") or node.get("shape") or "").lower().replace("uml-", "").replace("-", "")
         if "enum" in node_type:
             continue
-        if node_type in ["class", "abstract", "entity", "classnode"] or "class" in node_type or "entity" in node_type:
+        if node_type in ["class", "abstract", "entity", "classnode", "interface", "interfacenode"] or "class" in node_type or "entity" in node_type or "interface" in node_type:
             data = node.get("data", {})
             raw_name = data.get("name") or "Entity"
             clean_name = sanitize_class_name(raw_name)
@@ -214,8 +214,8 @@ def generate_fastapi_project(graph_data: dict) -> Dict[str, str]:
         rel_type = (edge.get("type") or edge.get("shape") or "").lower().replace("uml-", "").replace("-", "")
 
         edge_data = edge.get("data", {}) if isinstance(edge.get("data"), dict) else {}
-        s_mult = str(edge_data.get("sourceMultiplicity") or "")
-        t_mult = str(edge_data.get("targetMultiplicity") or "")
+        s_mult = str(edge_data.get("sourceMultiplicity") or edge.get("source_multiplicity") or "")
+        t_mult = str(edge_data.get("targetMultiplicity") or edge.get("target_multiplicity") or "")
 
         if source_id in classes and target_id in classes:
             source_cls = classes[source_id]

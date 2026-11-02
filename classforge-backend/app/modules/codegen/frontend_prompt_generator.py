@@ -74,7 +74,7 @@ def generate_frontend_meta_prompt(
     classes: Dict[str, Dict[str, Any]] = {}
     for node in nodes:
         node_type = (node.get("type") or node.get("shape") or "").lower().replace("uml-", "").replace("-", "")
-        if node_type in ["class", "abstract", "entity", "classnode"] or "class" in node_type or "entity" in node_type:
+        if node_type in ["class", "abstract", "entity", "classnode", "interface", "interfacenode"] or "class" in node_type or "entity" in node_type or "interface" in node_type:
             data = node.get("data", {})
             raw_name = data.get("name") or "Entity"
             clean_name = re.sub(r'[^a-zA-Z0-9_]', '', str(raw_name))

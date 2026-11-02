@@ -48,8 +48,20 @@ def test_ai_health_endpoint_contract():
     Reports active provider, model chain, has_server_key boolean, and Ollama status.
     Does NOT make any paid Gemini calls.
     """
-    client = TestClient(app)
-    response = client.get("/api/v1/ai/health")
+    from app.core.dependencies import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: {
+        "_id": "507f1f77bcf86cd799439011",
+        "name": "Tester",
+        "role": "admin",
+        "email": "t@example.com",
+    }
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/ai/health")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
     assert response.status_code == 200
 
     data = response.json()
@@ -64,6 +76,13 @@ def test_ai_health_endpoint_contract():
     assert data["models"][0] == "gemini-3.8-flash"
     assert isinstance(data["has_server_key"], bool)
     assert isinstance(data["ollama_available"], bool)
+
+
+def test_ai_health_requires_authentication():
+    """A22: the health probe used to be public and uncached."""
+    client = TestClient(app)
+    response = client.get("/api/v1/ai/health")
+    assert response.status_code in (401, 403)
 
 
 def test_ai_chat_enabled_switch_503(monkeypatch):
