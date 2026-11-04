@@ -254,6 +254,7 @@ async def set_proposal_state(
         proposal_id=proposal_id,
         status=body.status,
         user_id=str(current_user["_id"]),
+        project_id=project_id,
     )
     if not updated_msg:
         raise NotFoundError("Mensaje no encontrado para actualizar propuesta")

@@ -135,6 +135,13 @@ class ServerDiagramEditor:
             applied_ops = 0
             new_graph = simulated_canonical.to_graph_data()
 
+            # Persist before notifying clients. A failed write must not create
+            # a remote state that cannot be recovered from the database.
+            comment = f"IA {role_id.capitalize()}: {title}"
+            saved = await self.repo.save_graph(diagram_id, new_graph, saved_by=bot_user_id, comment=comment)
+            if not saved:
+                return False, 0, "No se pudo guardar el diagrama"
+
             # Broadcast simulated additions/modifications to diagram room
             for n in simulated_canonical.nodes:
                 orig = canonical.get_node(n.id)
@@ -193,12 +200,6 @@ class ServerDiagramEditor:
                     })
                     applied_ops += 1
 
-            # 7. Persist to MongoDB with snapshot in history
-            comment = f"IA {role_id.capitalize()}: {title}"
-            # Attribute the snapshot to the bot identity instead of a zero ObjectId.
-            saved_by = bot_user_id
-            await self.repo.save_graph(diagram_id, new_graph, saved_by=saved_by, comment=comment)
-
             # Optional AI_FOCUS event (TODO P7b / lienzo highlighting)
             focus_ids = [n.id for n in simulated_canonical.nodes if not canonical.get_node(n.id)]
             if focus_ids:
@@ -229,8 +230,10 @@ class ServerDiagramEditor:
             ]
             if node:
                 # Merge or replace attributes
-                node.attributes = attrs
-                node.methods = methods
+                for attr in attrs:
+                    node.attributes = [a for a in node.attributes if a.name != attr.name] + [attr]
+                for method in methods:
+                    node.methods = [m for m in node.methods if m.name != method.name] + [method]
                 if c.stereotype:
                     node.stereotype = c.stereotype
             else:

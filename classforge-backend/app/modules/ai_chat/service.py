@@ -552,11 +552,13 @@ class AiChatService:
         if diagram_id:
             try:
                 did = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
-                doc = await self.db["diagrams"].find_one({"_id": did})
+                pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+                doc = await self.db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
                 if doc:
                     return doc
             except Exception:
                 pass
+            return None
         try:
             pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
             cursor = self.db["diagrams"].find(

@@ -150,11 +150,12 @@ class AiMessageRepository:
         proposal_id: str,
         status: str,
         user_id: str,
+        project_id: str,
     ) -> Optional[dict]:
         """Sets status ('applied' | 'dismissed') for a specific proposal inside a message."""
         try:
             message = await self.find_by_id(message_id)
-            if not message:
+            if not message or str(message.get("project_id")) != str(project_id):
                 return None
 
             # Writing proposal_state for an id that does not exist used to answer
@@ -178,11 +179,14 @@ class AiMessageRepository:
             query = {"_id": message_id}
             if ObjectId.is_valid(message_id):
                 query = {"$or": [{"_id": message_id}, {"_id": ObjectId(message_id)}]}
+            query["project_id"] = str(project_id)
 
-            await self.col.update_one(
+            result = await self.col.update_one(
                 query,
                 {"$set": {field_key: state_record, "updated_at": now}}
             )
+            if not result.matched_count:
+                return None
             return await self.find_by_id(message_id)
         except NotFoundError:
             raise

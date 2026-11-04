@@ -91,9 +91,9 @@ async def test_proposal_state_rejects_unknown_proposal():
     })
 
     with pytest.raises(NotFoundError):
-        await repo.update_proposal_state("msg-1", "p-no-existe", "applied", "u")
+        await repo.update_proposal_state("msg-1", "p-no-existe", "applied", "u", PROJECT_ID)
 
-    updated = await repo.update_proposal_state("msg-1", "p-1", "applied", "u")
+    updated = await repo.update_proposal_state("msg-1", "p-1", "applied", "u", PROJECT_ID)
     assert updated["proposal_state"]["p-1"]["status"] == "applied"
 
 
