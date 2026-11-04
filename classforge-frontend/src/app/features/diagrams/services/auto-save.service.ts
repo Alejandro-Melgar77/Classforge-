@@ -16,6 +16,8 @@ export class AutoSaveService implements OnDestroy {
   private isSaving = signal(false);
   private hasError = signal(false);
   private retryCount = 0;
+  private editRevision = 0;
+  private sessionRevision = 0;
   private readonly maxRetries = 3;
 
   readonly saveStatus = computed<SaveStatus>(() => {
@@ -43,6 +45,8 @@ export class AutoSaveService implements OnDestroy {
   }
 
   init(diagramId: string, graphDataGetter: () => GraphData) {
+    this.sessionRevision++;
+    this.editRevision = 0;
     this.currentDiagramId = diagramId;
     this.currentGraphData = graphDataGetter;
     this.isDirty.set(false);
@@ -55,6 +59,7 @@ export class AutoSaveService implements OnDestroy {
 
   markDirty(): void {
     if (!this.currentDiagramId) return;
+    this.editRevision++;
     this.hasError.set(false);
     this.isDirty.set(true);
     this.saveLocalDraft();
@@ -84,19 +89,25 @@ export class AutoSaveService implements OnDestroy {
 
   async executeSave(isRetry = false): Promise<void> {
     if (!this.currentDiagramId || (!this.isDirty() && !isRetry)) return;
+    if (this.isSaving()) return;
 
     const data = this.currentGraphData();
     if (!data) return;
+    const session = this.sessionRevision;
+    const revision = this.editRevision;
+    const diagramId = this.currentDiagramId;
 
     this.isSaving.set(true);
     this.hasError.set(false);
 
     try {
-      await this.diagramService.saveGraph(this.currentDiagramId, data, 'Auto-save').toPromise();
-      this.isDirty.set(false);
+      await this.diagramService.saveGraph(diagramId, data, 'Auto-save').toPromise();
+      if (this.sessionRevision !== session) return;
+      this.isDirty.set(this.editRevision !== revision);
       this.hasError.set(false);
       this.retryCount = 0;
     } catch (e) {
+      if (this.sessionRevision !== session) return;
       console.error('Auto-save falló', e);
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
@@ -108,7 +119,10 @@ export class AutoSaveService implements OnDestroy {
         this.toastService.error('Error al guardar en el servidor. Los cambios están respaldados localmente en tu navegador.');
       }
     } finally {
-      this.isSaving.set(false);
+      if (this.sessionRevision === session) {
+        this.isSaving.set(false);
+        if (this.isDirty() && this.editRevision !== revision) this.scheduleAutoSave();
+      }
     }
   }
 
@@ -120,6 +134,7 @@ export class AutoSaveService implements OnDestroy {
   }
 
   destroy(): void {
+    this.sessionRevision++;
     clearTimeout(this.saveTimer);
     clearTimeout(this.retryTimer);
     this.currentDiagramId = null;

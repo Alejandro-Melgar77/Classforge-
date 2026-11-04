@@ -8,11 +8,11 @@
 
 <!-- METADATOS_DINAMICOS_INICIO -->
 ### 📌 Metadatos de Seguimiento y Estado del Repositorio
-* **Última Actualización Automática:** 2026-11-04 16:56:53
+* **Última Actualización Automática:** 2026-11-04 17:19:14
 * **Rama Activa:** `main`
-* **Último Commit:** `b2e0ddc` - *fix: recover complete AI history after reconnect*
+* **Último Commit:** `1ff9266` - *fix: avoid premature AI job lease expiry*
 * **Autor:** Alejandro-Melgar77 <ale.melgararteaga@gmail.com>
-* **Estado del Árbol de Trabajo:** 7 archivo(s) con cambios pendientes
+* **Estado del Árbol de Trabajo:** 6 archivo(s) con cambios pendientes
 * **Batería de Pruebas Backend (Pytest):** 274 pasadas, 0 fallidas (100% éxito en 21.08s)
 * **Archivos de Prueba en Backend:** 60 suites de prueba
 * **Estado Operativo General:** **PRODUCCIÓN / ESTABLE** (Defectos C1–C7, A1–A36, M1–M12 cerrados y verificados)

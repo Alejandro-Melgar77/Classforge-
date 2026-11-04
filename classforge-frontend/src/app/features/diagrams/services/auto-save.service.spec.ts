@@ -2,7 +2,7 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { AutoSaveService } from './auto-save.service';
 import { DiagramService } from './diagram.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { GraphData } from '../models/diagram.model';
 
 describe('AutoSaveService', () => {
@@ -88,6 +88,24 @@ describe('AutoSaveService', () => {
     service.forceSaveNow();
     tick();
     expect(diagramServiceSpy.saveGraph).toHaveBeenCalledTimes(1);
+    expect(service.saveStatus()).toBe('saved');
+  }));
+
+  it('conserva ediciones efectuadas durante un guardado y evita guardados simultáneos', fakeAsync(() => {
+    const pending = new Subject<any>();
+    diagramServiceSpy.saveGraph.and.returnValues(pending, of({ success: true, message: 'Saved', data: {} as any }));
+    service.init('diag-1', () => mockGraphData);
+    service.markDirty();
+    tick(5000);
+    service.markDirty();
+    tick(5000);
+    expect(diagramServiceSpy.saveGraph).toHaveBeenCalledTimes(1);
+    pending.next({ success: true });
+    pending.complete();
+    tick();
+    expect(service.saveStatus()).toBe('unsaved');
+    tick(5000);
+    expect(diagramServiceSpy.saveGraph).toHaveBeenCalledTimes(2);
     expect(service.saveStatus()).toBe('saved');
   }));
 });
