@@ -4,14 +4,37 @@ Scalable model with cursor-based pagination and personal/project thread semantic
 """
 from __future__ import annotations
 import logging
+import base64
+import json
+import binascii
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from bson import ObjectId
 
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationError
 from app.modules.ai_chat.domain.models import AiMessage
 
 logger = logging.getLogger(__name__)
+
+def _encode_cursor(doc: dict) -> str:
+    payload = [doc['created_at'].isoformat(), str(doc['_id']), isinstance(doc['_id'], ObjectId)]
+    return 'v2:' + base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')
+
+def _apply_cursor(query: dict, value: str, operator: str) -> dict:
+    try:
+        if not value.startswith('v2:'):
+            return {'$and': [query, {'created_at': {operator: datetime.fromisoformat(value)}}]}
+        encoded = value[3:]
+        dt, ident, is_object_id = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+        if not isinstance(ident, str) or not isinstance(is_object_id, bool):
+            raise ValueError('invalid cursor')
+        dt = datetime.fromisoformat(dt)
+        ident = ObjectId(ident) if is_object_id else ident
+        return {'$and': [query, {'$or': [
+            {'created_at': {operator: dt}}, {'created_at': dt, '_id': {operator: ident}}
+        ]}]}
+    except (ValueError, TypeError, UnicodeError, binascii.Error) as exc:
+        raise ValidationError('Cursor de historial inválido') from exc
 
 
 def _serialize_id(val: Any) -> str:
@@ -226,43 +249,20 @@ class AiMessageRepository:
         if role:
             query["ai_role"] = role
 
-        if before:
-            try:
-                dt_before = datetime.fromisoformat(before) if isinstance(before, str) else before
-                query["created_at"] = {"$lt": dt_before}
-            except Exception:
-                pass
-            sort_dir = -1
-        elif after:
-            try:
-                dt_after = datetime.fromisoformat(after) if isinstance(after, str) else after
-                query["created_at"] = {"$gt": dt_after}
-            except Exception:
-                pass
-            sort_dir = 1
-        else:
-            sort_dir = -1 if order == "desc" else 1
-
-        # The total must honour the same filters as the page (it was counting
-        # every message of the project).
+        if before and after:
+            raise ValidationError('No se pueden combinar before y after')
         total = await self.col.count_documents(query)
-
-        cursor = self.col.find(query).sort("created_at", sort_dir).limit(limit)
+        if before or after:
+            query = _apply_cursor(query, before or after, '$lt' if before else '$gt')
+        sort_dir = -1 if before else (1 if after else (-1 if order == 'desc' else 1))
+        cursor = self.col.find(query).sort([('created_at', sort_dir), ('_id', sort_dir)]).limit(limit)
         docs = await cursor.to_list(length=limit)
 
         if before:
             docs.reverse()
 
-        serialized = [_doc_to_dict(d) for d in docs]
-        next_cursor = None
-        if serialized:
-            last_dt = serialized[-1].get("created_at")
-            if isinstance(last_dt, datetime):
-                next_cursor = last_dt.isoformat()
-            elif isinstance(last_dt, str):
-                next_cursor = last_dt
-
-        return serialized, total, next_cursor
+        next_cursor = _encode_cursor(docs[0] if before else docs[-1]) if docs else None
+        return [_doc_to_dict(d) for d in docs], total, next_cursor
 
     async def get_mine_history(
         self,
@@ -282,21 +282,9 @@ class AiMessageRepository:
             ],
         }
 
-        sort_dir = 1
-        if before:
-            try:
-                dt_before = datetime.fromisoformat(before) if isinstance(before, str) else before
-                query["created_at"] = {"$lt": dt_before}
-            except Exception:
-                pass
-            sort_dir = -1
-        elif after:
-            try:
-                dt_after = datetime.fromisoformat(after) if isinstance(after, str) else after
-                query["created_at"] = {"$gt": dt_after}
-            except Exception:
-                pass
-            sort_dir = 1
+        if before and after:
+            raise ValidationError('No se pueden combinar before y after')
+        sort_dir = -1 if before else 1
 
         total = await self.col.count_documents({
             "project_id": str(project_id),
@@ -306,22 +294,16 @@ class AiMessageRepository:
             ],
         })
 
-        cursor = self.col.find(query).sort("created_at", sort_dir).limit(limit)
+        if before or after:
+            query = _apply_cursor(query, before or after, '$lt' if before else '$gt')
+        cursor = self.col.find(query).sort([('created_at', sort_dir), ('_id', sort_dir)]).limit(limit)
         docs = await cursor.to_list(length=limit)
 
         if before:
             docs.reverse()
 
-        serialized = [_doc_to_dict(d) for d in docs]
-        next_cursor = None
-        if serialized:
-            last_dt = serialized[-1].get("created_at")
-            if isinstance(last_dt, datetime):
-                next_cursor = last_dt.isoformat()
-            elif isinstance(last_dt, str):
-                next_cursor = last_dt
-
-        return serialized, total, next_cursor
+        next_cursor = _encode_cursor(docs[0] if before else docs[-1]) if docs else None
+        return [_doc_to_dict(d) for d in docs], total, next_cursor
 
     async def get_recent_user_turns(
         self,

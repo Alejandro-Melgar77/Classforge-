@@ -148,6 +148,9 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 op = message.get("op")
                 node_id = message.get("node_id")
                 node_data = message.get("data")
+                if op not in ("add", "move", "update", "delete") or not isinstance(node_id, str) or not node_id or (op != "delete" and not isinstance(node_data, dict)):
+                    await websocket.send_json({"type": "OP_REJECTED", "element_id": node_id, "reason": "invalid_operation"})
+                    continue
                 if op and node_id:
                     # Check if locked by another user
                     if manager.is_locked_by_other(diagram_id, node_id, user_id):
@@ -185,6 +188,9 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 op = message.get("op")
                 edge_id = message.get("edge_id")
                 edge_data = message.get("data")
+                if op not in ("add", "update", "delete") or not isinstance(edge_id, str) or not edge_id or (op != "delete" and not isinstance(edge_data, dict)):
+                    await websocket.send_json({"type": "OP_REJECTED", "element_id": edge_id, "reason": "invalid_operation"})
+                    continue
                 if op and edge_id:
                     # Check if locked by another user
                     if manager.is_locked_by_other(diagram_id, edge_id, user_id):

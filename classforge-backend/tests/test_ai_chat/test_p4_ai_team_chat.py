@@ -350,8 +350,8 @@ async def test_cursor_pagination_and_thread_semantics(async_client: AsyncClient)
     )
     page2_data = res_page2.json()
     assert len(page2_data["messages"]) > 0
-    # Ensure next page messages are newer than cursor1
-    assert page2_data["messages"][0]["created_at"] > cursor1
+    # The cursor is opaque; compare messages rather than its representation.
+    assert page2_data["messages"][0]["created_at"] > page1_data["messages"][-1]["created_at"]
 
     # 3. Test Personal History (/history/mine) for Ana:
     # Must contain Ana's 5 personal messages + 1 project announcement (6 total),

@@ -179,6 +179,7 @@ async def get_group_history(
     limit: int = Query(50, ge=1, le=100),
     member: Optional[str] = None,
     role: Optional[str] = None,
+    latest: bool = False,
     project: dict = Depends(require_project_member),
     current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -192,7 +193,10 @@ async def get_group_history(
         limit=limit,
         member=member,
         role=role,
+        order='desc' if latest and not before and not after else 'asc',
     )
+    if latest and not before and not after:
+        messages.reverse()
     return {
         "project_id": project_id,
         "messages": messages,

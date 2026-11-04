@@ -214,6 +214,7 @@ export interface HistoryFilters {
 }
 
 export interface HistoryQueryParams {
+  latest?: boolean;
   before?: string;
   after?: string;
   limit?: number;

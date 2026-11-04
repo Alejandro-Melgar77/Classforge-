@@ -260,7 +260,7 @@ export class AiTeamStore implements OnDestroy {
   }
 
   private loadInitialHistory(projectId: string): void {
-    this.api.getHistory(projectId, { limit: 50 }).subscribe({
+    this.api.getHistory(projectId, { limit: 50, latest: true }).subscribe({
       next: (res) => {
         this._messages.set(res.messages || []);
         this._hasMoreHistory.set((res.messages || []).length >= 50 || !!res.next_cursor);
@@ -698,7 +698,7 @@ export class AiTeamStore implements OnDestroy {
 
     // Oldest message is at index 0
     const oldest = msgs[0];
-    const beforeCursor = oldest.created_at || oldest.timestamp;
+    const beforeCursor = this._nextCursor() || oldest.created_at || oldest.timestamp;
     if (!beforeCursor) return;
 
     this._isLoadingMore.set(true);

@@ -140,7 +140,7 @@ describe('AiTeamStore', () => {
 
     expect(apiSpy.getState).toHaveBeenCalledWith('proj-1');
     expect(apiSpy.getRoles).toHaveBeenCalledWith('proj-1');
-    expect(apiSpy.getHistory).toHaveBeenCalledWith('proj-1', { limit: 50 });
+    expect(apiSpy.getHistory).toHaveBeenCalledWith('proj-1', { limit: 50, latest: true });
     expect(mockSocketService.connect).toHaveBeenCalledWith('proj-1');
 
     expect(store.state()?.project_id).toBe('proj-1');
@@ -390,7 +390,7 @@ describe('AiTeamStore', () => {
     tick();
 
     expect(apiSpy.getHistory).toHaveBeenCalledWith('proj-1', {
-      before: '2026-11-01T10:00:00Z',
+      before: 'cursor-seed',
       limit: 30,
       member: undefined,
       role: undefined

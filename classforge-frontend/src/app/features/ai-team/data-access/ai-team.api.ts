@@ -68,6 +68,7 @@ export class AiTeamApiService {
     if (params?.limit) httpParams = httpParams.set('limit', params.limit.toString());
     if (params?.member) httpParams = httpParams.set('member', params.member);
     if (params?.role) httpParams = httpParams.set('role', params.role);
+    if (params?.latest) httpParams = httpParams.set('latest', 'true');
 
     return this.http.get<AiHistoryResponse>(url, { params: httpParams });
   }

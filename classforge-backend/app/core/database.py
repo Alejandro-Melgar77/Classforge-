@@ -38,6 +38,7 @@ async def connect_to_mongo():
     await db_instance.db["notifications"].create_index([("created_at", -1)])
     # Indexes for AI chat collections (P4 scalable model)
     await db_instance.db["ai_messages"].create_index([("project_id", 1), ("created_at", -1)])
+    await db_instance.db["ai_messages"].create_index([("project_id", 1), ("created_at", -1), ("_id", -1)])
     await db_instance.db["ai_messages"].create_index(
         [("project_id", 1), ("thread", 1), ("owner_id", 1), ("created_at", -1)]
     )
