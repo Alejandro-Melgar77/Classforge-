@@ -4,6 +4,7 @@ import { AiRolesRegistryService } from './ai-roles.registry';
 import { AiTeamApiService, GEMINI_BYOK_STORAGE_KEY } from './ai-team.api';
 import {
   AiMessage,
+  AiHistoryResponse,
   AiPendingRole,
   AiProjectState,
   AiRole,
@@ -469,9 +470,11 @@ export class AiTeamStore implements OnDestroy {
   }
 
   // ── Reconnection Resume (?after=) ──────────────────────────────────────────
-  public resumeHistory(afterTimestamp: string | null): void {
+  private historySyncInProgress = false;
+
+  public async resumeHistory(afterTimestamp: string | null): Promise<void> {
     const pid = this._projectId();
-    if (!pid) return;
+    if (!pid || this.historySyncInProgress) return;
 
     // Use either the provided timestamp or the newest message in store
     let after = afterTimestamp;
@@ -480,18 +483,29 @@ export class AiTeamStore implements OnDestroy {
       after = last.created_at || last.timestamp || null;
     }
 
-    if (!after) return;
-
-    this.api.getHistory(pid, { after, limit: 100 }).subscribe({
-      next: (res) => {
-        if (res.messages && res.messages.length > 0) {
-          for (const msg of res.messages) {
-            this.upsertMessage(msg);
-          }
-        }
-      },
-      error: () => {}
-    });
+    if (!after) {
+      this.loadInitialHistory(pid);
+      return;
+    }
+    // Include all messages in the last millisecond, then deduplicate by ID.
+    // This also works with older servers that supply timestamp-only cursors.
+    const timestamp = Date.parse(after);
+    if (Number.isNaN(timestamp)) return;
+    let cursor: string = new Date(timestamp - 1).toISOString();
+    this.historySyncInProgress = true;
+    try {
+      while (this._projectId() === pid) {
+        const res: AiHistoryResponse = await firstValueFrom(this.api.getHistory(pid, { after: cursor, limit: 100 }));
+        if (this._projectId() !== pid) return;
+        for (const msg of res.messages || []) this.upsertMessage(msg);
+        if ((res.messages || []).length < 100 || !res.next_cursor || res.next_cursor === cursor) break;
+        cursor = res.next_cursor;
+      }
+    } catch {
+      this._errorMessage.set('No se pudo sincronizar el historial. Se reintentará al reconectar.');
+    } finally {
+      this.historySyncInProgress = false;
+    }
   }
 
   // ── Polling Fallback Mechanism ─────────────────────────────────────────────
@@ -503,19 +517,7 @@ export class AiTeamStore implements OnDestroy {
       const pid = this._projectId();
       if (!pid) return;
 
-      const last = this._messages()[this._messages().length - 1];
-      const after = last?.created_at || last?.timestamp;
-
-      this.api.getHistory(pid, { after, limit: 50 }).subscribe({
-        next: (res) => {
-          if (res.messages && res.messages.length > 0) {
-            for (const m of res.messages) {
-              this.upsertMessage(m);
-            }
-          }
-        },
-        error: () => {}
-      });
+      void this.resumeHistory(null);
 
       this.api.getState(pid).subscribe({
         next: (state) => {

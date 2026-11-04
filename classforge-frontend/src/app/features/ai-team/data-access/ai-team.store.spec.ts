@@ -299,10 +299,28 @@ describe('AiTeamStore', () => {
     tick();
 
     expect(apiSpy.getHistory).toHaveBeenCalledWith('proj-1', {
-      after: '2026-11-01T10:00:00Z',
+      after: '2026-11-01T09:59:59.999Z',
       limit: 100
     });
     expect(store.messages().some(m => m.id === 'msg-reconnected-1')).toBeTrue();
+  }));
+
+  it('recovers every page after reconnect even when messages share a timestamp', fakeAsync(() => {
+    store.setSocketService(mockSocketService);
+    store.init('proj-1', 'usr-1', 'Ana');
+    tick();
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `recovered-${i}`, thread: 'personal' as const, author_type: 'user' as const,
+      author_name: 'Ana', content: 'mensaje', created_at: '2026-11-01T10:00:00Z', status: 'ok' as const
+    }));
+    apiSpy.getHistory.and.returnValues(
+      of({ project_id: 'proj-1', messages, total: 101, next_cursor: 'v2:page' }),
+      of({ project_id: 'proj-1', messages: [{ ...messages[0], id: 'recovered-last' }], total: 101, next_cursor: 'v2:last' })
+    );
+    store.resumeHistory('2026-11-01T10:00:00Z');
+    tick();
+    expect(apiSpy.getHistory).toHaveBeenCalledWith('proj-1', { after: 'v2:page', limit: 100 });
+    expect(store.messages().filter(m => m.id.startsWith('recovered-')).length).toBe(101);
   }));
 
   it('should fallback to polling when socket enters polling_fallback with backoff', fakeAsync(() => {
