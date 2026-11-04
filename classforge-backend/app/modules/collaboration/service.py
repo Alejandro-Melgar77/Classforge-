@@ -84,7 +84,7 @@ async def verify_ws_token(diagram_id: str, token: str) -> Optional[Dict[str, Any
         except Exception:
             pass
             
-    user = await db.users.find_one({"_id": user_id, "is_deleted": False})
+    user = await db.users.find_one({"_id": user_id, "is_deleted": False, "is_active": True})
     return user
 
 async def update_diagram_graph_data(

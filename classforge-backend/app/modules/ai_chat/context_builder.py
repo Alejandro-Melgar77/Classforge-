@@ -27,7 +27,7 @@ class ProjectContextBuilder:
             project = await self._get_project(db, project_id)
             team = await self._get_team(db, project)
             members = await self._get_members(db, team)
-            diagram = await self._get_diagram(db, diagram_id)
+            diagram = await self._get_diagram(db, diagram_id, project_id)
             history = await self._get_recent_history(db, project_id, history_limit)
             tasks = await self._get_active_tasks(db, project_id)
 
@@ -86,12 +86,13 @@ TAREAS ACTIVAS:
         except Exception:
             return []
 
-    async def _get_diagram(self, db, diagram_id: Optional[str]) -> Optional[dict]:
+    async def _get_diagram(self, db, diagram_id: Optional[str], project_id: str) -> Optional[dict]:
         if not diagram_id:
             return None
         try:
             did = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
-            return await db["diagrams"].find_one({"_id": did})
+            pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+            return await db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
         except Exception:
             return None
 

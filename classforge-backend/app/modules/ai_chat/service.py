@@ -352,15 +352,16 @@ class AiChatService:
                 trigger_text = parent_msg.get("content", trigger_text)
 
         # Trigger background processing
-        asyncio.create_task(
-            self._process_ai_response(
-                ai_msg_id=message_id,
-                project_id=project_id,
-                role_def=role_def,
-                user_id=user_id,
-                trigger_text=trigger_text,
+        try:
+            await self.triggers.on_user_message(
+                project_id=project_id, user_id=user_id, ai_msg_id=message_id,
+                role_id=role_id, trigger_text=trigger_text,
             )
-        )
+        except Exception:
+            await self.msg_repo.update_ai_response(
+                message_id=message_id, content="", status="error", error_code="AI_QUEUE_ERROR"
+            )
+            raise
 
         return {"message_id": message_id, "status": "pending"}
 
