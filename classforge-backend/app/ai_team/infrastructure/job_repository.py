@@ -147,9 +147,10 @@ class AiJobRepository:
         for doc in expired_jobs:
             job_id = doc["_id"]
             attempts = doc.get("attempts", 1)
+            lease_filter = {"_id": job_id, "status": "running", "lease_until": doc.get("lease_until"), "attempts": attempts}
             if attempts >= doc.get("max_attempts", 3):
-                await self.col.update_one(
-                    {"_id": job_id},
+                result = await self.col.update_one(
+                    lease_filter,
                     {
                         "$set": {
                             "status": "failed",
@@ -160,8 +161,8 @@ class AiJobRepository:
                     },
                 )
             else:
-                await self.col.update_one(
-                    {"_id": job_id},
+                result = await self.col.update_one(
+                    lease_filter,
                     {
                         "$set": {
                             "status": "queued",
@@ -171,7 +172,7 @@ class AiJobRepository:
                         }
                     },
                 )
-            reaped_count += 1
+            reaped_count += result.modified_count
 
         if reaped_count > 0:
             logger.warning(f"[AiJobRepository] Reaped {reaped_count} expired job leases.")

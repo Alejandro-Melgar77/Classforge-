@@ -118,14 +118,19 @@ class AiWorker:
                     except Exception as m_err:
                         logger.error(f"[AiWorker] Maintenance error: {m_err}")
 
-                # Acquire next job
-                job = await self.job_repo.acquire_next(self.worker_id, lease_seconds=self.lease_seconds)
+                # Reserve capacity before acquiring a lease. Otherwise a job may
+                # expire while waiting for a busy worker's semaphore.
+                await sem.acquire()
+                try:
+                    job = await self.job_repo.acquire_next(self.worker_id, lease_seconds=self.lease_seconds)
+                except BaseException:
+                    sem.release()
+                    raise
                 if not job:
+                    sem.release()
                     await asyncio.sleep(self.poll_interval)
                     continue
 
-                # Run job under concurrency semaphore
-                await sem.acquire()
                 task = asyncio.create_task(self._run_job_wrapper(job, sem))
                 self._active_tasks.add(task)
                 task.add_done_callback(self._active_tasks.discard)
