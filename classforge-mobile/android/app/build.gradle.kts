@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.classforge.classforge_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -16,10 +16,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.classforge.classforge_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -28,6 +25,8 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -38,17 +37,11 @@ tasks.matching { it.name.startsWith("assemble") }.configureEach {
         val flutterApkDir = file("${layout.buildDirectory.asFile.get()}/outputs/flutter-apk")
         if (flutterApkDir.exists()) {
             flutterApkDir.listFiles()?.forEach { apk ->
-                if (apk.extension == "apk" && !apk.name.startsWith("ClassForge")) {
-                    apk.copyTo(file("${flutterApkDir.path}/ClassForge.apk"), overwrite = true)
+                if (apk.extension == "apk" && !apk.name.startsWith("Classforge-Visualizer")) {
+                    apk.copyTo(file("${flutterApkDir.path}/Classforge-Visualizer.apk"), overwrite = true)
                 }
             }
         }
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 

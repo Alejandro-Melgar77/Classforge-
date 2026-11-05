@@ -18,6 +18,7 @@ import { CodegenService } from '../codegen/services/codegen.service';
 import { LiveCodeDrawerComponent } from '../codegen/components/live-code-drawer.component';
 import { FrontendPromptModalComponent } from '../codegen/components/frontend-prompt-modal.component';
 import { ToolboxPaletteComponent } from '../toolbox/toolbox-palette.component';
+import { PropertiesPanelComponent } from '../properties-panel/properties-panel.component';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
@@ -41,6 +42,7 @@ import { EditorShortcutsModalComponent } from './modals/editor-shortcuts-modal.c
     LiveCodeDrawerComponent,
     FrontendPromptModalComponent,
     ToolboxPaletteComponent,
+    PropertiesPanelComponent,
     NodeEditModalComponent,
     CanvasEditModalComponent,
     CanvasParticipantsModalComponent,
@@ -79,7 +81,9 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // Estados responsivos y paneles
   isMobileViewer = signal<boolean>(false);
+  isDesktopLarge = signal<boolean>(true);
   isToolboxOpen = true;
+  isPropertiesOpen = false;
   toolboxWidth = 240;
   isAiDrawerOpen = false;
   isLiveCodeOpen = false;
@@ -105,6 +109,8 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   quickEdgeLabel = '';
   quickEdgeSourceMult = '';
   quickEdgeTargetMult = '';
+  quickEdgeSourceRole = '';
+  quickEdgeTargetRole = '';
   cardinalityOptions = ['', '1', '0..1', '1..*', '0..*', '*', '1..1', '0..n', '1..n'];
 
   selectedNodeId: string | null = null;
@@ -168,14 +174,20 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   @HostListener('window:resize')
   onWindowResize() {
     this.checkScreenSize();
+    this.canvasService.resizeGraphToContainer();
+    this.updateFloatingToolbarsPosition();
   }
 
   private checkScreenSize() {
     if (typeof window !== 'undefined') {
-      const isMobile = window.innerWidth < 768;
+      const w = window.innerWidth;
+      const isMobile = w < 768;
+      const isLarge = w >= 1280;
       this.isMobileViewer.set(isMobile);
+      this.isDesktopLarge.set(isLarge);
       if (isMobile) {
         this.isToolboxOpen = false;
+        this.isPropertiesOpen = false;
       }
     }
   }
@@ -629,9 +641,12 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
       const labelObj = attrs?.['label'] || attrs?.['text'];
       return typeof labelObj?.['text'] === 'string' ? labelObj['text'] : '';
     };
-    this.quickEdgeLabel = getLabelText(0);
-    this.quickEdgeSourceMult = getLabelText(1);
-    this.quickEdgeTargetMult = getLabelText(2);
+    const rawData = (((edge as any).getData ? (edge as any).getData() : {}) || {}) as any;
+    this.quickEdgeLabel = rawData.label || getLabelText(0);
+    this.quickEdgeSourceMult = rawData.source_multiplicity || rawData.sourceMultiplicity || getLabelText(1);
+    this.quickEdgeTargetMult = rawData.target_multiplicity || rawData.targetMultiplicity || getLabelText(2);
+    this.quickEdgeSourceRole = (rawData.source_role || rawData.sourceRole || getLabelText(3)).replace(/^\+/, '');
+    this.quickEdgeTargetRole = (rawData.target_role || rawData.targetRole || getLabelText(4)).replace(/^\+/, '');
     this.updateFloatingToolbarsPosition();
     this.cdr.markForCheck();
   }
@@ -655,7 +670,15 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
 
   onQuickEdgeChange() {
     if (!this.selectedEdgeId) return;
-    this.canvasService.updateEdgeProperties(this.selectedEdgeId, this.quickEdgeType, this.quickEdgeLabel, this.quickEdgeSourceMult, this.quickEdgeTargetMult);
+    this.canvasService.updateEdgeProperties(
+      this.selectedEdgeId,
+      this.quickEdgeType,
+      this.quickEdgeLabel,
+      this.quickEdgeSourceMult,
+      this.quickEdgeTargetMult,
+      this.quickEdgeSourceRole,
+      this.quickEdgeTargetRole
+    );
     this.autoSave.markDirty();
     this.triggerCodegenPreview();
     if (!this.isApplyingRemoteUpdate) {
@@ -669,7 +692,9 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
         target: tgt,
         label: this.quickEdgeLabel,
         source_multiplicity: this.quickEdgeSourceMult,
-        target_multiplicity: this.quickEdgeTargetMult
+        target_multiplicity: this.quickEdgeTargetMult,
+        source_role: this.quickEdgeSourceRole,
+        target_role: this.quickEdgeTargetRole
       });
     }
   }
@@ -678,6 +703,13 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
     const temp = this.quickEdgeSourceMult;
     this.quickEdgeSourceMult = this.quickEdgeTargetMult;
     this.quickEdgeTargetMult = temp;
+    this.onQuickEdgeChange();
+  }
+
+  swapRoles() {
+    const temp = this.quickEdgeSourceRole;
+    this.quickEdgeSourceRole = this.quickEdgeTargetRole;
+    this.quickEdgeTargetRole = temp;
     this.onQuickEdgeChange();
   }
 
@@ -798,6 +830,11 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   // ─── Manejo de Paneles & Modales ─────────────────────────────
   toggleToolbox() {
     this.isToolboxOpen = !this.isToolboxOpen;
+    setTimeout(() => this.canvasService.resizeGraphToContainer(), 250);
+  }
+
+  toggleProperties() {
+    this.isPropertiesOpen = !this.isPropertiesOpen;
     setTimeout(() => this.canvasService.resizeGraphToContainer(), 250);
   }
 

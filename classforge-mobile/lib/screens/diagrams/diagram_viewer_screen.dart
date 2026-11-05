@@ -66,12 +66,28 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
 
       _wsMessageSub?.cancel();
       _wsMessageSub = wsService.messageStream.listen((msg) {
-        if (msg['type'] == 'NODE_OPERATION' || msg['type'] == 'EDGE_OPERATION') {
+        final type = msg['type']?.toString();
+        if (type == 'DIAGRAM_COMMITTED' ||
+            type == 'NODE_OPERATION' ||
+            type == 'EDGE_OPERATION' ||
+            type == 'BATCH_OPERATIONS' ||
+            type == 'SYNC_GRAPH') {
           _apiService.getDiagram(widget.diagramId).then((updated) {
             if (mounted && updated != null) {
               setState(() => _diagram = updated);
             }
           });
+
+          final actorId = msg['actor_id']?.toString();
+          final currentUserId = _apiService.currentUser?.id;
+          if (actorId != null && actorId != currentUserId) {
+            PushNotificationService().triggerInstantPush(
+              title: 'ClassForge: Diagrama Actualizado',
+              message: 'Un colaborador ha modificado el diagrama "${_diagram?.name ?? "UML"}" en tiempo real.',
+              type: 'remote_update',
+              diagramId: widget.diagramId,
+            );
+          }
         }
       });
     }
@@ -374,25 +390,43 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
                                   status = 'Enviando petición al backend...';
                                 });
 
-                                final res = await _apiService.generateWithAiPrompt(widget.diagramId, prompt);
+                                try {
+                                  final res = await _apiService.generateWithAiPrompt(widget.diagramId, prompt);
 
-                                if (mounted) {
-                                  Navigator.pop(ctx);
-                                  await _loadDiagram();
+                                  if (mounted) {
+                                    Navigator.pop(ctx);
+                                    await _loadDiagram();
 
-                                  PushNotificationService().triggerInstantPush(
-                                    title: '🎤 Diagrama Actualizado por Voz',
-                                    message: 'Se aplicó el comando: "$prompt"',
-                                    type: 'ai_update',
-                                    diagramId: widget.diagramId,
-                                  );
+                                    PushNotificationService().triggerInstantPush(
+                                      title: '🎤 Comando de Voz Exitoso',
+                                      message: 'Se aplicó exitosamente el comando al diagrama: "$prompt"',
+                                      type: 'ai_success',
+                                      diagramId: widget.diagramId,
+                                    );
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Comando procesado: $prompt'),
-                                      backgroundColor: const Color(0xFF10B981),
-                                    ),
-                                  );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Comando procesado en el backend: $prompt'),
+                                        backgroundColor: const Color(0xFF10B981),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    Navigator.pop(ctx);
+                                    PushNotificationService().triggerInstantPush(
+                                      title: '❌ Error en Comando de Voz',
+                                      message: 'Falló la ejecución de la petición en el backend: $e',
+                                      type: 'ai_error',
+                                      diagramId: widget.diagramId,
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error en comando: $e'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                  }
                                 }
                               },
                         icon: isProcessing

@@ -5,7 +5,7 @@ import { AiService } from '../../services/ai.service';
 import { CommandExecutorService } from '../../services/command-executor.service';
 import { AiHistoryService } from '../../services/ai-history.service';
 import { AiTeamStore } from '../../../../ai-team/data-access/ai-team.store';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { UMLCommandResponse } from '../../models/ai-command.model';
 import { signal } from '@angular/core';
 
@@ -42,6 +42,7 @@ describe('CommandConsoleComponent', () => {
 
     mockAi = {
       processInput: jasmine.createSpy().and.returnValue(of(mockCommand)),
+      processImage: jasmine.createSpy().and.returnValue(of(mockCommand)),
       checkHealth: jasmine.createSpy().and.returnValue(of({ local_available: true, local_model: 'qwen2.5:1.5b' }))
     };
 
@@ -162,5 +163,50 @@ describe('CommandConsoleComponent', () => {
 
     component.setSection('console');
     expect(component.activeSection()).toBe('console');
+  });
+
+  it('should reject invalid image mime types', () => {
+    const invalidFile = new File(['dummy'], 'test.txt', { type: 'text/plain' });
+    component.handleImageFile(invalidFile);
+    expect(component.attachedImage()).toBeNull();
+    expect(component.executionFeedback()?.type).toBe('error');
+  });
+
+  it('should reject image exceeding 8 MB', () => {
+    const bigBlob = new Uint8Array(9 * 1024 * 1024);
+    const bigFile = new File([bigBlob], 'huge.png', { type: 'image/png' });
+    component.handleImageFile(bigFile);
+    expect(component.attachedImage()).toBeNull();
+    expect(component.executionFeedback()?.message).toContain('8 MB');
+  });
+
+  it('should execute image directly when autoApply is true', () => {
+    component.autoApply.set(true);
+    component.attachedImage.set({
+      dataUrl: 'data:image/png;base64,AAAA',
+      base64: 'AAAA',
+      mimeType: 'image/png',
+      name: 'diagram.png',
+      sizeBytes: 1024
+    });
+    component.textInput = 'boceto a UML';
+
+    component.handleSubmit();
+
+    expect(mockAi.processImage).toHaveBeenCalledWith('AAAA', 'image/png', 'boceto a UML', 'diag-1');
+    expect(mockExecutor.execute).toHaveBeenCalledWith(mockCommand);
+    expect(component.attachedImage()).toBeNull();
+  });
+
+  it('should remove attached image when requested', () => {
+    component.attachedImage.set({
+      dataUrl: 'data:image/png;base64,AAAA',
+      base64: 'AAAA',
+      mimeType: 'image/png',
+      name: 'diagram.png',
+      sizeBytes: 1024
+    });
+    component.removeImage();
+    expect(component.attachedImage()).toBeNull();
   });
 });

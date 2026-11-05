@@ -12,8 +12,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController(text: 'admin@classforge.io');
-  final TextEditingController _passwordController = TextEditingController(text: 'Admin123!');
+  final TextEditingController _emailController = TextEditingController(text: 'admin@classforge.com');
+  final TextEditingController _passwordController = TextEditingController(text: '1234');
   late TextEditingController _urlController;
   final ApiService _apiService = ApiService();
 
@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: 'Volver al Panel de Pruebas',
-          onPressed: () => Navigator.pushReplacementNamed(context, '/test-panel'),
+          onPressed: () => Navigator.canPop(context) ? Navigator.pop(context) : null,
         ),
         title: Text(
           'Inicio de Sesión Cloud',
@@ -349,19 +349,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     label: const Text('Admin'),
                     backgroundColor: AppTheme.surface3,
                     labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
-                    onPressed: () => _fillDemo('admin@classforge.io', 'Admin123!'),
+                    onPressed: () => _fillDemo('admin@classforge.com', '1234'),
                   ),
                   ActionChip(
                     label: const Text('Scrum Master'),
                     backgroundColor: AppTheme.surface3,
                     labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
-                    onPressed: () => _fillDemo('scrum@classforge.io', 'Scrum123!'),
+                    onPressed: () => _fillDemo('alejandro@classforge.com', '1234'),
                   ),
                   ActionChip(
                     label: const Text('Developer'),
                     backgroundColor: AppTheme.surface3,
                     labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
-                    onPressed: () => _fillDemo('dev@classforge.io', 'Dev12345!'),
+                    onPressed: () => _fillDemo('fernando@classforge.com', '1234'),
                   ),
                 ],
               ),

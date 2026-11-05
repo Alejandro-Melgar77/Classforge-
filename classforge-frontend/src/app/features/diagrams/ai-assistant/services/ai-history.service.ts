@@ -37,7 +37,7 @@ export class AiHistoryService {
 
   public addEntry(
     prompt: string,
-    inputType: 'voice' | 'text',
+    inputType: 'voice' | 'text' | 'image',
     command?: UMLCommandResponse,
     status: 'applied' | 'discarded' | 'failed' = 'applied',
     diagramId?: string

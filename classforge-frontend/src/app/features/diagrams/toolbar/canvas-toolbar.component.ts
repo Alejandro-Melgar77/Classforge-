@@ -6,7 +6,7 @@ import {
   LucideIconProvider, 
   Undo, Redo, Trash2, Copy, ClipboardPaste, 
   Maximize, ZoomIn, ZoomOut, Download, Upload, 
-  LayoutGrid, HelpCircle, RefreshCw 
+  LayoutGrid, HelpCircle, RefreshCw, MoreHorizontal, Sparkles, Settings2, SlidersHorizontal
 } from 'lucide-angular';
 import { CanvasService } from '../services/canvas.service';
 import { DiagramService } from '../services/diagram.service';
@@ -25,22 +25,27 @@ import { ActivatedRoute } from '@angular/router';
       useValue: new LucideIconProvider({
         Undo, Redo, Trash2, Copy, ClipboardPaste,
         Maximize, ZoomIn, ZoomOut, Download, Upload,
-        LayoutGrid, HelpCircle, RefreshCw
+        LayoutGrid, HelpCircle, RefreshCw, MoreHorizontal,
+        Sparkles, Settings2, SlidersHorizontal
       })
     }
   ],
   templateUrl: './canvas-toolbar.component.html',
 })
 export class CanvasToolbarComponent {
-  private canvasService = inject(CanvasService);
+  public canvasService = inject(CanvasService);
   private diagramService = inject(DiagramService);
   private toastService = inject(ToastService);
   public autoSave = inject(AutoSaveService);
   private route = inject(ActivatedRoute);
 
   @Output() openShortcuts = new EventEmitter<void>();
+  @Output() toggleAiAssistant = new EventEmitter<void>();
+  @Output() toggleProperties = new EventEmitter<void>();
+  @Output() toggleToolbox = new EventEmitter<void>();
 
   exportMenuOpen = false;
+  moreMenuOpen = false;
   isExporting = false;
   isImporting = false;
 
@@ -53,6 +58,9 @@ export class CanvasToolbarComponent {
   redo() { this.canvasService.redo(); }
   deleteSelected() { this.canvasService.deleteSelected(); }
   fitView() { this.canvasService.fitView(); }
+  resetZoom() { this.canvasService.resetZoom(); }
+  centerDiagram() { this.canvasService.centerDiagram(); }
+
   autoLayout() {
     if (!this.diagramId) {
       this.canvasService.autoLayout();
@@ -74,6 +82,7 @@ export class CanvasToolbarComponent {
       }
     });
   }
+
   zoomIn() { this.canvasService.zoomIn(); }
   zoomOut() { this.canvasService.zoomOut(); }
 
@@ -98,10 +107,21 @@ export class CanvasToolbarComponent {
 
   toggleExportMenu() {
     this.exportMenuOpen = !this.exportMenuOpen;
+    if (this.exportMenuOpen) this.moreMenuOpen = false;
+  }
+
+  toggleMoreMenu() {
+    this.moreMenuOpen = !this.moreMenuOpen;
+    if (this.moreMenuOpen) this.exportMenuOpen = false;
+  }
+
+  closeMenus() {
+    this.exportMenuOpen = false;
+    this.moreMenuOpen = false;
   }
 
   async exportPng() {
-    this.exportMenuOpen = false;
+    this.closeMenus();
     this.isExporting = true;
     try {
       await this.canvasService.exportPng();
@@ -114,7 +134,7 @@ export class CanvasToolbarComponent {
   }
 
   async exportPdf() {
-    this.exportMenuOpen = false;
+    this.closeMenus();
     this.isExporting = true;
     try {
       await this.canvasService.exportPdf('classforge-diagram');
@@ -127,7 +147,7 @@ export class CanvasToolbarComponent {
   }
 
   exportXmi() {
-    this.exportMenuOpen = false;
+    this.closeMenus();
     if (!this.diagramId) return;
     this.isExporting = true;
     this.diagramService.exportXmi(this.diagramId).subscribe({
@@ -149,7 +169,7 @@ export class CanvasToolbarComponent {
   }
 
   exportJson() {
-    this.exportMenuOpen = false;
+    this.closeMenus();
     if (!this.diagramId) return;
     this.isExporting = true;
     this.diagramService.exportJson(this.diagramId).subscribe({
@@ -171,11 +191,11 @@ export class CanvasToolbarComponent {
   }
 
   importXmi(event: Event) {
+    this.closeMenus();
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0 || !this.diagramId) return;
     const file = input.files[0];
 
-    // Validación de extensión
     const validExtensions = ['.xmi', '.xml'];
     const fileName = file.name.toLowerCase();
     const isValid = validExtensions.some(ext => fileName.endsWith(ext));
@@ -214,6 +234,7 @@ export class CanvasToolbarComponent {
   }
 
   importJson(event: Event) {
+    this.closeMenus();
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];

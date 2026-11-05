@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Graph, Cell, Node, Edge } from '@antv/x6';
@@ -6,6 +6,7 @@ import { LucideAngularModule, Plus, X, Settings2, ChevronDown, ChevronRight } fr
 import { UMLNodeData, UMLAttribute, UMLMethod, Visibility, EdgeType, NodeType } from '../models/diagram.model';
 import { AutoSaveService } from '../services/auto-save.service';
 import { CanvasService } from '../services/canvas.service';
+import { buildUmlEdgeLabels } from '../nodes/uml-nodes';
 
 @Component({
   selector: 'properties-panel',
@@ -18,10 +19,11 @@ import { CanvasService } from '../services/canvas.service';
 })
 export class PropertiesPanelComponent implements OnInit, OnDestroy {
   @Input() graph!: Graph;
+  @Output() close = new EventEmitter<void>();
 
   private cdr = inject(ChangeDetectorRef);
   private autoSave = inject(AutoSaveService);
-  private canvasService = inject(CanvasService);
+  public canvasService = inject(CanvasService);
 
   selectedCell: Cell | null = null;
   cellType: 'node' | 'edge' | null = null;
@@ -65,9 +67,12 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
   ];
 
   ngOnInit() {
-    if (!this.graph) return;
-
-    this.bindSelectionEvents();
+    if (!this.graph) {
+      this.graph = this.canvasService.getGraph();
+    }
+    if (this.graph) {
+      this.bindSelectionEvents();
+    }
   }
 
   bindSelectionEvents() {
@@ -98,6 +103,7 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
         this.nodeData = {
           name: rawData.name || 'NombreClase',
           stereotype: rawData.stereotype || null,
+          is_abstract: !!(rawData.is_abstract || (rawData as any).isAbstract),
           attributes: Array.isArray(rawData.attributes) ? JSON.parse(JSON.stringify(rawData.attributes)) : [],
           methods: Array.isArray(rawData.methods) ? JSON.parse(JSON.stringify(rawData.methods)) : [],
           notes: rawData.notes || null
@@ -106,13 +112,21 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
       } else {
         const edge = this.selectedCell as Edge;
         const labels = edge.getLabels() || [];
+        const getLabel = (idx: number) => {
+          if (idx >= labels.length) return '';
+          const l = labels[idx];
+          return (l?.attrs as any)?.['label']?.['text'] || (l?.attrs as any)?.['text']?.['text'] || '';
+        };
+
+        const rawEdgeData = (edge.getData() as any) || {};
+
         this.edgeData = {
-          label: (labels[0]?.attrs as any)?.['text']?.['text'] || (labels[0]?.attrs as any)?.['label']?.['text'] || '',
+          label: rawEdgeData.label || getLabel(0),
           type: (this.selectedCell.shape.replace('uml-', '') as EdgeType) || 'association',
-          source_multiplicity: (labels[1]?.attrs as any)?.['text']?.['text'] || (labels[1]?.attrs as any)?.['label']?.['text'] || '',
-          target_multiplicity: (labels[2]?.attrs as any)?.['text']?.['text'] || (labels[2]?.attrs as any)?.['label']?.['text'] || '',
-          source_role: '',
-          target_role: ''
+          source_multiplicity: rawEdgeData.source_multiplicity || rawEdgeData.sourceMultiplicity || getLabel(1),
+          target_multiplicity: rawEdgeData.target_multiplicity || rawEdgeData.targetMultiplicity || getLabel(2),
+          source_role: (rawEdgeData.source_role || rawEdgeData.sourceRole || getLabel(3)).replace(/^\+/, ''),
+          target_role: (rawEdgeData.target_role || rawEdgeData.targetRole || getLabel(4)).replace(/^\+/, '')
         };
       }
     } else {
@@ -150,7 +164,12 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
     if (!this.selectedCell || !this.nodeData) return;
 
     this.nodeType = newType;
-    this.nodeData.stereotype = newType !== 'class' && newType !== 'note' && newType !== 'package' ? newType : null;
+    if (newType === 'interface') this.nodeData.stereotype = 'interface';
+    else if (newType === 'abstract') {
+      this.nodeData.stereotype = 'abstract';
+      this.nodeData.is_abstract = true;
+    } else if (newType === 'enum') this.nodeData.stereotype = 'enumeration';
+    else if (newType === 'class') this.nodeData.stereotype = null;
 
     this.canvasService.updateNodeData(this.selectedCell as Node, this.nodeData, newType);
     this.autoSave.markDirty();
@@ -164,7 +183,9 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
         name: 'nuevoAtributo',
         type: 'String',
         default_value: null,
-        is_static: false
+        is_static: false,
+        is_derived: false,
+        multiplicity: null
       });
       this.updateNode();
     }
@@ -205,62 +226,25 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
     if (!this.selectedCell || this.cellType !== 'edge' || !this.edgeData) return;
 
     const edge = this.selectedCell as Edge;
-    const labels: any[] = [
-      // 0: Main relationship label (center)
-      {
-        position: 0.5,
-        attrs: {
-          label: {
-            text: this.edgeData.label || '',
-            fill: '#E2E8F0',
-            fontSize: 11,
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '500',
-            display: this.edgeData.label ? 'block' : 'none'
-          },
-          body: {
-            fill: '#1E293B',
-            stroke: '#475569',
-            strokeWidth: 1,
-            rx: 3,
-            ry: 3,
-            display: this.edgeData.label ? 'block' : 'none'
-          }
-        }
-      },
-      // 1: Source Multiplicity (near source)
-      {
-        position: { distance: 35, offset: { x: 0, y: -14 } },
-        attrs: {
-          label: {
-            text: this.edgeData.source_multiplicity || '',
-            fill: '#38BDF8',
-            fontSize: 11,
-            fontFamily: 'JetBrains Mono, monospace',
-            fontWeight: 'bold',
-            display: this.edgeData.source_multiplicity ? 'block' : 'none'
-          },
-          body: { fill: 'transparent', stroke: 'none' }
-        }
-      },
-      // 2: Target Multiplicity (near target)
-      {
-        position: { distance: -35, offset: { x: 0, y: -14 } },
-        attrs: {
-          label: {
-            text: this.edgeData.target_multiplicity || '',
-            fill: '#38BDF8',
-            fontSize: 11,
-            fontFamily: 'JetBrains Mono, monospace',
-            fontWeight: 'bold',
-            display: this.edgeData.target_multiplicity ? 'block' : 'none'
-          },
-          body: { fill: 'transparent', stroke: 'none' }
-        }
-      }
-    ];
+    const isLight = this.canvasService.isLightMode();
+    const labels = buildUmlEdgeLabels(
+      this.edgeData.label,
+      this.edgeData.source_multiplicity,
+      this.edgeData.target_multiplicity,
+      this.edgeData.source_role,
+      this.edgeData.target_role,
+      isLight
+    );
 
     edge.setLabels(labels);
+    edge.setData({
+      label: this.edgeData.label,
+      type: this.edgeData.type,
+      source_multiplicity: this.edgeData.source_multiplicity,
+      target_multiplicity: this.edgeData.target_multiplicity,
+      source_role: this.edgeData.source_role,
+      target_role: this.edgeData.target_role
+    });
     this.autoSave.markDirty();
   }
 
@@ -268,17 +252,17 @@ export class PropertiesPanelComponent implements OnInit, OnDestroy {
     if (!this.selectedCell || !this.edgeData) return;
     this.edgeData.type = newType;
 
-    this.canvasService.changeEdgeType(this.selectedCell.id, newType);
-
-    this.selectedCell = null;
-    this.cellType = null;
-    this.edgeData = null;
+    const newEdge = this.canvasService.changeEdgeType(this.selectedCell.id, newType);
+    if (newEdge) {
+      this.selectedCell = newEdge;
+      this.updateEdge();
+    }
     this.autoSave.markDirty();
     this.cdr.detectChanges();
   }
 
   validateIdentifier(name: string): { valid: boolean; warning?: string } {
-    if (!name || !name.trim()) return { valid: false, warning: 'El nombre no puede estar vacio.' };
+    if (!name || !name.trim()) return { valid: false, warning: 'El nombre no puede estar vacío.' };
     if (/\s/.test(name)) return { valid: false, warning: 'No debe contener espacios.' };
     const reserved = ['class', 'interface', 'public', 'private', 'protected', 'static', 'void', 'def', 'import', 'from', 'return'];
     if (reserved.includes(name.toLowerCase())) {

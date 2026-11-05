@@ -14,7 +14,7 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
          aria-modal="true" 
          aria-labelledby="node-edit-title">
       
-      <div class="w-full max-w-lg bg-[var(--surface-2)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+      <div class="w-full max-w-xl bg-[var(--surface-2)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
         
         <!-- Header -->
         <div class="h-12 px-4 border-b border-[var(--border)] bg-[var(--surface-1)] flex items-center justify-between shrink-0">
@@ -35,22 +35,30 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
           <div class="grid grid-cols-2 gap-3 p-3 bg-[var(--surface-1)] rounded-lg border border-[var(--border)]">
             <div>
               <label for="node-name-input" class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Nombre de la Clase</label>
-              <input id="node-name-input" type="text" [(ngModel)]="localData.name" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none font-medium">
+              <input id="node-name-input" type="text" [(ngModel)]="localData.name" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none font-bold">
             </div>
             <div>
               <label for="node-type-select" class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Tipo de Elemento</label>
-              <select id="node-type-select" [(ngModel)]="localType" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none">
-                <option value="class">Clase (Class)</option>
-                <option value="interface">Interfaz («interface»)</option>
-                <option value="abstract">Clase Abstracta (Abstract)</option>
-                <option value="enum">Enumeración («enum»)</option>
+              <select id="node-type-select" [(ngModel)]="localType" (ngModelChange)="onTypeChange($event)" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none cursor-pointer">
+                <option value="class">Clase Estándar (&laquo;class&raquo;)</option>
+                <option value="interface">Interfaz (&laquo;interface&raquo;)</option>
+                <option value="abstract">Clase Abstracta (&laquo;abstract&raquo;)</option>
+                <option value="enum">Enumeración (&laquo;enumeration&raquo;)</option>
                 <option value="package">Paquete (Package)</option>
                 <option value="note">Nota / Comentario</option>
               </select>
             </div>
-            <div class="col-span-2">
-              <label for="node-stereotype-input" class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Estereotipo (opcional)</label>
-              <input id="node-stereotype-input" type="text" [(ngModel)]="localData.stereotype" placeholder="ej. entity, service, repository, DTO" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none">
+            <div class="col-span-2 grid grid-cols-2 gap-3">
+              <div>
+                <label for="node-stereotype-input" class="text-[11px] font-semibold text-[var(--text-secondary)] mb-1 block">Estereotipo</label>
+                <input id="node-stereotype-input" type="text" [(ngModel)]="localData.stereotype" placeholder="ej. class, interface, abstract, enumeration, DTO" class="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white focus:border-[var(--primary)] outline-none font-mono">
+              </div>
+              <div class="flex items-end pb-1.5">
+                <label class="flex items-center gap-2 text-xs text-purple-300 cursor-pointer">
+                  <input type="checkbox" [(ngModel)]="localData.is_abstract" class="rounded text-purple-600 w-3.5 h-3.5">
+                  <span>Es Abstracta (nombre en <em>cursiva</em>)</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -58,7 +66,7 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
           <div *ngIf="localType !== 'note' && localType !== 'package'" class="border border-[var(--border)] rounded-lg bg-[var(--surface-1)] overflow-hidden">
             <div class="px-3 py-2 bg-[var(--surface-3)]/60 border-b border-[var(--border)] flex items-center justify-between">
               <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Atributos ({{ localData.attributes.length }})
+                Atributos UML 2.5 ({{ localData.attributes.length }})
               </span>
               <button (click)="addAttribute()" class="px-2 py-1 bg-blue-600/30 text-blue-400 hover:bg-blue-600/50 border border-blue-500/40 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer">
                 + Añadir Atributo
@@ -66,7 +74,7 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
             </div>
 
             <div class="p-2 flex flex-col gap-2">
-              <div *ngFor="let attr of localData.attributes; let i = index" class="p-2 bg-[var(--surface-2)] rounded border border-[var(--border)]/70 flex flex-col gap-2">
+              <div *ngFor="let attr of localData.attributes; let i = index" class="p-2.5 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]/70 flex flex-col gap-2">
                 <div class="flex items-center gap-1.5">
                   <select [(ngModel)]="attr.visibility" class="w-24 bg-[var(--surface-3)] border border-[var(--border)] rounded px-1 py-1 text-xs font-mono text-white" aria-label="Visibilidad del atributo">
                     <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.label }}</option>
@@ -77,11 +85,20 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
                   </button>
                 </div>
 
-                <div class="flex items-center gap-2">
-                  <input type="text" [(ngModel)]="attr.type" placeholder="Tipo (String, Long...)" class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-sky-400 font-mono" aria-label="Tipo de dato">
-                  <input type="text" [(ngModel)]="attr.default_value" placeholder="Valor por defecto" class="w-32 bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono" aria-label="Valor por defecto">
-                  <label class="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
-                    <input type="checkbox" [(ngModel)]="attr.is_static" class="rounded"> Static
+                <div class="grid grid-cols-3 gap-2">
+                  <input type="text" [(ngModel)]="attr.type" placeholder="Tipo (String, Long...)" class="bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-sky-400 font-mono" aria-label="Tipo de dato">
+                  <input type="text" [(ngModel)]="attr.multiplicity" placeholder="Multiplicidad (ej. 0..1)" class="bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-amber-300 font-mono" aria-label="Multiplicidad">
+                  <input type="text" [(ngModel)]="attr.default_value" placeholder="Valor por defecto" class="bg-[var(--surface-3)] border border-[var(--border)] rounded px-2 py-1 text-xs text-emerald-400 font-mono" aria-label="Valor por defecto">
+                </div>
+
+                <div class="flex items-center gap-4 text-[11px] text-slate-300 pt-0.5">
+                  <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" [(ngModel)]="attr.is_static" class="rounded">
+                    <span>Static (subrayado)</span>
+                  </label>
+                  <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" [(ngModel)]="attr.is_derived" class="rounded">
+                    <span>Derivado (/ prefijo)</span>
                   </label>
                 </div>
               </div>
@@ -104,7 +121,7 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
             </div>
 
             <div class="p-2 flex flex-col gap-2">
-              <div *ngFor="let m of localData.methods; let i = index" class="p-2 bg-[var(--surface-2)] rounded border border-[var(--border)]/70 flex flex-col gap-2">
+              <div *ngFor="let m of localData.methods; let i = index" class="p-2.5 bg-[var(--surface-2)] rounded-lg border border-[var(--border)]/70 flex flex-col gap-2">
                 <div class="flex items-center gap-1.5">
                   <select [(ngModel)]="m.visibility" class="w-24 bg-[var(--surface-3)] border border-[var(--border)] rounded px-1 py-1 text-xs font-mono text-white" aria-label="Visibilidad del método">
                     <option *ngFor="let v of visibilityOptions" [value]="v.value">{{ v.label }}</option>
@@ -122,7 +139,7 @@ import { UMLNodeData, NodeType, UMLAttribute, UMLMethod, Visibility } from '../.
                     <input type="checkbox" [(ngModel)]="m.is_static" class="rounded"> Static
                   </label>
                   <label class="flex items-center gap-1 text-[11px] text-purple-300 cursor-pointer">
-                    <input type="checkbox" [(ngModel)]="m.is_abstract" class="rounded"> Abstract
+                    <input type="checkbox" [(ngModel)]="m.is_abstract" class="rounded text-purple-600"> Abstract
                   </label>
                 </div>
               </div>
@@ -162,6 +179,7 @@ export class NodeEditModalComponent {
       this.localData = {
         name: val.name || 'Clase',
         stereotype: val.stereotype || null,
+        is_abstract: !!(val.is_abstract || (val as any).isAbstract),
         attributes: Array.isArray(val.attributes) ? JSON.parse(JSON.stringify(val.attributes)) : [],
         methods: Array.isArray(val.methods) ? JSON.parse(JSON.stringify(val.methods)) : [],
         notes: val.notes || null
@@ -178,6 +196,7 @@ export class NodeEditModalComponent {
   localData: UMLNodeData = {
     name: 'Clase',
     stereotype: null,
+    is_abstract: false,
     attributes: [],
     methods: [],
     notes: null
@@ -191,13 +210,24 @@ export class NodeEditModalComponent {
     { value: '~', label: '~ package' }
   ];
 
+  onTypeChange(newType: NodeType) {
+    if (newType === 'interface') this.localData.stereotype = 'interface';
+    else if (newType === 'abstract') {
+      this.localData.stereotype = 'abstract';
+      this.localData.is_abstract = true;
+    } else if (newType === 'enum') this.localData.stereotype = 'enumeration';
+    else if (newType === 'class') this.localData.stereotype = null;
+  }
+
   addAttribute() {
     this.localData.attributes.push({
       visibility: '+',
       name: 'nuevoAtributo',
       type: 'String',
       default_value: null,
-      is_static: false
+      is_static: false,
+      is_derived: false,
+      multiplicity: null
     });
   }
 

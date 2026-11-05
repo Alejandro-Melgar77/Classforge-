@@ -20,10 +20,10 @@ class ApiService {
   String? _accessToken;
   UserModel? _currentUser;
   String _activeBaseUrl = ApiConstants.baseUrl;
-  bool _isOfflineDemoMode = true; // Por defecto activo para funcionamiento autónomo
+  bool _isOfflineDemoMode = false;
 
   UserModel? get currentUser => _currentUser;
-  bool get isAuthenticated => _currentUser != null;
+  bool get isAuthenticated => _currentUser != null && _accessToken != null;
   bool get isOfflineDemoMode => _isOfflineDemoMode;
   String get activeBaseUrl => _activeBaseUrl;
 
@@ -38,17 +38,24 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
     _activeBaseUrl = prefs.getString('custom_base_url') ?? ApiConstants.baseUrl;
+    _isOfflineDemoMode = prefs.getBool('is_offline_demo_mode') ?? false;
 
     final userJson = prefs.getString('current_user');
     if (userJson != null) {
-      _currentUser = UserModel.fromJson(jsonDecode(userJson));
+      try {
+        _currentUser = UserModel.fromJson(jsonDecode(userJson));
+      } catch (e) {
+        debugPrint('Error parseando usuario almacenado: ');
+        _currentUser = null;
+      }
     }
 
     _initializeMockData();
 
-    // Si no hay sesión previa, inicializar con el usuario ejecutivo por defecto
-    if (_currentUser == null) {
-      await enableOfflineDemoMode();
+    if (_currentUser != null && _accessToken != null && !_isOfflineDemoMode) {
+      fetchCurrentUser().catchError((e) {
+        debugPrint('Error validando sesión: ');
+      });
     }
   }
 
@@ -598,6 +605,27 @@ class ApiService {
   }
 
   Future<List<DiagramModel>> getDiagrams({String? projectId}) async {
+    if (!_isOfflineDemoMode && _accessToken != null) {
+      try {
+        String url = '';
+        if (projectId != null && projectId.isNotEmpty) {
+          url += '?project_id=';
+        }
+        final response = await http
+            .get(Uri.parse(url), headers: _headers())
+            .timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final list = data['data'] as List<dynamic>? ?? [];
+          final result = list.map((d) => DiagramModel.fromJson(d)).toList();
+          return result;
+        }
+      } catch (e) {
+        debugPrint('Error fetching diagrams from cloud: ');
+      }
+    }
+
     final list = _mockDiagrams.values.toList();
     if (projectId != null) {
       return list.where((d) => d.projectId == projectId).toList();
@@ -632,6 +660,23 @@ class ApiService {
   }
 
   Future<String?> getWsToken(String diagramId) async {
+    if (!_isOfflineDemoMode && _accessToken != null) {
+      try {
+        final response = await http
+            .get(
+              Uri.parse('//ws-token'),
+              headers: _headers(),
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['data']?['token'] ?? data['token'];
+        }
+      } catch (e) {
+        debugPrint('Error fetching ws token from cloud: ');
+      }
+    }
     return 'mock-ws-token';
   }
 

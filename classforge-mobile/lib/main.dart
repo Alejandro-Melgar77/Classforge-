@@ -15,10 +15,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final apiService = ApiService();
-  await apiService.init();
+  try {
+    await apiService.init();
+  } catch (e) {
+    debugPrint('Error inicializando ApiService en arranque: $e');
+  }
 
   final pushService = PushNotificationService();
-  await pushService.init(rootNavigatorKey);
+  try {
+    await pushService.init(rootNavigatorKey);
+  } catch (e) {
+    debugPrint('Error inicializando PushNotificationService en arranque: $e');
+  }
 
   runApp(
     ClassForgeMobileApp(
@@ -42,7 +50,11 @@ class ClassForgeMobileApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeApiService = apiService ?? ApiService();
     final activePushService = pushService ?? PushNotificationService();
-    activePushService.init(rootNavigatorKey);
+    try {
+      activePushService.init(rootNavigatorKey);
+    } catch (_) {}
+
+    final bool isUserLoggedIn = activeApiService.isAuthenticated;
 
     return MultiProvider(
       providers: [
@@ -53,10 +65,10 @@ class ClassForgeMobileApp extends StatelessWidget {
       ],
       child: MaterialApp(
         navigatorKey: rootNavigatorKey,
-        title: 'ClassForge Studio',
+        title: 'Classforge Visualizer',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        initialRoute: '/home',
+        initialRoute: isUserLoggedIn ? '/home' : '/login',
         routes: {
           '/home': (context) => const HomeScreen(),
           '/login': (context) => const LoginScreen(),

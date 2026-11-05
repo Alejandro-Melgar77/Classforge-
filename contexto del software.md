@@ -8,11 +8,11 @@
 
 <!-- METADATOS_DINAMICOS_INICIO -->
 ### 📌 Metadatos de Seguimiento y Estado del Repositorio
-* **Última Actualización Automática:** 2026-11-04 22:04:50
+* **Última Actualización Automática:** 2026-11-05 09:29:03
 * **Rama Activa:** `main`
-* **Último Commit:** `c79e11f` - *docs: actualizar metadatos sincronizados de contexto del software*
+* **Último Commit:** `78b5bf1` - *feat(collab): completar Fase 3 de sincronización en tiempo real y unificar las 6 fases de ClassForge 2.0*
 * **Autor:** Alejandro-Melgar77 <ale.melgararteaga@gmail.com>
-* **Estado del Árbol de Trabajo:** 10 archivo(s) con cambios pendientes
+* **Estado del Árbol de Trabajo:** 43 archivo(s) con cambios pendientes
 * **Batería de Pruebas Backend (Pytest):** 274 pasadas, 0 fallidas (100% éxito en 21.08s)
 * **Archivos de Prueba en Backend:** 81 suites de prueba
 * **Estado Operativo General:** **PRODUCCIÓN / ESTABLE** (Defectos C1–C7, A1–A36, M1–M12 cerrados y verificados)
@@ -371,19 +371,35 @@ segundo examen parcial/
 
 ---
 
-### 3.3. Aplicación Móvil (`classforge-mobile`)
+### 3.3. Aplicación Móvil — ClassForge Visualizer (`classforge-mobile`)
 
-* **Framework:** Flutter SDK 3.x con lenguaje Dart 3.x bajo arquitectura reactiva `Provider`.
-* **Visor UML Táctil 100% Solo Lectura (Readonly):**
-  - Restricción deliberada de edición táctil directa para evitar alteraciones accidentales del modelo conceptual en pantallas pequeñas.
-  - Renderizado mediante `CustomPainter` vectorial optimizado con `InteractiveViewer`, ofreciendo *pinch-to-zoom* y paneo suave a **60 FPS constantes**.
-* **Motor NLU On-Device en Dart (`offline_nlu_service.dart`):**
-  - Ejecución de interpretación de comandos de texto y voz directamente en el microprocesador del teléfono móvil en **menos de 1 milisegundo**.
-  - Sin dependencias de red ni latencias externas.
-* **Notificaciones Push Locales Nativas:**
-  - Conexión continua por WebSockets que detecta eventos de la sala y notifica al desarrollador mediante `flutter_local_notifications` cuando un compañero actualiza el diagrama o envía un mensaje al chat.
-* **Panel de Diagnóstico y Telemetría Integrado (`test_panel_screen.dart`):**
-  - Herramienta interna de la aplicación para medir en vivo tiempos de respuesta del NLU y evaluar la latencia de la conexión WebSocket.
+* **Identidad y Paquete:**
+  - **Nombre de la Aplicación:** `Classforge Visualizer`
+  - **Paquete Android:** `com.classforge.classforge_mobile`
+  - **Ícono Temático:** Logo personalizado de ingeniería de software y modelado UML en alta resolución (`res/mipmap-*/ic_launcher.png` e `ic_launcher_round.png`).
+  - **Binario de Producción:** `Classforge-Visualizer.apk` (53.4 MB / 56,037,483 bytes) compilado en modo Release sin compresión R8 destructiva (`isMinifyEnabled = false`, `isShrinkResources = false`) para garantizar estabilidad total en cualquier dispositivo Android.
+* **Conectividad Cloud en Tiempo Real:**
+  - Conexión predeterminada al backend cloud de producción en Render: `https://classforge-backend-8a14.onrender.com/api/v1`.
+  - Conexión WebSocket segura para eventos de colaboración bidireccionales: `wss://classforge-backend-8a14.onrender.com/api/v1/ws/diagrams/{id}?token={ws_token}`.
+* **Flujo de Inicio de Sesión y Control de Acceso (RBAC):**
+  - Pantalla de inicio de sesión formal (`LoginScreen`) que se activa automáticamente al abrir la aplicación si no existe una sesión previa válida.
+  - Autenticación real contra el backend cloud (`POST /auth/login`), recepción de token JWT y sincronización de perfil (`GET /auth/me`).
+  - Credenciales demo accesibles de un toque para perfiles corporativos (`admin@classforge.com`, `alejandro@classforge.com`, `fernando@classforge.com`).
+* **Filtrado Estricto de Proyectos y Diagramas:**
+  - En la vista móvil, cada proyecto se mapea a su diagrama UML correspondiente.
+  - Verificación rigurosa de pertenencia: la lista de diagramas se filtra dinámicamente para mostrar **únicamente aquellos diagramas donde el usuario logueado es creador (`createdBy == user.id`) o miembro asignado (`member_ids.contains(user.id)`)**, o todos si posee rol de Administrador.
+* **Visualizador UML en Tiempo Real (100% Solo Lectura):**
+  - Lienzo interactivo optimizado con `InteractiveViewer` a 60 FPS con zoom, paneo y renderizado vectorial de nodos de clase (`UMLClassCard`) y relaciones (`UMLRelationshipPainter`).
+  - Modo estrictamente solo lectura para evitar alteraciones accidentales con gestos táctiles.
+  - Escucha activa del canal WebSocket: ante eventos `DIAGRAM_COMMITTED`, `NODE_OPERATION`, `EDGE_OPERATION` o `SYNC_GRAPH`, el visor recarga automáticamente el diagrama en pantalla sin necesidad de refresco manual.
+* **Asistente de Voz Integrado con Modificación en Servidor:**
+  - Botón de micrófono flotante en la vista del diagrama que captura solicitudes habladas mediante `speech_to_text`.
+  - Envía la transcripción al endpoint del servidor `POST /api/v1/diagrams/{id}/ai-prompt`.
+  - El backend interpreta la petición con NLU/Gemini, genera las operaciones sobre el grafo, guarda la versión atómicamente y difunde el evento a la sala WebSocket, actualizando tanto el visor web como el móvil en tiempo real.
+* **Notificaciones Push Nativas de Android:**
+  - Integradas en la barra de notificaciones del sistema operativo mediante `flutter_local_notifications` y retroalimentación háptica física (`HapticFeedback.heavyImpact`):
+    1. **Notificación por Colaboración Remota:** Cada vez que otro integrante del diagrama realiza un cambio en tiempo real, el dispositivo emite una notificación push nativa indicando el nombre del diagrama actualizado.
+    2. **Notificación por Comando de Voz:** Al finalizar el procesamiento de una orden por micrófono, emite una notificación push informando si la modificación fue exitosa (`🎤 Comando de Voz Exitoso`) o si ocurrió algún error en el backend (`❌ Error en Comando de Voz`).
 
 ---
 

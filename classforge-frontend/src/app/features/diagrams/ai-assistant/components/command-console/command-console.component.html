@@ -1,4 +1,23 @@
-<div class="command-console flex flex-col h-full bg-slate-900 text-slate-200">
+<div 
+  class="command-console flex flex-col h-full bg-slate-900 text-slate-200 relative"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+>
+  <!-- Drag & Drop Full Overlay -->
+  <div 
+    *ngIf="isDraggingOver()" 
+    class="absolute inset-0 bg-blue-950/90 border-2 border-dashed border-blue-400 z-50 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm pointer-events-none animate-fade-in"
+  >
+    <div class="w-16 h-16 rounded-full bg-blue-500/20 text-blue-300 flex items-center justify-center text-3xl mb-3 shadow-inner">
+      📷
+    </div>
+    <h3 class="text-sm font-bold text-white mb-1">Suelta tu imagen o boceto UML aquí</h3>
+    <p class="text-xs text-blue-200/80 max-w-xs">
+      Gemini Vision procesará la imagen (PNG, JPEG o WebP hasta 8 MB) para extraer clases, atributos y relaciones.
+    </p>
+  </div>
+
   <!-- Feedback Toast / Banner -->
   <div 
     *ngIf="executionFeedback()" 
@@ -15,7 +34,7 @@
     </div>
     <button 
       (click)="executionFeedback.set(null)" 
-      class="text-slate-400 hover:text-white text-xs ml-2"
+      class="text-slate-400 hover:text-white text-xs ml-2 cursor-pointer"
       aria-label="Cerrar notificación"
     >
       ✕
@@ -134,10 +153,11 @@
         *ngIf="pendingCommand()"
         [command]="pendingCommand()!"
         (apply)="applyCommand()"
+        (confirm)="applyCommand()"
         (discard)="discardCommand()"
       ></app-command-preview-card>
 
-      <!-- Non-blocking Local Progress with 'Use Gemini Now' action (P8a) -->
+      <!-- Non-blocking Local Progress with 'Use Gemini Now' action -->
       <div 
         *ngIf="isProcessing()" 
         class="p-3.5 rounded-xl bg-slate-950/80 border border-blue-500/30 shadow-xl space-y-2.5 animate-fade-in"
@@ -146,7 +166,7 @@
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping"></span>
             <span class="text-xs font-semibold text-slate-200">
-              {{ providerPreference() === 'local' ? 'Generando con modelo local (' + localModel() + ')...' : 'Interpretando orden UML...' }}
+              {{ attachedImage() ? 'Gemini Vision analizando imagen y generando UML...' : (providerPreference() === 'local' ? 'Generando con modelo local (' + localModel() + ')...' : 'Interpretando orden UML...') }}
             </span>
           </div>
           <span class="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">{{ elapsedSeconds() }}s</span>
@@ -175,7 +195,7 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
-            <span class="text-xs font-bold text-blue-300">Escuchando dictado por voz...</span>
+            <span class="text-xs font-bold text-blue-300">Escuchando dictado por voz en tiempo real...</span>
           </div>
           <button 
             (click)="cancelVoice()" 
@@ -208,14 +228,17 @@
         </div>
       </div>
 
-      <!-- Quick Guidance / Status Info -->
-      <div *ngIf="!pendingCommand() && !voice.isListening()" class="bg-slate-950/50 p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 space-y-1.5">
-        <div class="flex items-center gap-1.5 text-blue-400 font-semibold">
-          <span>💡</span>
-          <span>Procesamiento de Lenguaje Natural a UML</span>
+      <!-- Multimodal Guidance / Status Info -->
+      <div *ngIf="!pendingCommand() && !voice.isListening()" class="bg-slate-950/50 p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 space-y-2">
+        <div class="flex items-center justify-between text-blue-400 font-semibold">
+          <span class="flex items-center gap-1.5">
+            <span>✨</span>
+            <span>IA Multimodal (Texto, Voz e Imagen)</span>
+          </span>
+          <span class="text-[10px] text-slate-400 font-normal">UML 2.5+</span>
         </div>
         <p class="text-slate-400 leading-relaxed text-[11px]">
-          Describe clases, atributos, métodos y asociaciones en lenguaje cotidiano o por voz. La IA interpretará la estructura y la plasmará directamente en el diagrama activo.
+          Describe clases y asociaciones en lenguaje natural, dicta por voz con transcripción en vivo, o adjunta un boceto/captura usando el botón de cámara, arrastrando un archivo o pegando con <kbd class="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px]">Ctrl+V</kbd>.
         </p>
       </div>
 
@@ -282,7 +305,9 @@
         >
           <div class="flex items-center justify-between text-[10px] text-slate-400">
             <span class="flex items-center gap-1">
-              <span>{{ entry.inputType === 'voice' ? '🎙️ Voz' : '⌨️ Texto' }}</span>
+              <span>
+                {{ entry.inputType === 'voice' ? '🎙️ Voz' : (entry.inputType === 'image' ? '🖼️ Imagen' : '⌨️ Texto') }}
+              </span>
               <span>•</span>
               <span>{{ formatTimestamp(entry.timestamp) }}</span>
             </span>
@@ -322,9 +347,54 @@
 
   </div>
 
-  <!-- Bottom Input Bar (Always accessible for rapid prompting) -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ATTACHED IMAGE PREVIEW THUMBNAIL (if image selected) -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div 
+    *ngIf="attachedImage()" 
+    class="mx-3 mb-1 p-2 rounded-xl bg-slate-800/90 border border-blue-500/40 shadow-lg flex items-center justify-between gap-2.5 animate-fade-in shrink-0"
+  >
+    <div class="flex items-center gap-2.5 min-w-0">
+      <img 
+        [src]="attachedImage()?.dataUrl" 
+        alt="Miniatura boceto UML" 
+        class="w-12 h-12 object-cover rounded-lg border border-slate-600 shrink-0 bg-slate-950"
+      />
+      <div class="min-w-0">
+        <span class="text-xs font-semibold text-white truncate block">
+          {{ attachedImage()?.name }}
+        </span>
+        <span class="text-[10px] text-blue-300 flex items-center gap-1 font-mono">
+          <span>✨ Gemini Vision</span>
+          <span>•</span>
+          <span>{{ ((attachedImage()?.sizeBytes || 0) / 1024) | number:'1.0-0' }} KB</span>
+        </span>
+      </div>
+    </div>
+    <button 
+      (click)="removeImage()" 
+      class="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer text-xs"
+      title="Eliminar imagen adjunta"
+      aria-label="Eliminar imagen adjunta"
+    >
+      ✕
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- BOTTOM INPUT BAR (TEXT + VOICE + IMAGE FILE PICKER) -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
   <div class="p-3 border-t border-slate-800 bg-slate-950/90 shrink-0">
-    <div class="flex items-center gap-2">
+    <!-- Hidden file input for images -->
+    <input 
+      #imageFileInput 
+      type="file" 
+      (change)="onFileInputChange($event)" 
+      accept="image/png, image/jpeg, image/webp" 
+      class="hidden"
+    />
+
+    <div class="flex items-center gap-1.5">
       <div class="relative flex-1">
         <!-- Ghost Text inside input field while speaking -->
         <div 
@@ -339,7 +409,7 @@
           type="text" 
           [(ngModel)]="textInput" 
           (keyup.enter)="handleSubmit()"
-          [placeholder]="voice.isListening() ? '🎙️ Habla ahora (voz en tiempo real)...' : 'Ej: crea clase Cliente con atributos nombre, id, ci, nit...'"
+          [placeholder]="attachedImage() ? 'Instrucción opcional para la imagen (o presiona Enviar)...' : (voice.isListening() ? '🎙️ Habla ahora (voz en tiempo real)...' : 'Ej: crea clase Cliente con atributos nombre, id, ci, nit...')"
           class="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all pr-8"
           [class.text-transparent]="voice.isListening() && (voice.transcript() || voice.interimTranscript())"
           [disabled]="isProcessing()"
@@ -355,8 +425,27 @@
         </button>
       </div>
 
+      <!-- Image File Picker Button -->
+      <button 
+        type="button"
+        (click)="imageFileInput.click()" 
+        class="p-2.5 rounded-xl border transition-all flex items-center justify-center text-sm shadow-md cursor-pointer"
+        [class.bg-blue-600]="!!attachedImage()"
+        [class.text-white]="!!attachedImage()"
+        [class.border-blue-500]="!!attachedImage()"
+        [class.bg-slate-800]="!attachedImage()"
+        [class.hover:bg-slate-700]="!attachedImage()"
+        [class.text-slate-300]="!attachedImage()"
+        [class.border-slate-700]="!attachedImage()"
+        title="Adjuntar imagen o boceto UML (o arrastra y suelta / pega con Ctrl+V)"
+        aria-label="Adjuntar imagen UML"
+      >
+        📷
+      </button>
+
       <!-- Mic Toggle Button -->
       <button 
+        type="button"
         (click)="toggleVoice()" 
         class="p-2.5 rounded-xl border transition-all flex items-center justify-center text-sm shadow-md cursor-pointer"
         [class.bg-rose-600]="voice.isListening()"
@@ -375,9 +464,10 @@
 
       <!-- Submit Button -->
       <button 
+        type="button"
         (click)="handleSubmit()"
         class="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-        [disabled]="isProcessing() || (!textInput.trim() && !voice.getBestTranscript().trim())"
+        [disabled]="isProcessing() || (!textInput.trim() && !voice.getBestTranscript().trim() && !attachedImage())"
         [title]="autoApply() ? 'Ejecutar directamente en el lienzo' : 'Interpretar y previsualizar'"
         aria-label="Ejecutar orden UML"
       >

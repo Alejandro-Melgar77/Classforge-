@@ -454,6 +454,79 @@ async def apply_ai_prompt_to_diagram(
         logger.error(f"Error procesando prompt con IA: {e}")
         raise ExternalServiceError("Error procesando prompt con el servicio de IA")
 
+    # Apply AI modifications to the persisted diagram graph and broadcast
+    try:
+        from copy import deepcopy
+        new_graph = deepcopy(current_graph) if isinstance(current_graph, dict) else {"nodes": [], "edges": []}
+        nodes = new_graph.setdefault("nodes", [])
+        edges = new_graph.setdefault("edges", [])
+        modified = False
+
+        for c in ai_res.classes:
+            existing = next((n for n in nodes if n.get("name", "").lower() == c.name.lower() or (n.get("data", {}).get("name", "").lower() == c.name.lower())), None)
+            attrs = [{"id": f"attr_{uuid.uuid4().hex[:6]}", "name": a.name, "type": a.type, "visibility": a.visibility} for a in c.attributes]
+            methods = [{"id": f"meth_{uuid.uuid4().hex[:6]}", "name": m.name, "params": m.params, "returnType": m.returnType, "visibility": m.visibility} for m in c.methods]
+            if existing:
+                existing_data = existing.setdefault("data", {})
+                existing_data.setdefault("attributes", []).extend(attrs)
+                existing_data.setdefault("methods", []).extend(methods)
+                modified = True
+            else:
+                count = len(nodes)
+                x = 80.0 + (count % 3) * 260.0
+                y = 80.0 + (count // 3) * 200.0
+                node_id = f"node_{uuid.uuid4().hex[:8]}"
+                nodes.append({
+                    "id": node_id,
+                    "type": "uml.Class",
+                    "name": c.name,
+                    "position": {"x": float(x), "y": float(y)},
+                    "size": {"width": 220.0, "height": 160.0 + (len(attrs) * 15.0)},
+                    "data": {
+                        "name": c.name,
+                        "stereotype": c.stereotype,
+                        "attributes": attrs,
+                        "methods": methods
+                    }
+                })
+                modified = True
+
+        for r in ai_res.relations:
+            src = next((n for n in nodes if n.get("name", "").lower() == r.source.lower() or (n.get("data", {}).get("name", "").lower() == r.source.lower())), None)
+            tgt = next((n for n in nodes if n.get("name", "").lower() == r.target.lower() or (n.get("data", {}).get("name", "").lower() == r.target.lower())), None)
+            if src and tgt:
+                edges.append({
+                    "id": f"edge_{uuid.uuid4().hex[:8]}",
+                    "type": f"uml.{r.type.capitalize()}",
+                    "source": src["id"],
+                    "target": tgt["id"],
+                    "data": {
+                        "type": r.type,
+                        "multiplicity_source": r.multiplicity_source or "1",
+                        "multiplicity_target": r.multiplicity_target or "1",
+                    }
+                })
+                modified = True
+
+        for del_name in ai_res.deleted_elements:
+            del_nodes = [n for n in nodes if n.get("name", "").lower() == del_name.lower() or (n.get("data", {}).get("name", "").lower() == del_name.lower())]
+            for dn in del_nodes:
+                dn_id = dn["id"]
+                if dn in nodes:
+                    nodes.remove(dn)
+                edges[:] = [e for e in edges if e.get("source") != dn_id and e.get("target") != dn_id]
+                modified = True
+
+        if modified:
+            save_data = SaveGraph(
+                graph_data=new_graph,
+                base_version=int(diagram.get("version", 1)),
+                comment=f"Voice/AI: {prompt[:30]}"
+            )
+            await service.save_graph(diagram_id, save_data, current_user)
+    except Exception as exc:
+        logger.warning(f"No se pudo guardar la modificación del prompt en el diagrama: {exc}")
+
     return StandardResponse(
         success=True,
         message="Prompt procesado exitosamente por la IA",

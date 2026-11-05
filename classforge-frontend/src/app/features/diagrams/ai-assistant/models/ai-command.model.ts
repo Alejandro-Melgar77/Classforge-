@@ -2,6 +2,10 @@ export interface UMLAttribute {
   name: string;
   type: string;
   visibility: string;
+  is_derived?: boolean;
+  multiplicity?: string | null;
+  default_value?: string | null;
+  is_static?: boolean;
 }
 
 export interface UMLMethod {
@@ -9,6 +13,8 @@ export interface UMLMethod {
   params: string;
   return_type: string;
   visibility: string;
+  is_static?: boolean;
+  is_abstract?: boolean;
 }
 
 export interface UMLClassCommand {
@@ -16,6 +22,7 @@ export interface UMLClassCommand {
   attributes: UMLAttribute[];
   methods: UMLMethod[];
   stereotype?: string;
+  is_abstract?: boolean;
 }
 
 export interface UMLRelationCommand {
@@ -25,6 +32,12 @@ export interface UMLRelationCommand {
   label?: string;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
+  source_multiplicity?: string;
+  target_multiplicity?: string;
+  sourceRole?: string;
+  targetRole?: string;
+  source_role?: string;
+  target_role?: string;
 }
 
 export interface UMLCommandResponse {
@@ -42,8 +55,9 @@ export interface AiHistoryEntry {
   diagramId?: string;
   timestamp: string;
   prompt: string;
-  inputType: 'voice' | 'text';
+  inputType: 'voice' | 'text' | 'image';
   status: 'applied' | 'discarded' | 'failed';
   command?: UMLCommandResponse;
   resultSummary?: string;
+  imageThumbnail?: string;
 }

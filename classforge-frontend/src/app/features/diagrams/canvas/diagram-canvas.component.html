@@ -1,9 +1,10 @@
-<div class="diagram-canvas-shell flex h-full w-full bg-[var(--surface-1)] overflow-hidden select-none">
+<div class="diagram-canvas-shell flex h-screen w-screen max-h-screen max-w-screen bg-[var(--surface-1)] overflow-hidden select-none relative">
 
-  <!-- ═══ LEFT PANEL: TOOLBOX (Palette) ═══ -->
-  <div *ngIf="isToolboxOpen && !isMobileViewer()"
+  <!-- ═══ LEFT PANEL: TOOLBOX (PALETTE) ═══ -->
+  <!-- Docked Toolbox (Screens >= 1280px) -->
+  <div *ngIf="isToolboxOpen && !isMobileViewer() && isDesktopLarge()"
        data-tour="toolbar"
-       class="shrink-0 border-r border-[var(--border)] relative flex flex-col h-full bg-[var(--surface-2)] z-20"
+       class="shrink-0 border-r border-[var(--border)] relative flex flex-col h-full bg-[var(--surface-2)] z-20 transition-all duration-200"
        [style.width.px]="toolboxWidth">
     
     <app-toolbox-palette
@@ -20,13 +21,28 @@
     </div>
   </div>
 
+  <!-- Off-Canvas Drawer Toolbox (Screens < 1280px) -->
+  <div *ngIf="isToolboxOpen && !isMobileViewer() && !isDesktopLarge()"
+       class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex animate-in fade-in duration-150"
+       (click)="toggleToolbox()">
+    <div class="w-72 max-w-[85vw] h-full bg-[var(--surface-2)] border-r border-[var(--border)] shadow-2xl z-50 flex flex-col"
+         (click)="$event.stopPropagation()">
+      <app-toolbox-palette
+        class="w-full h-full flex flex-col overflow-hidden"
+        [isOpen]="true"
+        (close)="toggleToolbox()"
+        (connectionModeChanged)="canvasService.setConnectionMode($event)">
+      </app-toolbox-palette>
+    </div>
+  </div>
+
   <!-- Re-open Toolbox Button (when collapsed) -->
   <button *ngIf="!isToolboxOpen && !isMobileViewer()"
           (click)="toggleToolbox()"
-          class="absolute left-0 top-16 z-30 px-2 py-3 bg-[var(--surface-2)] border border-[var(--border)] border-l-0 rounded-r-md flex items-center justify-center text-xs font-bold text-[var(--primary-light)] hover:bg-[var(--surface-3)] shadow-lg transition-colors cursor-pointer"
+          class="absolute left-0 top-24 z-30 px-2 py-3 bg-[var(--surface-2)] border border-[var(--border)] border-l-0 rounded-r-md flex items-center justify-center text-xs font-bold text-blue-400 hover:bg-[var(--surface-3)] shadow-lg transition-colors cursor-pointer"
           title="Abrir Caja de Herramientas UML"
           aria-label="Abrir barra de herramientas UML">
-    🧰 ▶
+    🧰
   </button>
 
   <!-- ═══ CENTER: MAIN CANVAS WORKSPACE ═══ -->
@@ -37,7 +53,7 @@
          class="bg-indigo-900/90 border-b border-indigo-500/40 px-3 py-1.5 flex items-center justify-between text-xs text-indigo-100 z-30">
       <div class="flex items-center gap-2">
         <span class="text-sm">📱</span>
-        <span><strong>Modo Visor:</strong> En dispositivos móviles el editor UML es de solo lectura. Para editar, usa una tablet o escritorio.</span>
+        <span><strong>Modo Visor:</strong> En dispositivos móviles el editor UML es de solo lectura. Para modelar y editar, usa una tablet o escritorio.</span>
       </div>
       <span class="text-[10px] bg-indigo-700/60 px-2 py-0.5 rounded font-mono">Solo lectura</span>
     </div>
@@ -120,7 +136,7 @@
                   : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/25'"
                 [title]="canvasService.isLightMode() ? 'Cambiar a Modo Oscuro' : 'Cambiar a Modo Claro'"
                 aria-label="Alternar tema del lienzo">
-          <span>{{ canvasService.isLightMode() ? '☀️ Claro' : '🌙 Oscuro' }}</span>
+          <span>{{ canvasService.isLightMode() ? '☀️' : '🌙' }}</span>
         </button>
 
         <!-- Live Code -->
@@ -146,9 +162,9 @@
         <!-- Asistente IA -->
         <button (click)="isAiDrawerOpen = !isAiDrawerOpen"
                 data-tour="ai-assistant-btn"
-                class="flex items-center gap-1 px-2 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded text-xs hover:bg-purple-500/20 transition-colors font-medium cursor-pointer"
-                title="Asistente de equipo IA por voz o texto">
-          ✨ <span class="hidden sm:inline">IA</span>
+                class="flex items-center gap-1 px-2.5 py-1 bg-purple-500/15 text-purple-300 border border-purple-500/40 rounded text-xs hover:bg-purple-500/30 transition-colors font-semibold cursor-pointer shadow-xs"
+                title="Asistente de equipo IA por voz, texto o imagen">
+          ✨ <span>IA</span>
         </button>
 
         <!-- Collab Chat -->
@@ -163,21 +179,13 @@
           </span>
         </button>
 
-        <!-- Propiedades Elemento -->
-        <button *ngIf="!isMobileViewer()" (click)="openNodeEditModal()"
+        <!-- Propiedades Elemento Toggle -->
+        <button *ngIf="!isMobileViewer()" (click)="toggleProperties()"
                 data-tour="properties-panel"
-                class="flex items-center gap-1 px-2 py-1 bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] rounded text-xs hover:bg-[var(--surface-4)] transition-colors cursor-pointer"
-                title="Editar propiedades de la clase">
-          ⚙️ <span class="hidden xl:inline">Propiedades</span>
-        </button>
-
-        <!-- Botón Guardar Manual -->
-        <button *ngIf="!isMobileViewer()" 
-                (click)="autoSave.forceSaveNow()"
-                [disabled]="autoSave.saveStatus() === 'saving' || autoSave.saveStatus() === 'saved'"
-                class="px-3 py-1 bg-[var(--primary)] text-white rounded text-xs hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold shadow-xs cursor-pointer"
-                title="Guardar cambios en el servidor (Ctrl+S)">
-          Guardar
+                class="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors cursor-pointer border"
+                [ngClass]="isPropertiesOpen ? 'bg-blue-600/30 text-blue-300 border-blue-500/50' : 'bg-[var(--surface-3)] text-[var(--text-primary)] border-[var(--border)] hover:bg-[var(--surface-4)]'"
+                title="Alternar panel de propiedades UML 2.5">
+          ⚙️ <span class="hidden sm:inline">Propiedades</span>
         </button>
       </div>
     </div>
@@ -185,6 +193,9 @@
     <!-- Quick Action Toolbar -->
     <canvas-toolbar data-tour="toolbar" 
                     (openShortcuts)="isShortcutsModalOpen = true"
+                    (toggleAiAssistant)="isAiDrawerOpen = !isAiDrawerOpen"
+                    (toggleProperties)="toggleProperties()"
+                    (toggleToolbox)="toggleToolbox()"
                     class="z-10 shrink-0"></canvas-toolbar>
 
     <!-- Canvas Graph Container -->
@@ -210,18 +221,25 @@
            class="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-[var(--border)] overflow-hidden shadow-2xl z-20 bg-[var(--surface-2)]/90 backdrop-blur-sm hidden sm:block">
       </div>
 
-      <!-- Zoom & View Controls (Bottom Left) -->
+      <!-- Zoom, Center & View Controls (Bottom Left) -->
       <div class="absolute bottom-4 left-4 z-20 flex items-center gap-1.5 bg-[var(--surface-2)]/95 backdrop-blur-sm border border-[var(--border)] rounded-lg p-1 shadow-xl text-xs text-[var(--text-secondary)]">
         <button (click)="canvasService.zoomOut()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] font-bold cursor-pointer" title="Alejar (-)">−</button>
-        <span class="w-12 text-center font-mono font-bold text-white">{{ (canvasService.getZoom() * 100) | number:'1.0-0' }}%</span>
+        <button (click)="canvasService.resetZoom()" class="w-14 text-center font-mono font-bold text-white hover:bg-[var(--surface-3)] rounded py-1 cursor-pointer" title="Resetear zoom a 100%">
+          {{ (canvasService.getZoom() * 100) | number:'1.0-0' }}%
+        </button>
         <button (click)="canvasService.zoomIn()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] font-bold cursor-pointer" title="Acercar (+)">+</button>
         <div class="w-px h-4 bg-[var(--border)] mx-1"></div>
-        <button (click)="canvasService.fitView()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] cursor-pointer" title="Ajustar a pantalla (F)">⛶ Ajustar</button>
+        <button (click)="canvasService.fitView()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] cursor-pointer flex items-center gap-1" title="Ajustar a pantalla (F)">
+          <span>⛶</span> <span>Ajustar</span>
+        </button>
+        <button (click)="canvasService.centerDiagram()" class="hover:text-white px-2 py-1 rounded hover:bg-[var(--surface-3)] cursor-pointer flex items-center gap-1" title="Centrar diagrama">
+          <span>🎯</span> <span>Centrar</span>
+        </button>
       </div>
 
       <!-- ═══ FLOATING EDGE QUICK TOOLBAR ═══ -->
       <div *ngIf="selectedEdgeId && edgeToolbarPos && !isMobileViewer()"
-           class="absolute z-40 bg-[var(--surface-2)]/95 backdrop-blur-md border border-[var(--border)] rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-100"
+           class="absolute z-40 bg-[var(--surface-2)]/95 backdrop-blur-md border border-[var(--border)] rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-100 max-w-[95vw]"
            [style.left.px]="edgeToolbarPos.x"
            [style.top.px]="edgeToolbarPos.y">
         
@@ -237,10 +255,10 @@
           <button (click)="closeEdgeQuickToolbar()" class="text-slate-400 hover:text-white text-xs p-1 rounded hover:bg-[var(--surface-3)] cursor-pointer">✕</button>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <div class="flex flex-col">
             <span class="text-[9px] font-bold text-[var(--text-secondary)] uppercase">Mensaje</span>
-            <input type="text" [(ngModel)]="quickEdgeLabel" (ngModelChange)="onQuickEdgeChange()" placeholder="ej. contiene" class="w-28 bg-[var(--surface-1)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white outline-none focus:border-blue-500 font-medium">
+            <input type="text" [(ngModel)]="quickEdgeLabel" (ngModelChange)="onQuickEdgeChange()" placeholder="ej. contiene" class="w-24 bg-[var(--surface-1)] border border-[var(--border)] rounded px-2 py-1 text-xs text-white outline-none focus:border-blue-500 font-medium">
           </div>
           <div class="flex flex-col">
             <span class="text-[9px] font-bold text-sky-400 uppercase">Mult. Origen</span>
@@ -255,6 +273,17 @@
               <option *ngFor="let opt of cardinalityOptions" [value]="opt">{{ opt || '—' }}</option>
             </select>
           </div>
+          
+          <div class="flex flex-col">
+            <span class="text-[9px] font-bold text-slate-400 uppercase">Rol Origen</span>
+            <input type="text" [(ngModel)]="quickEdgeSourceRole" (ngModelChange)="onQuickEdgeChange()" placeholder="owner" class="w-20 bg-[var(--surface-1)] border border-[var(--border)] rounded px-1.5 py-1 text-xs text-slate-200 font-mono outline-none focus:border-blue-500">
+          </div>
+          <button (click)="swapRoles()" title="Invertir nombres de rol" class="mt-3 p-1 rounded bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-slate-300 hover:text-white text-xs border border-[var(--border)] cursor-pointer">⇄</button>
+          <div class="flex flex-col">
+            <span class="text-[9px] font-bold text-slate-400 uppercase">Rol Destino</span>
+            <input type="text" [(ngModel)]="quickEdgeTargetRole" (ngModelChange)="onQuickEdgeChange()" placeholder="items" class="w-20 bg-[var(--surface-1)] border border-[var(--border)] rounded px-1.5 py-1 text-xs text-slate-200 font-mono outline-none focus:border-blue-500">
+          </div>
+
           <button (click)="deleteSelectedEdge()" title="Eliminar relación" class="mt-3 p-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs cursor-pointer">🗑️</button>
         </div>
       </div>
@@ -266,6 +295,9 @@
            [style.top.px]="nodeToolbarPos.y">
         <button (click)="openNodeEditModal()" class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-slate-200 cursor-pointer" title="Editar clase">
           <span>✏️ Editar</span>
+        </button>
+        <button (click)="toggleProperties()" class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 cursor-pointer" title="Ver propiedades">
+          <span>⚙️ Panel</span>
         </button>
         <button (click)="deleteSelectedNode()" class="p-1 rounded text-red-400 hover:bg-red-400/20 text-[11px] cursor-pointer" title="Eliminar clase">
           🗑️
@@ -309,6 +341,40 @@
 
     </div>
   </div>
+
+  <!-- ═══ RIGHT PANEL: PROPERTIES PANEL ═══ -->
+  <!-- Docked Properties (Screens >= 1280px) -->
+  <div *ngIf="isPropertiesOpen && !isMobileViewer() && isDesktopLarge()"
+       class="shrink-0 w-80 border-l border-[var(--border)] relative flex flex-col h-full bg-[var(--surface-2)] z-20 transition-all duration-200">
+    <properties-panel
+      class="w-full h-full flex flex-col overflow-hidden"
+      [graph]="graph"
+      (close)="toggleProperties()">
+    </properties-panel>
+  </div>
+
+  <!-- Off-Canvas Drawer Properties (Screens < 1280px) -->
+  <div *ngIf="isPropertiesOpen && !isMobileViewer() && !isDesktopLarge()"
+       class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-150"
+       (click)="toggleProperties()">
+    <div class="w-84 max-w-[90vw] h-full bg-[var(--surface-2)] border-l border-[var(--border)] shadow-2xl z-50 flex flex-col"
+         (click)="$event.stopPropagation()">
+      <properties-panel
+        class="w-full h-full flex flex-col overflow-hidden"
+        [graph]="graph"
+        (close)="toggleProperties()">
+      </properties-panel>
+    </div>
+  </div>
+
+  <!-- Re-open Properties Button (when collapsed) -->
+  <button *ngIf="!isPropertiesOpen && !isMobileViewer()"
+          (click)="toggleProperties()"
+          class="absolute right-0 top-24 z-30 px-2 py-3 bg-[var(--surface-2)] border border-[var(--border)] border-r-0 rounded-l-md flex items-center justify-center text-xs font-bold text-slate-300 hover:text-white hover:bg-[var(--surface-3)] shadow-lg transition-colors cursor-pointer"
+          title="Abrir Panel de Propiedades UML 2.5"
+          aria-label="Abrir panel de propiedades">
+    ⚙️
+  </button>
 
   <!-- ═══ DESACOPLADOS MODALES & DRAWERS ═══ -->
   <app-collaborators-panel *ngIf="isCollabPanelOpen" [isOpen]="isCollabPanelOpen" (close)="isCollabPanelOpen = false"></app-collaborators-panel>

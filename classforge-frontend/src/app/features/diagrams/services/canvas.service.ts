@@ -9,7 +9,13 @@ import { Transform } from '@antv/x6-plugin-transform';
 import { Keyboard } from '@antv/x6-plugin-keyboard';
 import { Clipboard } from '@antv/x6-plugin-clipboard';
 import { Export } from '@antv/x6-plugin-export';
-import { registerUMLNodesAndEdges, applyUMLNodeAttrs, calculateNodeHeight, setUMLNodeTheme } from '../nodes/uml-nodes';
+import {
+  registerUMLNodesAndEdges,
+  applyUMLNodeAttrs,
+  calculateNodeHeight,
+  setUMLNodeTheme,
+  buildUmlEdgeLabels
+} from '../nodes/uml-nodes';
 import { GraphData, NodeType, UMLNodeData, DiagramNode, DiagramEdge, EdgeType } from '../models/diagram.model';
 
 const NODE_SHAPE_MAP: Record<NodeType, string> = {
@@ -131,8 +137,16 @@ export class CanvasService {
           args: { attrs: { fill: '#2D6BE4', stroke: '#2D6BE4' } }
         }
       },
-      mousewheel: { enabled: true, zoomAtMousePosition: true, modifiers: 'ctrl', minScale: 0.2, maxScale: 3 },
-      panning: { enabled: true, modifiers: ['space'] },
+      mousewheel: {
+        enabled: true,
+        zoomAtMousePosition: true,
+        minScale: 0.2,
+        maxScale: 3
+      },
+      panning: {
+        enabled: true,
+        modifiers: ['space']
+      },
       interacting: {
         magnetConnectable: true,
         nodeMovable: true,
@@ -165,7 +179,7 @@ export class CanvasService {
     // Auto-update SVG compartments and height when node data or size changes
     this.graph.on('node:change:data', ({ node }) => {
       if (!node || !node.isNode()) return;
-      const data = (node.getData() as UMLNodeData) || { name: 'Clase', stereotype: null, attributes: [], methods: [], notes: null };
+      const data = (node.getData() as UMLNodeData) || { name: 'Clase', stereotype: null, is_abstract: false, attributes: [], methods: [], notes: null };
       const currentType = (node.prop('nodeType') || 'class') as NodeType;
       const newH = calculateNodeHeight(data, currentType);
       const currentSize = node.size();
@@ -180,11 +194,102 @@ export class CanvasService {
       applyUMLNodeAttrs(node, this.isLightMode());
     });
 
+    // Setup touch gestures (1-finger pan on empty canvas, 2-finger pinch zoom, middle/right-click pan)
+    this.setupGestureHandlers(container);
+
     return this.graph;
   }
 
   getGraph(): Graph {
     return this.graph;
+  }
+
+  // ─── Gesture & Touch Support ─────────────────────────────────
+
+  private setupGestureHandlers(container: HTMLElement) {
+    let initialTouchDist = 0;
+    let initialZoom = 1;
+    let isTouchPanning = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isRightPanning = false;
+    let rightStartX = 0;
+    let rightStartY = 0;
+
+    container.addEventListener('touchstart', (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        // Pinch-to-zoom
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        initialTouchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        initialZoom = this.getZoom();
+      } else if (e.touches.length === 1) {
+        // 1-finger pan if on empty background
+        const target = e.target as HTMLElement;
+        const isBlank = target === container || target.tagName === 'svg' || target.classList.contains('x6-graph-svg');
+        if (isBlank) {
+          isTouchPanning = true;
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+        }
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e: TouchEvent) => {
+      if (e.touches.length === 2 && initialTouchDist > 0) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const factor = dist / initialTouchDist;
+        const newZoom = Math.max(0.2, Math.min(3.0, initialZoom * factor));
+        this.graph.zoom(newZoom, { absolute: true });
+      } else if (e.touches.length === 1 && isTouchPanning) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        (this.graph as any).translateBy?.(dx, dy);
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', () => {
+      initialTouchDist = 0;
+      isTouchPanning = false;
+    }, { passive: true });
+
+    // Right-click or middle-click dragging for panning
+    container.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button === 1 || e.button === 2) {
+        isRightPanning = true;
+        rightStartX = e.clientX;
+        rightStartY = e.clientY;
+        container.style.cursor = 'grabbing';
+      }
+    });
+
+    window.addEventListener('mousemove', (e: MouseEvent) => {
+      if (isRightPanning) {
+        const dx = e.clientX - rightStartX;
+        const dy = e.clientY - rightStartY;
+        rightStartX = e.clientX;
+        rightStartY = e.clientY;
+        (this.graph as any).translateBy?.(dx, dy);
+      }
+    });
+
+    window.addEventListener('mouseup', (e: MouseEvent) => {
+      if (isRightPanning && (e.button === 1 || e.button === 2)) {
+        isRightPanning = false;
+        container.style.cursor = '';
+      }
+    });
+
+    container.addEventListener('contextmenu', (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target === container || target.tagName === 'svg' || target.classList.contains('x6-graph-svg')) {
+        e.preventDefault();
+      }
+    });
   }
 
   // ─── Connection Mode ─────────────────────────────────────────
@@ -218,11 +323,19 @@ export class CanvasService {
     const defaultSize = customSize || DEFAULT_NODE_SIZES[type] || { width: 220, height: 140 };
     const pos = position || this.findFreePosition(defaultSize.width, defaultSize.height);
 
+    const isAbstract = type === 'abstract' || customData?.is_abstract;
+    let stereotype: string | null = null;
+    if (type === 'interface') stereotype = 'interface';
+    else if (type === 'abstract') stereotype = 'abstract';
+    else if (type === 'enum') stereotype = 'enumeration';
+    else if (customData?.stereotype) stereotype = customData.stereotype;
+
     const data: UMLNodeData = customData || {
       name: this.generateDefaultName(type),
-      stereotype: type !== 'class' && type !== 'note' && type !== 'package' ? type : null,
+      stereotype,
+      is_abstract: isAbstract,
       attributes: type !== 'note' && type !== 'package' ? [
-        { visibility: '+', name: 'id', type: 'Long', default_value: null, is_static: false }
+        { visibility: '+', name: 'id', type: 'Long', default_value: null, is_static: false, is_derived: false, multiplicity: null }
       ] : [],
       methods: [],
       notes: type === 'note' ? 'Escribe aquí tu nota...' : null
@@ -269,7 +382,6 @@ export class CanvasService {
       // Apply crisp SVG UML 2.5 compartments
       applyUMLNodeAttrs(newNode, this.isLightMode());
 
-      // Optionally select the newly created node
       if (select) {
         this.graph.cleanSelection();
         this.graph.select(newNode);
@@ -339,7 +451,9 @@ export class CanvasService {
       name: `atributo${count}`,
       type: 'String',
       default_value: null,
-      is_static: false
+      is_static: false,
+      is_derived: false,
+      multiplicity: null
     });
 
     this.updateNodeData(node, data);
@@ -382,46 +496,25 @@ export class CanvasService {
     type: EdgeType,
     sourceId: string,
     targetId: string,
-    label?: string,
-    sourceMult?: string,
-    targetMult?: string,
+    label?: string | null,
+    sourceMult?: string | null,
+    targetMult?: string | null,
+    sourceRole?: string | null,
+    targetRole?: string | null,
     labels?: any[]
   ): Edge | undefined {
     if (!this.graph) return undefined;
     const existing = this.graph.getCellById(id);
     if (existing) return existing as Edge;
 
-    const edgeLabels: any[] = labels || [];
-    if (!labels) {
-      const isLight = this.isLightMode();
-      if (label) {
-        edgeLabels.push({
-          position: 0.5,
-          attrs: {
-            label: { text: label, fill: isLight ? '#0F172A' : '#F1F5F9', fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: '600' },
-            body: { fill: isLight ? '#FFFFFF' : '#1E293B', stroke: isLight ? '#CBD5E1' : '#475569', strokeWidth: 1, rx: 3, ry: 3 }
-          }
-        });
-      }
-      if (sourceMult) {
-        edgeLabels.push({
-          position: { distance: 24, offset: { x: 0, y: -12 } },
-          attrs: {
-            label: { text: sourceMult, fill: isLight ? '#0284C7' : '#38BDF8', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 'bold' },
-            body: { fill: isLight ? '#FFFFFF' : '#0F172A', stroke: isLight ? '#CBD5E1' : '#334155', strokeWidth: 1, rx: 3, ry: 3 }
-          }
-        });
-      }
-      if (targetMult) {
-        edgeLabels.push({
-          position: { distance: -24, offset: { x: 0, y: -12 } },
-          attrs: {
-            label: { text: targetMult, fill: isLight ? '#0284C7' : '#38BDF8', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 'bold' },
-            body: { fill: isLight ? '#FFFFFF' : '#0F172A', stroke: isLight ? '#CBD5E1' : '#334155', strokeWidth: 1, rx: 3, ry: 3 }
-          }
-        });
-      }
-    }
+    const edgeLabels: any[] = labels || buildUmlEdgeLabels(
+      label,
+      sourceMult,
+      targetMult,
+      sourceRole,
+      targetRole,
+      this.isLightMode()
+    );
 
     try {
       const newEdge = this.graph.addEdge({
@@ -429,7 +522,15 @@ export class CanvasService {
         shape: EDGE_SHAPE_MAP[type] || 'uml-association',
         source: { cell: sourceId },
         target: { cell: targetId },
-        labels: edgeLabels
+        labels: edgeLabels,
+        data: {
+          label: label || null,
+          type,
+          source_multiplicity: sourceMult || null,
+          target_multiplicity: targetMult || null,
+          source_role: sourceRole || null,
+          target_role: targetRole || null
+        }
       });
       return newEdge;
     } catch (err) {
@@ -446,6 +547,7 @@ export class CanvasService {
     const source = edge.getSource();
     const target = edge.getTarget();
     const labels = edge.getLabels();
+    const edgeData = edge.getData();
 
     this.graph.removeCell(edge);
 
@@ -454,7 +556,11 @@ export class CanvasService {
       shape: EDGE_SHAPE_MAP[newType],
       source,
       target,
-      labels
+      labels,
+      data: {
+        ...(edgeData || {}),
+        type: newType
+      }
     });
 
     this.graph.cleanSelection();
@@ -462,7 +568,15 @@ export class CanvasService {
     return newEdge;
   }
 
-  updateEdgeProperties(edgeId: string, type: EdgeType, label: string, sourceMult: string, targetMult: string) {
+  updateEdgeProperties(
+    edgeId: string,
+    type: EdgeType,
+    label: string,
+    sourceMult: string,
+    targetMult: string,
+    sourceRole: string = '',
+    targetRole: string = ''
+  ) {
     if (!this.graph) return;
     let edge = this.graph.getCellById(edgeId) as Edge;
     if (!edge || !edge.isEdge()) return;
@@ -475,59 +589,16 @@ export class CanvasService {
     }
 
     const isLight = this.isLightMode();
-    const labels: any[] = [
-      {
-        position: 0.5,
-        attrs: {
-          label: {
-            text: label || '',
-            fill: isLight ? '#0F172A' : '#F1F5F9',
-            fontSize: 11,
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '600',
-            display: label ? 'block' : 'none'
-          },
-          body: {
-            fill: isLight ? '#FFFFFF' : '#1E293B',
-            stroke: isLight ? '#CBD5E1' : '#475569',
-            strokeWidth: 1,
-            rx: 3,
-            ry: 3,
-            display: label ? 'block' : 'none'
-          }
-        }
-      },
-      {
-        position: { distance: 35, offset: { x: 0, y: -14 } },
-        attrs: {
-          label: {
-            text: sourceMult || '',
-            fill: isLight ? '#0284C7' : '#38BDF8',
-            fontSize: 11,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontWeight: 'bold',
-            display: sourceMult ? 'block' : 'none'
-          },
-          body: { fill: 'transparent', stroke: 'none' }
-        }
-      },
-      {
-        position: { distance: -35, offset: { x: 0, y: -14 } },
-        attrs: {
-          label: {
-            text: targetMult || '',
-            fill: isLight ? '#0284C7' : '#38BDF8',
-            fontSize: 11,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontWeight: 'bold',
-            display: targetMult ? 'block' : 'none'
-          },
-          body: { fill: 'transparent', stroke: 'none' }
-        }
-      }
-    ];
-
+    const labels = buildUmlEdgeLabels(label, sourceMult, targetMult, sourceRole, targetRole, isLight);
     edge.setLabels(labels);
+    edge.setData({
+      label: label || null,
+      type,
+      source_multiplicity: sourceMult || null,
+      target_multiplicity: targetMult || null,
+      source_role: sourceRole || null,
+      target_role: targetRole || null
+    });
   }
 
   // ─── Standard Operations ──────────────────────────────────────
@@ -539,6 +610,17 @@ export class CanvasService {
 
   fitView() {
     this.graph?.zoomToFit({ maxScale: 1, padding: 40 });
+  }
+
+  resetZoom() {
+    if (!this.graph) return;
+    this.graph.zoom(1, { absolute: true });
+    this.graph.centerContent();
+  }
+
+  centerDiagram() {
+    if (!this.graph) return;
+    this.graph.centerContent();
   }
 
   zoomIn() {
@@ -650,7 +732,7 @@ export class CanvasService {
         type: (c.prop?.nodeType || this.shapeToNodeType(c.shape)) as NodeType,
         position: { x: c.position?.x || 0, y: c.position?.y || 0 },
         size: { width: c.size?.width || 220, height: c.size?.height || 140 },
-        data: (c.data as UMLNodeData) || { name: 'Clase', stereotype: null, attributes: [], methods: [], notes: null }
+        data: (c.data as UMLNodeData) || { name: 'Clase', stereotype: null, is_abstract: false, attributes: [], methods: [], notes: null }
       }));
 
     const edges: DiagramEdge[] = json.cells
@@ -658,14 +740,26 @@ export class CanvasService {
       .map((c: any) => {
         const edgeType = SHAPE_TO_EDGE_TYPE[c.shape] || 'association';
         const labels = c.labels || [];
+        const rawData = c.data || {};
+        const srcMult = rawData.source_multiplicity || rawData.sourceMultiplicity || this.extractLabelText(labels, 1);
+        const tgtMult = rawData.target_multiplicity || rawData.targetMultiplicity || this.extractLabelText(labels, 2);
+        const srcRole = (rawData.source_role || rawData.sourceRole || this.extractLabelText(labels, 3))?.replace(/^\+/, '') || null;
+        const tgtRole = (rawData.target_role || rawData.targetRole || this.extractLabelText(labels, 4))?.replace(/^\+/, '') || null;
+
         return {
           id: c.id,
           type: edgeType,
           source: typeof c.source === 'object' ? c.source.cell : c.source,
           target: typeof c.target === 'object' ? c.target.cell : c.target,
-          label: this.extractLabelText(labels, 0),
-          source_multiplicity: this.extractLabelText(labels, 1),
-          target_multiplicity: this.extractLabelText(labels, 2)
+          label: rawData.label || this.extractLabelText(labels, 0),
+          source_multiplicity: srcMult,
+          target_multiplicity: tgtMult,
+          source_role: srcRole,
+          target_role: tgtRole,
+          sourceMultiplicity: srcMult,
+          targetMultiplicity: tgtMult,
+          sourceRole: srcRole,
+          targetRole: tgtRole
         };
       });
 
@@ -738,46 +832,36 @@ export class CanvasService {
       applyUMLNodeAttrs(node, this.isLightMode());
     });
 
-    // Load edges with multiplicity labels
+    // Load edges with multiplicity and role labels
     data.edges?.forEach(e => {
-      const edgeLabels: any[] = [];
+      const srcMult = e.source_multiplicity || e.sourceMultiplicity || null;
+      const tgtMult = e.target_multiplicity || e.targetMultiplicity || null;
+      const srcRole = e.source_role || e.sourceRole || null;
+      const tgtRole = e.target_role || e.targetRole || null;
 
-      if (e.label) {
-        edgeLabels.push({
-          position: 0.5,
-          attrs: {
-            text: { text: e.label, fill: '#94A3B8', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-            rect: { fill: '#1E293B', stroke: '#334155', strokeWidth: 1, rx: 3, ry: 3 }
-          }
-        });
-      }
-
-      if (e.source_multiplicity) {
-        edgeLabels.push({
-          position: { distance: 35, offset: { x: 0, y: -14 } },
-          attrs: {
-            label: { text: e.source_multiplicity, fill: '#38BDF8', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 'bold' },
-            body: { fill: 'transparent', stroke: 'none' }
-          }
-        });
-      }
-
-      if (e.target_multiplicity) {
-        edgeLabels.push({
-          position: { distance: -35, offset: { x: 0, y: -14 } },
-          attrs: {
-            label: { text: e.target_multiplicity, fill: '#38BDF8', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 'bold' },
-            body: { fill: 'transparent', stroke: 'none' }
-          }
-        });
-      }
+      const edgeLabels = buildUmlEdgeLabels(
+        e.label,
+        srcMult,
+        tgtMult,
+        srcRole,
+        tgtRole,
+        this.isLightMode()
+      );
 
       this.graph.addEdge({
         id: e.id,
         shape: EDGE_SHAPE_MAP[e.type] || 'uml-association',
         source: { cell: e.source },
         target: { cell: e.target },
-        labels: edgeLabels
+        labels: edgeLabels,
+        data: {
+          label: e.label || null,
+          type: e.type,
+          source_multiplicity: srcMult,
+          target_multiplicity: tgtMult,
+          source_role: srcRole,
+          target_role: tgtRole
+        }
       });
     });
   }

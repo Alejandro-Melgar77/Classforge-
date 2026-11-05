@@ -5,6 +5,7 @@ import '../../core/services/api_service.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/project_model.dart';
+import '../../models/diagram_model.dart';
 import '../../models/team_model.dart';
 import '../../models/user_model.dart';
 import '../diagrams/diagram_viewer_screen.dart';
@@ -22,6 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   DashboardStatsModel? _stats;
   List<ProjectModel> _recentProjects = [];
+  List<DiagramModel> _myDiagrams = [];
   List<TeamModel> _teams = [];
   List<UserModel> _users = [];
   bool _isLoading = true;
@@ -36,13 +38,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoading = true);
     final stats = await _apiService.getDashboardStats();
     final projects = await _apiService.getProjects();
+    final diagrams = await _apiService.getDiagrams();
     final teams = await _apiService.getTeams();
     final users = await _apiService.getUsers();
+    final user = _apiService.currentUser;
+
+    final myDiagrams = diagrams.where((d) {
+      if (user == null) return true;
+      if (user.role == 'admin') return true;
+      final isCreator = (d.createdBy != null && (d.createdBy == user.id || d.createdBy == user.name));
+      final isMember = d.memberIds.contains(user.id);
+      return isCreator || isMember;
+    }).toList();
 
     if (mounted) {
       setState(() {
         _stats = stats;
         _recentProjects = projects.take(4).toList();
+        _myDiagrams = myDiagrams;
         _teams = teams;
         _users = users;
         _isLoading = false;
@@ -307,7 +320,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ..._recentProjects.map((project) => _buildProjectCard(project)),
+                  ...(_myDiagrams.isNotEmpty 
+                      ? _myDiagrams.take(4).map((d) => _buildDiagramCard(d)) 
+                      : _recentProjects.map((project) => _buildProjectCard(project))),
                   const SizedBox(height: 20),
 
                   // Sección: Notificación en Barra del Teléfono
@@ -413,7 +428,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildProjectCard(ProjectModel project) {
+    Widget _buildDiagramCard(DiagramModel diagram) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: AppTheme.surface2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppTheme.border),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DiagramViewerScreen(
+                diagramId: diagram.id,
+                initialName: diagram.name,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.account_tree_outlined, color: AppTheme.primaryLight, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            diagram.name,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      'v${diagram.version}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF10B981),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                diagram.description.isNotEmpty ? diagram.description : 'Diagrama UML colaborativo en tiempo real',
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${diagram.nodes.length} clases • ${diagram.edges.length} relaciones',
+                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'Visualizar',
+                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.primaryLight, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 3),
+                      const Icon(Icons.arrow_forward_ios, size: 10, color: AppTheme.primaryLight),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+Widget _buildProjectCard(ProjectModel project) {
     Color statusColor = const Color(0xFF10B981);
     String statusLabel = 'En Progreso';
     if (project.status == 'completed') {

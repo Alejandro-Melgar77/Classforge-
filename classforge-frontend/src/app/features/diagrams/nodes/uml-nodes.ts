@@ -7,31 +7,46 @@ export function setUMLNodeTheme(isLight: boolean) {
   gIsLightMode = isLight;
 }
 
+/**
+ * Format UML 2.5+ attributes according to standard:
+ * [visibility] [/] name : type [multiplicity] [= defaultValue]
+ */
 export function formatAttributesText(attrs?: UMLAttribute[]): string {
   if (!attrs || attrs.length === 0) {
     return '— sin atributos —';
   }
   return attrs.map(a => {
     const vis = a.visibility || '+';
-    const staticMark = a.is_static ? '_' : '';
+    const isDerived = !!(a.is_derived || (a as any).isDerived);
+    const derivedPrefix = isDerived ? '/ ' : '';
+    const isStatic = !!(a.is_static || (a as any).isStatic);
+    const staticMark = isStatic ? '_' : '';
     const name = a.name || 'attr';
     const type = a.type || 'String';
+    const mult = a.multiplicity ? ` [${a.multiplicity}]` : '';
     const defaultVal = a.default_value ? ` = ${a.default_value}` : '';
-    return `${vis} ${staticMark}${name}${staticMark}: ${type}${defaultVal}`;
+    return `${vis} ${derivedPrefix}${staticMark}${name}${staticMark} : ${type}${mult}${defaultVal}`;
   }).join('\n');
 }
 
+/**
+ * Format UML 2.5+ methods according to standard:
+ * [visibility] name(param1: type1, ...) : returnType [{abstract}]
+ */
 export function formatMethodsText(methods?: UMLMethod[]): string {
   if (!methods || methods.length === 0) {
     return '— sin métodos —';
   }
   return methods.map(m => {
     const vis = m.visibility || '+';
+    const isStatic = !!(m.is_static || (m as any).isStatic);
+    const staticMark = isStatic ? '_' : '';
     const name = m.name || 'metodo';
     const params = m.params ? `(${m.params})` : '()';
     const ret = m.return_type ? `: ${m.return_type}` : ': void';
-    const abs = m.is_abstract ? ' {abstract}' : '';
-    return `${vis} ${name}${params}${ret}${abs}`;
+    const isAbstract = !!(m.is_abstract || (m as any).isAbstract);
+    const abs = isAbstract ? ' {abstract}' : '';
+    return `${vis} ${staticMark}${name}${staticMark}${params} ${ret}${abs}`;
   }).join('\n');
 }
 
@@ -39,7 +54,13 @@ export function calculateNodeHeight(data: UMLNodeData, nodeType: NodeType): numb
   if (nodeType === 'note') return 110;
   if (nodeType === 'package') return 150;
 
-  const hasStereotype = !!(data.stereotype || nodeType === 'interface' || nodeType === 'enum' || nodeType === 'abstract');
+  const hasStereotype = !!(
+    data.stereotype ||
+    nodeType === 'interface' ||
+    nodeType === 'enum' ||
+    nodeType === 'abstract' ||
+    data.stereotype === 'class'
+  );
   const headerH = hasStereotype ? 42 : 32;
   const attrCount = Math.max(1, data.attributes?.length || 1);
   const methodCount = Math.max(1, data.methods?.length || 1);
@@ -50,10 +71,129 @@ export function calculateNodeHeight(data: UMLNodeData, nodeType: NodeType): numb
   return Math.max(120, headerH + attrH + methodH + 10);
 }
 
+/**
+ * Builds standard UML 2.5+ edge labels preventing overlap with node boxes:
+ * - Center (0.5): main label
+ * - Near source (distance 35, y: -14): source multiplicity
+ * - Near target (distance -35, y: -14): target multiplicity
+ * - Near source (distance 45, y: 14): source role name
+ * - Near target (distance -45, y: 14): target role name
+ */
+export function buildUmlEdgeLabels(
+  label?: string | null,
+  sourceMult?: string | null,
+  targetMult?: string | null,
+  sourceRole?: string | null,
+  targetRole?: string | null,
+  isLight: boolean = gIsLightMode
+): any[] {
+  const edgeLabels: any[] = [];
+
+  // 0: Center relationship label
+  if (label && label.trim()) {
+    edgeLabels.push({
+      position: 0.5,
+      attrs: {
+        label: {
+          text: label.trim(),
+          fill: isLight ? '#0F172A' : '#F1F5F9',
+          fontSize: 11,
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: '600'
+        },
+        body: {
+          fill: isLight ? '#FFFFFF' : '#1E293B',
+          stroke: isLight ? '#CBD5E1' : '#475569',
+          strokeWidth: 1,
+          rx: 3,
+          ry: 3
+        }
+      }
+    });
+  }
+
+  // 1: Source Multiplicity (offset top)
+  if (sourceMult && sourceMult.trim()) {
+    edgeLabels.push({
+      position: { distance: 35, offset: { x: 0, y: -14 } },
+      attrs: {
+        label: {
+          text: sourceMult.trim(),
+          fill: isLight ? '#0284C7' : '#38BDF8',
+          fontSize: 11,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontWeight: 'bold'
+        },
+        body: { fill: 'transparent', stroke: 'none' }
+      }
+    });
+  }
+
+  // 2: Target Multiplicity (offset top)
+  if (targetMult && targetMult.trim()) {
+    edgeLabels.push({
+      position: { distance: -35, offset: { x: 0, y: -14 } },
+      attrs: {
+        label: {
+          text: targetMult.trim(),
+          fill: isLight ? '#0284C7' : '#38BDF8',
+          fontSize: 11,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontWeight: 'bold'
+        },
+        body: { fill: 'transparent', stroke: 'none' }
+      }
+    });
+  }
+
+  // 3: Source Role (offset bottom)
+  if (sourceRole && sourceRole.trim()) {
+    edgeLabels.push({
+      position: { distance: 45, offset: { x: 0, y: 14 } },
+      attrs: {
+        label: {
+          text: `+${sourceRole.trim()}`,
+          fill: isLight ? '#475569' : '#94A3B8',
+          fontSize: 10,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontStyle: 'italic'
+        },
+        body: { fill: 'transparent', stroke: 'none' }
+      }
+    });
+  }
+
+  // 4: Target Role (offset bottom)
+  if (targetRole && targetRole.trim()) {
+    edgeLabels.push({
+      position: { distance: -45, offset: { x: 0, y: 14 } },
+      attrs: {
+        label: {
+          text: `+${targetRole.trim()}`,
+          fill: isLight ? '#475569' : '#94A3B8',
+          fontSize: 10,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontStyle: 'italic'
+        },
+        body: { fill: 'transparent', stroke: 'none' }
+      }
+    });
+  }
+
+  return edgeLabels;
+}
+
 export function applyUMLNodeAttrs(node: Node, isLight: boolean = gIsLightMode) {
   if (!node || !node.isNode()) return;
 
-  const data = (node.getData() as UMLNodeData) || { name: 'Clase', stereotype: null, attributes: [], methods: [], notes: null };
+  const data = (node.getData() as UMLNodeData) || {
+    name: 'Clase',
+    stereotype: null,
+    is_abstract: false,
+    attributes: [],
+    methods: [],
+    notes: null
+  };
   const nodeType = (node.prop('nodeType') || 'class') as NodeType;
   const size = node.size() || { width: 220, height: 140 };
   const nodeWidth = size.width > 0 ? size.width : 220;
@@ -169,14 +309,22 @@ export function applyUMLNodeAttrs(node: Node, isLight: boolean = gIsLightMode) {
   }
 
   // ═══ STANDARD UML 2.5+ CLASSIFIER (Class, Interface, Abstract, Enum) ═══
-  const hasStereotype = !!(data.stereotype || nodeType === 'interface' || nodeType === 'enum' || nodeType === 'abstract');
-  const headerHeight = hasStereotype ? 42 : 32;
+  const isAbstractClass = !!(
+    nodeType === 'abstract' ||
+    data.is_abstract ||
+    (data as any).isAbstract ||
+    data.stereotype === 'abstract'
+  );
 
   let stereotypeLabel = '';
-  if (nodeType === 'interface') stereotypeLabel = '«interface»';
-  else if (nodeType === 'enum') stereotypeLabel = '«enumeration»';
-  else if (nodeType === 'abstract') stereotypeLabel = '«abstract»';
+  if (nodeType === 'interface' || data.stereotype === 'interface') stereotypeLabel = '«interface»';
+  else if (nodeType === 'enum' || data.stereotype === 'enum' || data.stereotype === 'enumeration') stereotypeLabel = '«enumeration»';
+  else if (isAbstractClass) stereotypeLabel = '«abstract»';
+  else if (data.stereotype === 'class') stereotypeLabel = '«class»';
   else if (data.stereotype) stereotypeLabel = `«${data.stereotype}»`;
+
+  const hasStereotype = !!stereotypeLabel;
+  const headerHeight = hasStereotype ? 42 : 32;
 
   const attrsText = formatAttributesText(data.attributes);
   const attrLineCount = Math.max(1, data.attributes?.length || 1);
@@ -201,7 +349,7 @@ export function applyUMLNodeAttrs(node: Node, isLight: boolean = gIsLightMode) {
     },
     stereotypeText: {
       text: stereotypeLabel,
-      fill: 'rgba(255, 255, 255, 0.85)',
+      fill: 'rgba(255, 255, 255, 0.88)',
       fontSize: 9,
       fontWeight: '600',
       fontFamily: 'Inter, sans-serif',
@@ -216,7 +364,7 @@ export function applyUMLNodeAttrs(node: Node, isLight: boolean = gIsLightMode) {
       fill: '#FFFFFF',
       fontSize: 12,
       fontWeight: 'bold',
-      fontStyle: nodeType === 'abstract' ? 'italic' : 'normal',
+      fontStyle: isAbstractClass ? 'italic' : 'normal',
       fontFamily: 'Inter, sans-serif',
       refX: 0.5,
       refY: hasStereotype ? 27 : 16,
@@ -423,7 +571,7 @@ export function registerUMLNodesAndEdges() {
 
   // ═══ REGISTER STRICT UML 2.5+ RELATIONSHIPS & EDGES ═══
 
-  // 1. Generalization / Inheritance (Solid line, hollow closed triangle at target)
+  // 1. Generalization / Inheritance (Solid line, hollow closed triangle pointing to superclass at target)
   Graph.registerEdge('uml-inheritance', {
     inherit: 'edge',
     defaultLabel,
@@ -434,7 +582,7 @@ export function registerUMLNodesAndEdges() {
         sourceMarker: null,
         targetMarker: {
           name: 'path',
-          d: 'M 0 -7 L 14 0 L 0 7 Z',
+          d: 'M 0 -8 L 15 0 L 0 8 Z',
           fill: '#FFFFFF',
           stroke: '#64748B',
           strokeWidth: 1.5
@@ -443,7 +591,7 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 2. Realization (Dashed line, hollow closed triangle at target)
+  // 2. Realization / Interface Implementation (Dashed line, hollow closed triangle at target)
   Graph.registerEdge('uml-realization', {
     inherit: 'edge',
     defaultLabel,
@@ -455,7 +603,7 @@ export function registerUMLNodesAndEdges() {
         sourceMarker: null,
         targetMarker: {
           name: 'path',
-          d: 'M 0 -7 L 14 0 L 0 7 Z',
+          d: 'M 0 -8 L 15 0 L 0 8 Z',
           fill: '#FFFFFF',
           stroke: '#64748B',
           strokeWidth: 1.5
@@ -464,7 +612,7 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 3. Composition (Solid line, filled diamond at source, NO target arrow)
+  // 3. Composition (Solid line, filled diamond at container source, NO arrow at target)
   Graph.registerEdge('uml-composition', {
     inherit: 'edge',
     defaultLabel,
@@ -474,7 +622,7 @@ export function registerUMLNodesAndEdges() {
         strokeWidth: 1.5,
         sourceMarker: {
           name: 'path',
-          d: 'M 0 0 L 8 -5 L 16 0 L 8 5 Z',
+          d: 'M 0 0 L 9 -6 L 18 0 L 9 6 Z',
           fill: '#0284C7',
           stroke: '#0284C7',
           strokeWidth: 1.5
@@ -484,7 +632,7 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 4. Aggregation (Solid line, hollow diamond at source, NO target arrow)
+  // 4. Aggregation (Solid line, hollow diamond at container source, NO arrow at target)
   Graph.registerEdge('uml-aggregation', {
     inherit: 'edge',
     defaultLabel,
@@ -494,7 +642,7 @@ export function registerUMLNodesAndEdges() {
         strokeWidth: 1.5,
         sourceMarker: {
           name: 'path',
-          d: 'M 0 0 L 8 -5 L 16 0 L 8 5 Z',
+          d: 'M 0 0 L 9 -6 L 18 0 L 9 6 Z',
           fill: '#FFFFFF',
           stroke: '#0284C7',
           strokeWidth: 1.5
@@ -504,7 +652,7 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 5. Association (Solid line, open arrowhead at target)
+  // 5. Association (Solid line, open arrowhead at target for navigability)
   Graph.registerEdge('uml-association', {
     inherit: 'edge',
     defaultLabel,
@@ -524,7 +672,7 @@ export function registerUMLNodesAndEdges() {
     }
   }, true);
 
-  // 6. Dependency (Dashed line, open arrowhead at target)
+  // 6. Dependency (Dashed line, open arrowhead pointing to provider at target)
   Graph.registerEdge('uml-dependency', {
     inherit: 'edge',
     defaultLabel,

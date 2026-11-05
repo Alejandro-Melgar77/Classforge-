@@ -10,7 +10,7 @@ import { UMLCommandResponse } from '../models/ai-command.model';
     <div class="command-preview-card p-4 rounded-xl bg-slate-900/90 border border-purple-500/30 shadow-2xl mb-4 backdrop-blur-sm">
       <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-800">
         <h4 class="text-xs font-bold text-purple-400 flex items-center gap-1.5 uppercase tracking-wider">
-          <span>⚡</span> Propuesta de Cambios
+          <span>⚡</span> Propuesta de Cambios UML 2.5+
         </h4>
         <span 
           class="text-[10px] px-2 py-0.5 rounded-full font-medium border flex items-center gap-1"
@@ -23,7 +23,7 @@ import { UMLCommandResponse } from '../models/ai-command.model';
         >
           <ng-container [ngSwitch]="command.source">
             <span *ngSwitchCase="'local'">🖥️ Local</span>
-            <span *ngSwitchCase="'gemini'">✨ Gemini 3.8 Flash</span>
+            <span *ngSwitchCase="'gemini'">✨ Gemini Vision / Flash</span>
             <span *ngSwitchCase="'backend_ai'">✨ Gemini 3.8 Flash</span>
             <span *ngSwitchDefault>⚡ Heurístico</span>
           </ng-container>
@@ -35,14 +35,19 @@ import { UMLCommandResponse } from '../models/ai-command.model';
       </p>
       
       <!-- Classes -->
-      <div *ngIf="command.classes.length > 0" class="mb-3">
+      <div *ngIf="command.classes && command.classes.length > 0" class="mb-3">
         <h5 class="text-[11px] font-bold text-blue-400 mb-1.5 flex items-center gap-1">
-          <span>📦</span> Clases / Tablas ({{ command.classes.length }}):
+          <span>📦</span> Clases / Elementos UML ({{ command.classes.length }}):
         </h5>
-        <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+        <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
           <div *ngFor="let cls of command.classes" class="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
             <div class="flex items-center justify-between mb-1">
-              <strong class="text-xs text-white font-mono">{{ cls.name }}</strong>
+              <strong 
+                class="text-xs text-white font-mono"
+                [class.italic]="cls.is_abstract || cls.stereotype === 'abstract'"
+              >
+                {{ cls.name }}
+              </strong>
               <span *ngIf="cls.stereotype" class="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">
                 &laquo;{{ cls.stereotype }}&raquo;
               </span>
@@ -50,15 +55,32 @@ import { UMLCommandResponse } from '../models/ai-command.model';
 
             <!-- Attributes preview -->
             <div *ngIf="cls.attributes && cls.attributes.length > 0" class="mt-1 pl-2 border-l-2 border-blue-500/40 space-y-0.5">
-              <div *ngFor="let attr of cls.attributes" class="text-[11px] text-slate-300 font-mono">
-                <span class="text-blue-400">{{ attr.visibility || '+' }}</span> {{ attr.name }}: <span class="text-emerald-400">{{ attr.type }}</span>
+              <div 
+                *ngFor="let attr of cls.attributes" 
+                class="text-[11px] text-slate-300 font-mono"
+                [class.underline]="attr.is_static"
+              >
+                <span class="text-blue-400 font-bold">{{ attr.visibility || '+' }}</span>
+                <span *ngIf="attr.is_derived" class="text-amber-400 font-bold">/</span>
+                <span>{{ attr.name }}</span>: 
+                <span class="text-emerald-400">{{ attr.type }}</span>
+                <span *ngIf="attr.multiplicity" class="text-slate-400 font-sans"> [{{ attr.multiplicity }}]</span>
+                <span *ngIf="attr.default_value" class="text-slate-400"> = {{ attr.default_value }}</span>
               </div>
             </div>
 
             <!-- Methods preview -->
             <div *ngIf="cls.methods && cls.methods.length > 0" class="mt-1 pl-2 border-l-2 border-emerald-500/40 space-y-0.5">
-              <div *ngFor="let m of cls.methods" class="text-[11px] text-slate-300 font-mono">
-                <span class="text-emerald-400">{{ m.visibility || '+' }}</span> {{ m.name }}({{ m.params }}): <span class="text-cyan-400">{{ m.return_type || 'void' }}</span>
+              <div 
+                *ngFor="let m of cls.methods" 
+                class="text-[11px] text-slate-300 font-mono"
+                [class.underline]="m.is_static"
+                [class.italic]="m.is_abstract"
+              >
+                <span class="text-emerald-400 font-bold">{{ m.visibility || '+' }}</span> 
+                <span>{{ m.name }}({{ m.params }}): </span>
+                <span class="text-cyan-400">{{ m.return_type || 'void' }}</span>
+                <span *ngIf="m.is_abstract" class="text-[10px] text-amber-300 font-sans"> &#123;abstract&#125;</span>
               </div>
             </div>
           </div>
@@ -66,25 +88,33 @@ import { UMLCommandResponse } from '../models/ai-command.model';
       </div>
 
       <!-- Relations & Cardinalities -->
-      <div *ngIf="command.relations.length > 0" class="mb-3">
+      <div *ngIf="command.relations && command.relations.length > 0" class="mb-3">
         <h5 class="text-[11px] font-bold text-cyan-400 mb-1.5 flex items-center gap-1">
-          <span>🔗</span> Relaciones y Cardinalidades:
+          <span>🔗</span> Relaciones y Conectores UML ({{ command.relations.length }}):
         </h5>
         <ul class="text-xs space-y-1.5">
-          <li *ngFor="let rel of command.relations" class="bg-slate-800/80 p-2 rounded-lg border border-slate-700 font-mono text-[11px] flex items-center justify-between">
-            <span class="text-white font-bold">{{ rel.source }}</span>
-            <div class="flex items-center gap-1.5 text-[10px] text-cyan-300">
-              <span *ngIf="rel.sourceMultiplicity" class="px-1 bg-cyan-950/80 rounded border border-cyan-800/50 text-cyan-400 font-bold">[{{ rel.sourceMultiplicity }}]</span>
-              <span>── {{ rel.type }} ──></span>
-              <span *ngIf="rel.targetMultiplicity" class="px-1 bg-cyan-950/80 rounded border border-cyan-800/50 text-cyan-400 font-bold">[{{ rel.targetMultiplicity }}]</span>
+          <li *ngFor="let rel of command.relations" class="bg-slate-800/80 p-2 rounded-lg border border-slate-700 font-mono text-[11px] flex flex-wrap items-center justify-between gap-1">
+            <div class="flex items-center gap-1">
+              <span class="text-white font-bold">{{ rel.source }}</span>
+              <span *ngIf="rel.sourceRole || rel.source_role" class="text-[10px] text-amber-300 font-sans">({{ rel.sourceRole || rel.source_role }})</span>
             </div>
-            <span class="text-white font-bold">{{ rel.target }}</span>
+            
+            <div class="flex items-center gap-1.5 text-[10px] text-cyan-300">
+              <span *ngIf="rel.sourceMultiplicity || rel.source_multiplicity" class="px-1 bg-cyan-950/80 rounded border border-cyan-800/50 text-cyan-400 font-bold">[{{ rel.sourceMultiplicity || rel.source_multiplicity }}]</span>
+              <span class="font-sans px-1 text-slate-300">── {{ rel.type }} <span *ngIf="rel.label">"{{ rel.label }}"</span> ──></span>
+              <span *ngIf="rel.targetMultiplicity || rel.target_multiplicity" class="px-1 bg-cyan-950/80 rounded border border-cyan-800/50 text-cyan-400 font-bold">[{{ rel.targetMultiplicity || rel.target_multiplicity }}]</span>
+            </div>
+
+            <div class="flex items-center gap-1">
+              <span *ngIf="rel.targetRole || rel.target_role" class="text-[10px] text-amber-300 font-sans">({{ rel.targetRole || rel.target_role }})</span>
+              <span class="text-white font-bold">{{ rel.target }}</span>
+            </div>
           </li>
         </ul>
       </div>
 
       <!-- Deleted elements -->
-      <div *ngIf="command.deleted_elements.length > 0" class="mb-3">
+      <div *ngIf="command.deleted_elements && command.deleted_elements.length > 0" class="mb-3">
         <h5 class="text-[11px] font-bold text-red-400 mb-1 flex items-center gap-1">
           <span>🗑️</span> Elementos a Eliminar:
         </h5>
@@ -98,7 +128,7 @@ import { UMLCommandResponse } from '../models/ai-command.model';
       <!-- Actions -->
       <div class="flex gap-2 mt-4 pt-3 border-t border-slate-800">
         <button class="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                (click)="confirm.emit()">
+                (click)="onConfirm()">
           <span>✓</span> Aplicar al Lienzo
         </button>
         <button class="py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
@@ -112,6 +142,11 @@ import { UMLCommandResponse } from '../models/ai-command.model';
 export class CommandPreviewCardComponent {
   @Input() command!: UMLCommandResponse;
   @Output() confirm = new EventEmitter<void>();
+  @Output() apply = new EventEmitter<void>();
   @Output() discard = new EventEmitter<void>();
-}
 
+  onConfirm(): void {
+    this.confirm.emit();
+    this.apply.emit();
+  }
+}

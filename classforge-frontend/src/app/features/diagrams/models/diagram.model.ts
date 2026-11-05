@@ -2,6 +2,7 @@ export type DiagramStatus = 'draft' | 'in_progress' | 'completed' | 'archived';
 export type NodeType = 'class' | 'interface' | 'abstract' | 'enum' | 'note' | 'package';
 export type EdgeType = 'inheritance' | 'composition' | 'aggregation' | 'association' | 'dependency' | 'realization';
 export type Visibility = '+' | '-' | '#' | '~';
+export type EntityStereotype = 'class' | 'interface' | 'abstract' | 'enumeration' | string;
 
 export interface UMLAttribute {
   visibility: Visibility;
@@ -9,6 +10,8 @@ export interface UMLAttribute {
   type: string;
   default_value: string | null;
   is_static: boolean;
+  is_derived?: boolean;
+  multiplicity?: string | null;
 }
 
 export interface UMLMethod {
@@ -23,6 +26,7 @@ export interface UMLMethod {
 export interface UMLNodeData {
   name: string;
   stereotype: string | null;
+  is_abstract?: boolean;
   attributes: UMLAttribute[];
   methods: UMLMethod[];
   notes: string | null;
@@ -44,6 +48,12 @@ export interface DiagramEdge {
   label: string | null;
   source_multiplicity: string | null;
   target_multiplicity: string | null;
+  source_role?: string | null;
+  target_role?: string | null;
+  sourceMultiplicity?: string | null;
+  targetMultiplicity?: string | null;
+  sourceRole?: string | null;
+  targetRole?: string | null;
 }
 
 export interface GraphData {

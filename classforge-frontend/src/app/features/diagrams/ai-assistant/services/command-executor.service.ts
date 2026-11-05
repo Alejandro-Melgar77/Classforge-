@@ -62,23 +62,26 @@ export class CommandExecutorService {
           name: a.name,
           type: a.type || 'String',
           visibility: normalizeVis(a.visibility),
-          default_value: null,
-          is_static: false
+          default_value: (a as any).default_value || null,
+          is_static: !!(a as any).is_static,
+          is_derived: !!(a as any).is_derived,
+          multiplicity: (a as any).multiplicity || null
         }));
 
         const methodsFormatted: UMLMethod[] = (cls.methods || []).map(m => ({
           name: m.name,
-          params: m.params || '',
-          return_type: m.return_type || 'void',
+          params: m.params || (m as any).parameters || '',
+          return_type: m.return_type || (m as any).returnType || 'void',
           visibility: normalizeVis(m.visibility),
-          is_static: false,
-          is_abstract: false
+          is_static: !!(m as any).is_static,
+          is_abstract: !!(m as any).is_abstract
         }));
 
+        const isAbstract = cls.stereotype === 'abstract' || !!(cls as any).is_abstract || !!(cls as any).isAbstract;
         const nodeType: NodeType = (
-          cls.stereotype === 'abstract' ? 'abstract' :
+          cls.stereotype === 'abstract' || isAbstract ? 'abstract' :
           cls.stereotype === 'interface' ? 'interface' :
-          cls.stereotype === 'enum' ? 'enum' : 'class'
+          cls.stereotype === 'enum' || cls.stereotype === 'enumeration' ? 'enum' : 'class'
         );
 
         if (existingNode) {
@@ -97,6 +100,7 @@ export class CommandExecutorService {
           const updatedData: UMLNodeData = {
             name: cls.name,
             stereotype: currentData.stereotype || cls.stereotype || null,
+            is_abstract: isAbstract || currentData.is_abstract,
             attributes: mergedAttrs,
             methods: mergedMethods,
             notes: currentData.notes || null
@@ -124,6 +128,7 @@ export class CommandExecutorService {
           const initialData: UMLNodeData = {
             name: cls.name,
             stereotype: cls.stereotype || null,
+            is_abstract: isAbstract,
             attributes: attributesFormatted.length > 0 ? attributesFormatted : [
               { name: 'id', type: 'Long', visibility: '+', default_value: null, is_static: false },
               { name: 'nombre', type: 'String', visibility: '+', default_value: null, is_static: false }
@@ -214,6 +219,8 @@ export class CommandExecutorService {
 
           const srcMult = rel.sourceMultiplicity || (rel as any).source_multiplicity || null;
           const tgtMult = rel.targetMultiplicity || (rel as any).target_multiplicity || null;
+          const srcRole = rel.sourceRole || (rel as any).source_role || null;
+          const tgtRole = rel.targetRole || (rel as any).target_role || null;
           const edgeId = `edge_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
           const newEdge = this.canvasService.addRemoteEdge(
@@ -223,7 +230,9 @@ export class CommandExecutorService {
             targetNode.id,
             rel.label,
             srcMult,
-            tgtMult
+            tgtMult,
+            srcRole,
+            tgtRole
           );
 
           if (newEdge) {
@@ -234,7 +243,9 @@ export class CommandExecutorService {
               target: { cell: targetNode.id },
               label: rel.label,
               source_multiplicity: srcMult,
-              target_multiplicity: tgtMult
+              target_multiplicity: tgtMult,
+              source_role: srcRole,
+              target_role: tgtRole
             });
           }
         }

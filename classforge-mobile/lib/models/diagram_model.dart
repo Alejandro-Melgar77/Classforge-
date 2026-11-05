@@ -155,6 +155,8 @@ class DiagramModel {
   final String description;
   final String projectId;
   final String? teamId;
+  final String? createdBy;
+  final List<String> memberIds;
   final String status;
   final int version;
   final List<DiagramNodeModel> nodes;
@@ -166,6 +168,8 @@ class DiagramModel {
     required this.description,
     required this.projectId,
     this.teamId,
+    this.createdBy,
+    this.memberIds = const [],
     required this.status,
     required this.version,
     required this.nodes,
@@ -197,12 +201,17 @@ class DiagramModel {
       }
     }
 
+    final rawMembers = json['member_ids'] as List<dynamic>? ?? [];
+    final memberIds = rawMembers.map((m) => m.toString()).toList();
+
     return DiagramModel(
-      id: json['id'] ?? json['_id'] ?? '',
+      id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
       name: json['name'] ?? 'Diagrama UML',
       description: json['description'] ?? '',
-      projectId: json['project_id'] ?? '',
-      teamId: json['team_id'],
+      projectId: json['project_id']?.toString() ?? '',
+      teamId: json['team_id']?.toString(),
+      createdBy: json['created_by']?.toString(),
+      memberIds: memberIds,
       status: json['status'] ?? 'draft',
       version: json['version'] ?? 1,
       nodes: parsedNodes,

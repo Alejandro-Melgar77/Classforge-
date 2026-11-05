@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   final List<String> _titles = [
-    'ClassForge Studio',
+    'Classforge Visualizer',
     'Repertorio de Proyectos',
     'Equipos de Desarrollo Scrum',
     'Directorio de Usuarios',
