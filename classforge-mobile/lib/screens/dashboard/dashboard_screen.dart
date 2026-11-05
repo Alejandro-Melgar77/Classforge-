@@ -37,7 +37,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final stats = await _apiService.getDashboardStats();
-    final projects = await _apiService.getProjects();
     final diagrams = await _apiService.getDiagrams();
     final teams = await _apiService.getTeams();
     final users = await _apiService.getUsers();
@@ -46,15 +45,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final myDiagrams = diagrams.where((d) {
       if (user == null) return true;
       if (user.role == 'admin') return true;
-      final isCreator = (d.createdBy != null && (d.createdBy == user.id || d.createdBy == user.name));
+      final isCreator = (d.createdBy != null && (d.createdBy == user.id || d.createdBy == user.name || d.createdBy == user.email));
       final isMember = d.memberIds.contains(user.id);
-      return isCreator || isMember;
+      final isTeamMember = d.teamId != null && user.teamIds.contains(d.teamId);
+      final isNamedTeam = d.teamName != null && user.name.isNotEmpty && d.teamName!.toLowerCase().contains(user.name.toLowerCase());
+      return isCreator || isMember || isTeamMember || isNamedTeam;
     }).toList();
+
+    final diagramProjects = myDiagrams.map((d) => ProjectModel(
+      id: d.id,
+      name: d.name,
+      description: d.description.isNotEmpty
+          ? d.description
+          : 'Lienzo de modelado conceptual UML para arquitectura de software (v\)',
+      status: d.status,
+      type: 'team',
+      teamId: d.teamId,
+      teamName: d.teamName ?? 'Equipo Alejandro',
+      createdBy: d.createdBy ?? 'Admin',
+      createdAt: DateTime.now(),
+    )).toList();
 
     if (mounted) {
       setState(() {
         _stats = stats;
-        _recentProjects = projects.take(4).toList();
+        _recentProjects = diagramProjects.take(6).toList();
         _myDiagrams = myDiagrams;
         _teams = teams;
         _users = users;
@@ -201,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Lienzo Conceptual Bancario',
+                                _myDiagrams.isNotEmpty ? _myDiagrams.first.name : 'Lienzo Conceptual UML',
                                 style: GoogleFonts.inter(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -210,7 +225,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Visor interactivo 60 FPS con zoom, clases y relaciones.',
+                                _myDiagrams.isNotEmpty
+                                    ? '${_myDiagrams.first.teamName ?? "Equipo"} • v${_myDiagrams.first.version} • Visor 60 FPS'
+                                    : 'Visor interactivo 60 FPS con zoom, clases y relaciones.',
                                 style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textSecondary),
                               ),
                             ],
@@ -223,12 +240,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           onPressed: () {
+                            if (_myDiagrams.isEmpty) return;
+                            final target = _myDiagrams.first;
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const DiagramViewerScreen(
-                                  diagramId: 'diag-01',
-                                  initialName: 'Diagrama Conceptual Bancario',
+                                builder: (context) => DiagramViewerScreen(
+                                  diagramId: target.id,
+                                  initialName: target.name,
                                 ),
                               ),
                             );
@@ -246,8 +265,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Expanded(
                         child: _buildKpiCard(
                           title: 'Proyectos',
-                          count: '${_stats?.totalProjects ?? 8}',
-                          subtitle: '${_stats?.activeProjects ?? 5} en progreso',
+                          count: '${_myDiagrams.length}',
+                          subtitle: '${_myDiagrams.where((d) => d.status == 'draft' || d.status == 'in_progress').length} en progreso',
                           icon: Icons.folder_outlined,
                           color: AppTheme.primaryLight,
                           onTap: () => widget.onNavigateTab?.call(1),
@@ -257,18 +276,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Expanded(
                         child: _buildKpiCard(
                           title: 'Diagramas UML',
-                          count: '14',
+                          count: '${_stats?.totalDiagrams ?? _myDiagrams.length}',
                           subtitle: 'Sincronizados',
                           icon: Icons.schema_outlined,
                           color: AppTheme.accent,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DiagramViewerScreen(diagramId: 'diag-01'),
-                              ),
-                            );
-                          },
+                          onTap: () => widget.onNavigateTab?.call(1),
                         ),
                       ),
                     ],
@@ -547,8 +559,21 @@ Widget _buildProjectCard(ProjectModel project) {
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: AppTheme.border),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DiagramViewerScreen(
+                diagramId: project.id,
+                initialName: project.name,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -608,9 +633,9 @@ Widget _buildProjectCard(ProjectModel project) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const DiagramViewerScreen(
-                          diagramId: 'diag-01',
-                          initialName: 'Diagrama Conceptual Bancario',
+                        builder: (context) => DiagramViewerScreen(
+                          diagramId: project.id,
+                          initialName: project.name,
                         ),
                       ),
                     );
@@ -619,6 +644,7 @@ Widget _buildProjectCard(ProjectModel project) {
               ],
             ),
           ],
+        ),
         ),
       ),
     );

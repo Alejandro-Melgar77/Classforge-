@@ -33,9 +33,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final filtered = all.where((d) {
       if (user == null) return true;
       if (user.role == 'admin') return true;
-      final isCreator = (d.createdBy != null && (d.createdBy == user.id || d.createdBy == user.name));
+      final isCreator = (d.createdBy != null && (d.createdBy == user.id || d.createdBy == user.name || d.createdBy == user.email));
       final isMember = d.memberIds.contains(user.id);
-      return isCreator || isMember;
+      final isTeamMember = d.teamId != null && user.teamIds.contains(d.teamId);
+      final isNamedTeam = d.teamName != null && user.name.isNotEmpty && d.teamName!.toLowerCase().contains(user.name.toLowerCase());
+      return isCreator || isMember || isTeamMember || isNamedTeam;
     }).toList();
 
     if (mounted) {

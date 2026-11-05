@@ -12,7 +12,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController(text: 'admin@classforge.com');
+  final TextEditingController _emailController = TextEditingController(text: 'alejandro@classforge.com');
   final TextEditingController _passwordController = TextEditingController(text: '1234');
   late TextEditingController _urlController;
   final ApiService _apiService = ApiService();
@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacementNamed(context, '/home');
       } else {
         setState(() {
-          _errorMessage = 'Credenciales inválidas o servidor inalcanzable. Puedes usar el Modo Offline.';
+          _errorMessage = _apiService.lastLoginError ?? 'Credenciales inválidas o servidor inalcanzable. Puedes usar el Modo Offline.';
         });
       }
     }
@@ -301,10 +301,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ElevatedButton(
                         onPressed: _isLoading ? null : _handleLogin,
                         child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Conectando a Render...',
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               )
                             : Text(
                                 'Conectar y Autenticar',
@@ -352,13 +362,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: () => _fillDemo('admin@classforge.com', '1234'),
                   ),
                   ActionChip(
-                    label: const Text('Scrum Master'),
+                    label: const Text('Alejandro (Scrum Master)'),
                     backgroundColor: AppTheme.surface3,
                     labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
                     onPressed: () => _fillDemo('alejandro@classforge.com', '1234'),
                   ),
                   ActionChip(
-                    label: const Text('Developer'),
+                    label: const Text('Fernando (Dev)'),
                     backgroundColor: AppTheme.surface3,
                     labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
                     onPressed: () => _fillDemo('fernando@classforge.com', '1234'),

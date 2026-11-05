@@ -21,6 +21,8 @@ class ApiService {
   UserModel? _currentUser;
   String _activeBaseUrl = ApiConstants.baseUrl;
   bool _isOfflineDemoMode = false;
+  String? _lastLoginError;
+  String? get lastLoginError => _lastLoginError;
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null && _accessToken != null;
@@ -38,13 +40,34 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
     final savedUrl = prefs.getString('custom_base_url');
-    if (savedUrl != null && !savedUrl.contains('10.0.2.2') && !savedUrl.contains('localhost') && savedUrl.trim().isNotEmpty) {
+    if (savedUrl != null &&
+        savedUrl.trim().isNotEmpty &&
+        savedUrl.startsWith('http') &&
+        !savedUrl.contains('10.0.2.2') &&
+        !savedUrl.contains('localhost') &&
+        !savedUrl.contains('127.0.0.1')) {
       _activeBaseUrl = savedUrl.trim();
     } else {
       _activeBaseUrl = ApiConstants.baseUrl;
       await prefs.setString('custom_base_url', ApiConstants.baseUrl);
     }
-    _isOfflineDemoMode = prefs.getBool('is_offline_demo_mode') ?? false;
+
+    // Purge fake mock tokens or non-production JWTs to always ensure cloud connectivity
+    if (_accessToken == 'classforge_production_session_jwt' ||
+        (_accessToken != null && !_accessToken!.startsWith('eyJ'))) {
+      _accessToken = null;
+      _currentUser = null;
+      _isOfflineDemoMode = false;
+      await prefs.remove('access_token');
+      await prefs.remove('current_user');
+      await prefs.setBool('is_offline_demo_mode', false);
+    } else if (_accessToken != null && _accessToken!.startsWith('eyJ')) {
+      _isOfflineDemoMode = false;
+      await prefs.setBool('is_offline_demo_mode', false);
+    } else {
+      _isOfflineDemoMode = false;
+      await prefs.setBool('is_offline_demo_mode', false);
+    }
 
     final userJson = prefs.getString('current_user');
     if (userJson != null) {
@@ -444,23 +467,33 @@ class ApiService {
   }
 
   Future<bool> login(String email, String password) async {
-    if (email.trim().endsWith('@classforge.io')) {
+    _lastLoginError = null;
+    final cleanEmail = email.trim();
+
+    if (cleanEmail.endsWith('@classforge.io')) {
       await enableOfflineDemoMode();
       return true;
     }
 
+    _isOfflineDemoMode = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_offline_demo_mode', false);
+
     try {
+      final endpoint = '$_activeBaseUrl${ApiConstants.login}';
+      debugPrint('POST $endpoint con $cleanEmail');
+
       final response = await http
           .post(
-            Uri.parse('$_activeBaseUrl${ApiConstants.login}'),
-            headers: _headers(auth: false),
+            Uri.parse(endpoint),
+            headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
-              'email': email.trim(),
+              'email': cleanEmail,
               'password': password,
-              'device_info': 'ClassForge Mobile (Flutter)'
+              'device_info': 'ClassForge Mobile (Android Release)'
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 35));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -468,7 +501,6 @@ class ApiService {
         _accessToken = tokenData['access_token'];
         _isOfflineDemoMode = false;
 
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setString('access_token', _accessToken!);
         await prefs.setBool('is_offline_demo_mode', false);
 
@@ -479,10 +511,19 @@ class ApiService {
           await fetchCurrentUser();
         }
         return true;
+      } else {
+        String msg = 'Error ${response.statusCode}';
+        try {
+          final errData = jsonDecode(response.body);
+          msg = errData['detail'] ?? errData['message'] ?? msg;
+        } catch (_) {}
+        _lastLoginError = msg;
+        debugPrint('Login rechazado: $msg');
+        return false;
       }
-      return false;
     } catch (e) {
-      debugPrint('Login error: ');
+      _lastLoginError = 'No se pudo conectar al servidor cloud: $e';
+      debugPrint('Excepción en login: $e');
       return false;
     }
   }
@@ -540,35 +581,35 @@ class ApiService {
   }
 
   Future<List<ProjectModel>> getProjects({String? status}) async {
-    if (_isOfflineDemoMode) {
-      if (status != null && status != 'all') {
-        return _mockProjects.where((p) => p.status == status).toList();
+    if (!_isOfflineDemoMode && _accessToken != null) {
+      try {
+        final diagrams = await getDiagrams();
+        if (diagrams.isNotEmpty) {
+          final list = diagrams.map((d) => ProjectModel(
+            id: d.id,
+            name: d.name,
+            description: d.description.isNotEmpty
+                ? d.description
+                : 'Lienzo de modelado conceptual UML para arquitectura de software',
+            status: d.status,
+            type: 'team',
+            teamId: d.teamId,
+            teamName: d.teamName ?? 'Equipo Alejandro',
+            createdBy: d.createdBy ?? 'Admin',
+            createdAt: DateTime.now(),
+          )).toList();
+          if (status != null && status != 'all') {
+            return list.where((p) => p.status == status).toList();
+          }
+          return list;
+        }
+      } catch (e) {
+        debugPrint('Fallback projects from diagrams: ');
       }
-      return _mockProjects;
     }
 
-    try {
-      String url = '$_activeBaseUrl${ApiConstants.projects}';
-      if (status != null && status != 'all') {
-        url += '?status=$status';
-      }
-
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: _headers(),
-          )
-          .timeout(const Duration(seconds: 12));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final list = data['data'] as List<dynamic>? ?? [];
-        return list.map((p) => ProjectModel.fromJson(p)).toList();
-      }
-    } catch (e) {
-      debugPrint('Fallback to offline projects: $e');
-    }
-    return _mockProjects;
+    if (_isOfflineDemoMode) return _mockProjects;
+    return [];
   }
 
   Future<List<TeamModel>> getTeams() async {
@@ -624,12 +665,15 @@ class ApiService {
         }
         final response = await http
             .get(Uri.parse(url), headers: _headers())
-            .timeout(const Duration(seconds: 15));
+            .timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final list = data['data'] as List<dynamic>? ?? [];
           final result = list.map((d) => DiagramModel.fromJson(d)).toList();
+          for (final d in result) {
+            _mockDiagrams[d.id] = d;
+          }
           return result;
         }
       } catch (e) {
@@ -645,26 +689,28 @@ class ApiService {
   }
 
   Future<DiagramModel?> getDiagram(String diagramId) async {
-    if (_mockDiagrams.containsKey(diagramId)) {
-      return _mockDiagrams[diagramId];
-    }
-
-    if (!_isOfflineDemoMode) {
+    if (!_isOfflineDemoMode && _accessToken != null) {
       try {
         final response = await http
             .get(
               Uri.parse('$_activeBaseUrl${ApiConstants.diagrams}/$diagramId'),
               headers: _headers(),
             )
-            .timeout(const Duration(seconds: 12));
+            .timeout(const Duration(seconds: 25));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
-          return DiagramModel.fromJson(data['data']);
+          final parsed = DiagramModel.fromJson(data['data']);
+          _mockDiagrams[diagramId] = parsed;
+          return parsed;
         }
       } catch (e) {
-        debugPrint('Fallback to offline diagram details: $e');
+        debugPrint('Error obteniendo diagrama cloud: $e');
       }
+    }
+
+    if (_mockDiagrams.containsKey(diagramId)) {
+      return _mockDiagrams[diagramId];
     }
 
     return _mockDiagrams['diag-01'];

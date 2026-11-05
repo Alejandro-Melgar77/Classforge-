@@ -155,6 +155,7 @@ class DiagramModel {
   final String description;
   final String projectId;
   final String? teamId;
+  final String? teamName;
   final String? createdBy;
   final List<String> memberIds;
   final String status;
@@ -168,6 +169,7 @@ class DiagramModel {
     required this.description,
     required this.projectId,
     this.teamId,
+    this.teamName,
     this.createdBy,
     this.memberIds = const [],
     required this.status,
@@ -210,6 +212,7 @@ class DiagramModel {
       description: json['description'] ?? '',
       projectId: json['project_id']?.toString() ?? '',
       teamId: json['team_id']?.toString(),
+      teamName: json['team_name']?.toString(),
       createdBy: json['created_by']?.toString(),
       memberIds: memberIds,
       status: json['status'] ?? 'draft',
