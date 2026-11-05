@@ -131,7 +131,7 @@ async def update_diagram_graph_data(
                 }
                 await db.diagrams.update_one(
                     {"_id": obj_id, "graph_data.nodes.id": {"$ne": element_id}},
-                    {"$push": {"graph_data.nodes": node_doc}, "$set": {"updated_at": now}}
+                    {"$push": {"graph_data.nodes": node_doc}, "$inc": {"version": 1}, "$set": {"updated_at": now}}
                 )
         elif op == "move":
             if data:
@@ -143,13 +143,13 @@ async def update_diagram_graph_data(
                 try:
                     await db.diagrams.update_one(
                         {"_id": obj_id},
-                        {"$set": {"graph_data.nodes.$[elem].position": new_pos, "updated_at": now}},
+                        {"$set": {"graph_data.nodes.$[elem].position": new_pos, "updated_at": now}, "$inc": {"version": 1}},
                         array_filters=[{"elem.id": element_id}]
                     )
                 except NotImplementedError:
                     await db.diagrams.update_one(
                         {"_id": obj_id, "graph_data.nodes.id": element_id},
-                        {"$set": {"graph_data.nodes.$.position": new_pos, "updated_at": now}}
+                        {"$set": {"graph_data.nodes.$.position": new_pos, "updated_at": now}, "$inc": {"version": 1}}
                     )
         elif op == "update":
             if data:
@@ -169,14 +169,14 @@ async def update_diagram_graph_data(
                 try:
                     await db.diagrams.update_one(
                         {"_id": obj_id},
-                        {"$set": set_fields},
+                        {"$set": set_fields, "$inc": {"version": 1}},
                         array_filters=[{"elem.id": element_id}]
                     )
                 except NotImplementedError:
                     pos_set_fields = {k.replace("$[elem]", "$"): v for k, v in set_fields.items()}
                     await db.diagrams.update_one(
                         {"_id": obj_id, "graph_data.nodes.id": element_id},
-                        {"$set": pos_set_fields}
+                        {"$set": pos_set_fields, "$inc": {"version": 1}}
                     )
         elif op == "delete":
             try:
@@ -187,13 +187,14 @@ async def update_diagram_graph_data(
                             "graph_data.nodes": {"id": element_id},
                             "graph_data.edges": {"$or": [{"source": element_id}, {"target": element_id}]}
                         },
+                        "$inc": {"version": 1},
                         "$set": {"updated_at": now}
                     }
                 )
             except Exception:
                 await db.diagrams.update_one(
                     {"_id": obj_id},
-                    {"$pull": {"graph_data.nodes": {"id": element_id}}, "$set": {"updated_at": now}}
+                    {"$pull": {"graph_data.nodes": {"id": element_id}}, "$inc": {"version": 1}, "$set": {"updated_at": now}}
                 )
                 await db.diagrams.update_one(
                     {"_id": obj_id},
@@ -223,7 +224,7 @@ async def update_diagram_graph_data(
                 }
                 await db.diagrams.update_one(
                     {"_id": obj_id, "graph_data.edges.id": {"$ne": element_id}},
-                    {"$push": {"graph_data.edges": edge_doc}, "$set": {"updated_at": now}}
+                    {"$push": {"graph_data.edges": edge_doc}, "$inc": {"version": 1}, "$set": {"updated_at": now}}
                 )
         elif op == "update":
             if data:
@@ -237,17 +238,20 @@ async def update_diagram_graph_data(
                 try:
                     await db.diagrams.update_one(
                         {"_id": obj_id},
-                        {"$set": set_fields},
+                        {"$set": set_fields, "$inc": {"version": 1}},
                         array_filters=[{"elem.id": element_id}]
                     )
                 except NotImplementedError:
                     pos_set_fields = {k.replace("$[elem]", "$"): v for k, v in set_fields.items()}
                     await db.diagrams.update_one(
                         {"_id": obj_id, "graph_data.edges.id": element_id},
-                        {"$set": pos_set_fields}
+                        {"$set": pos_set_fields, "$inc": {"version": 1}}
                     )
         elif op == "delete":
             await db.diagrams.update_one(
                 {"_id": obj_id},
-                {"$pull": {"graph_data.edges": {"id": element_id}}, "$set": {"updated_at": now}}
+                {"$pull": {"graph_data.edges": {"id": element_id}}, "$inc": {"version": 1}, "$set": {"updated_at": now}}
             )
+
+    doc = await db.diagrams.find_one({"_id": obj_id}, {"version": 1})
+    return int(doc.get("version", 1) or 1) if doc else 1

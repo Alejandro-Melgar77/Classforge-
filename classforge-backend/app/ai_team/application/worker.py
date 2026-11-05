@@ -181,6 +181,91 @@ class AiWorker:
                     logger.warning(f"[AiWorker] Error resolving skipped pending message: {msg_err}")
             return
 
+        # Deferred authorization (H09): verify project and user authorization before executing
+        pid = ObjectId(job.project_id) if ObjectId.is_valid(job.project_id) else job.project_id
+        project_doc = await self.db["projects"].find_one({"_id": pid})
+        if project_doc and project_doc.get("is_deleted") is True:
+            logger.warning(f"[AiWorker] Deferred auth check failed: project {job.project_id} is deleted. Job {job.id} aborted.")
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"skipped": "project_deleted"})
+            ai_msg_id = job.payload.get("ai_msg_id")
+            if ai_msg_id:
+                try:
+                    await self.msg_repo.update_ai_response(
+                        message_id=ai_msg_id,
+                        content="El procesamiento fue cancelado porque el proyecto fue eliminado.",
+                        status="error",
+                        error_code="PROJECT_DELETED",
+                    )
+                except Exception:
+                    pass
+            task_id = job.payload.get("task_id")
+            if task_id:
+                try:
+                    await self.task_repo.update_task(task_id, {"status": "failed", "error": "Proyecto eliminado"})
+                except Exception:
+                    pass
+            return
+
+        user_id = job.payload.get("user_id")
+        if user_id:
+            uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+            user_doc = await self.db["users"].find_one({"_id": uid})
+            if user_doc:
+                is_active = user_doc.get("is_active", True)
+                is_deleted = user_doc.get("is_deleted", False)
+                if not is_active or is_deleted:
+                    logger.warning(f"[AiWorker] Deferred auth check failed: user {user_id} inactive or deleted. Job {job.id} aborted.")
+                    await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"skipped": "user_inactive_or_deleted"})
+                    ai_msg_id = job.payload.get("ai_msg_id")
+                    if ai_msg_id:
+                        try:
+                            await self.msg_repo.update_ai_response(
+                                message_id=ai_msg_id,
+                                content="La tarea fue cancelada porque la cuenta del usuario fue desactivada o eliminada.",
+                                status="error",
+                                error_code="USER_UNAUTHORIZED",
+                            )
+                        except Exception:
+                            pass
+                    task_id = job.payload.get("task_id")
+                    if task_id:
+                        try:
+                            await self.task_repo.update_task(task_id, {"status": "failed", "error": "Usuario inactivo o eliminado"})
+                        except Exception:
+                            pass
+                    return
+
+                if project_doc:
+                    team_id = project_doc.get("team_id")
+                    team_doc = None
+                    if team_id:
+                        tid = ObjectId(team_id) if ObjectId.is_valid(team_id) else team_id
+                        team_doc = await self.db["teams"].find_one({"_id": tid, "is_deleted": {"$ne": True}})
+                    from app.core.authz import can_access_project
+                    # Team document is authoritative; ignore stale denormalized user.team_ids
+                    user_for_auth = {**user_doc, "team_ids": []}
+                    if not can_access_project(user_for_auth, project_doc, team_doc):
+                        logger.warning(f"[AiWorker] Deferred auth check failed: user {user_id} lost access to project {job.project_id}. Job {job.id} aborted.")
+                        await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"skipped": "user_unauthorized"})
+                        ai_msg_id = job.payload.get("ai_msg_id")
+                        if ai_msg_id:
+                            try:
+                                await self.msg_repo.update_ai_response(
+                                    message_id=ai_msg_id,
+                                    content="La tarea fue cancelada porque el usuario ya no tiene permisos vigentes en este proyecto.",
+                                    status="error",
+                                    error_code="UNAUTHORIZED",
+                                )
+                            except Exception:
+                                pass
+                        task_id = job.payload.get("task_id")
+                        if task_id:
+                            try:
+                                await self.task_repo.update_task(task_id, {"status": "failed", "error": "Usuario sin permisos en el proyecto"})
+                            except Exception:
+                                pass
+                        return
+
         logger.info(f"[AiWorker] Executing job {job.id} (kind={job.kind}, role={job.role_id})")
         try:
             if job.kind == "answer_message":
@@ -237,6 +322,17 @@ class AiWorker:
 
         role_id = task_doc.get("ai_role", job.role_id or "tech_lead")
         role_def = get_role(role_id)
+
+        # Deferred check: check if the user who assigned the task still has permission
+        assigned_by = task_doc.get("assigned_by")
+        if assigned_by and not job.payload.get("user_id"):
+            u_oid = ObjectId(assigned_by) if ObjectId.is_valid(assigned_by) else assigned_by
+            u_doc = await self.db["users"].find_one({"_id": u_oid})
+            if u_doc and (not u_doc.get("is_active", True) or u_doc.get("is_deleted", False)):
+                logger.warning(f"[AiWorker] Task {task_id} creator inactive/deleted. Cancelling task.")
+                await self.task_repo.update_task(task_id, {"status": "failed", "error": "Usuario asignador inactivo o eliminado"})
+                await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"skipped": "user_unauthorized"})
+                return
 
         # 1. Update task to in_progress
         await self.task_repo.update_task(task_id, {

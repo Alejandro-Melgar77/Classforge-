@@ -192,10 +192,53 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 op = message.get("op")
                 node_id = message.get("node_id")
                 node_data = message.get("data")
+                op_id = message.get("op_id") or message.get("operation_id")
+
+                if user.get("role") in ("viewer", "guest", "readonly") or user.get("read_only") is True:
+                    await websocket.send_json({"type": "OP_REJECTED", "element_id": node_id, "reason": "read_only"})
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "NACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "element_id": node_id,
+                            "error_code": "READ_ONLY",
+                            "message": "Operación rechazada: permiso de sólo lectura"
+                        })
+                    continue
                 if op not in ("add", "move", "update", "delete") or not isinstance(node_id, str) or not node_id or (op != "delete" and (not isinstance(node_data, dict) or not node_data)):
                     await websocket.send_json({"type": "OP_REJECTED", "element_id": node_id, "reason": "invalid_operation"})
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "NACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "element_id": node_id,
+                            "error_code": "INVALID_OPERATION",
+                            "message": "Operación inválida"
+                        })
                     continue
                 if op and node_id:
+                    # Idempotency check: if op_id was already committed, return existing ACK
+                    if op_id and db is not None:
+                        try:
+                            from app.modules.collaboration.outbox import DiagramOutboxRepository
+                            outbox_repo = DiagramOutboxRepository(db)
+                            existing_ev = await outbox_repo.col.find_one({"diagram_id": str(diagram_id), "operation_id": op_id})
+                            if existing_ev:
+                                await websocket.send_json({
+                                    "type": "ACK",
+                                    "op_id": op_id,
+                                    "diagram_id": diagram_id,
+                                    "revision": existing_ev.get("revision", 1),
+                                    "event_id": existing_ev.get("event_id"),
+                                    "status": "success",
+                                    "duplicate": True
+                                })
+                                continue
+                        except Exception as e_dup:
+                            logger.debug(f"[DiagramWS] Deduplication check warning: {e_dup}")
+
                     # Check if locked by another user
                     if manager.is_locked_by_other(diagram_id, node_id, user_id):
                         await websocket.send_json({
@@ -203,12 +246,24 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                             "element_id": node_id,
                             "reason": "locked"
                         })
+                        if op_id:
+                            await websocket.send_json({
+                                "type": "NACK",
+                                "op_id": op_id,
+                                "diagram_id": diagram_id,
+                                "element_id": node_id,
+                                "error_code": "LOCKED",
+                                "message": "El nodo está bloqueado por otro usuario"
+                            })
                         continue
 
                     # Persist before broadcasting: if the write fails the other
                     # clients must not apply a change that was never stored.
+                    new_rev = 1
                     try:
-                        await update_diagram_graph_data(diagram_id, node_id, op, node_data, "node")
+                        res_rev = await update_diagram_graph_data(diagram_id, node_id, op, node_data, "node")
+                        if isinstance(res_rev, int):
+                            new_rev = res_rev
                     except Exception as exc:
                         logger.error(f"[DiagramWS] Failed to persist NODE_OPERATION: {exc}")
                         await websocket.send_json({
@@ -216,14 +271,57 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                             "element_id": node_id,
                             "reason": "persist_failed"
                         })
+                        if op_id:
+                            await websocket.send_json({
+                                "type": "NACK",
+                                "op_id": op_id,
+                                "diagram_id": diagram_id,
+                                "element_id": node_id,
+                                "error_code": "PERSIST_FAILED",
+                                "message": "Error al persistir la operación"
+                            })
                         continue
+
+                    # Record durable event in outbox
+                    event_id = None
+                    if db is not None:
+                        try:
+                            from app.modules.collaboration.outbox import DiagramOutboxRepository
+                            outbox_repo = DiagramOutboxRepository(db)
+                            ev_doc = await outbox_repo.record_event(
+                                diagram_id=str(diagram_id),
+                                project_id=diagram.get("project_id") if isinstance(diagram, dict) else None,
+                                revision=new_rev,
+                                previous_revision=max(1, new_rev - 1),
+                                actor_id=user_id,
+                                operations=[{"type": op, "node_id": node_id, "data": node_data}],
+                                operation_id=op_id,
+                                origin_connection_id=str(id(websocket)),
+                            )
+                            event_id = ev_doc.get("event_id")
+                            await outbox_repo.mark_dispatched(event_id)
+                        except Exception as e_out:
+                            logger.warning(f"[DiagramWS] Outbox record error: {e_out}")
+
+                    # Explicit ACK on success
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "ACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "revision": new_rev,
+                            "event_id": event_id,
+                            "status": "success"
+                        })
 
                     broadcast_msg = {
                         "type": "NODE_OPERATION",
                         "op": op,
                         "node_id": node_id,
                         "data": node_data,
-                        "user_id": user_id
+                        "user_id": user_id,
+                        "revision": new_rev,
+                        "event_id": event_id,
                     }
                     await manager.broadcast(diagram_id, broadcast_msg, exclude_websocket=websocket)
                     spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
@@ -232,10 +330,53 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 op = message.get("op")
                 edge_id = message.get("edge_id")
                 edge_data = message.get("data")
+                op_id = message.get("op_id") or message.get("operation_id")
+
+                if user.get("role") in ("viewer", "guest", "readonly") or user.get("read_only") is True:
+                    await websocket.send_json({"type": "OP_REJECTED", "element_id": edge_id, "reason": "read_only"})
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "NACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "element_id": edge_id,
+                            "error_code": "READ_ONLY",
+                            "message": "Operación rechazada: permiso de sólo lectura"
+                        })
+                    continue
                 if op not in ("add", "update", "delete") or not isinstance(edge_id, str) or not edge_id or (op != "delete" and (not isinstance(edge_data, dict) or not edge_data)):
                     await websocket.send_json({"type": "OP_REJECTED", "element_id": edge_id, "reason": "invalid_operation"})
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "NACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "element_id": edge_id,
+                            "error_code": "INVALID_OPERATION",
+                            "message": "Operación inválida"
+                        })
                     continue
                 if op and edge_id:
+                    # Idempotency check
+                    if op_id and db is not None:
+                        try:
+                            from app.modules.collaboration.outbox import DiagramOutboxRepository
+                            outbox_repo = DiagramOutboxRepository(db)
+                            existing_ev = await outbox_repo.col.find_one({"diagram_id": str(diagram_id), "operation_id": op_id})
+                            if existing_ev:
+                                await websocket.send_json({
+                                    "type": "ACK",
+                                    "op_id": op_id,
+                                    "diagram_id": diagram_id,
+                                    "revision": existing_ev.get("revision", 1),
+                                    "event_id": existing_ev.get("event_id"),
+                                    "status": "success",
+                                    "duplicate": True
+                                })
+                                continue
+                        except Exception as e_dup:
+                            logger.debug(f"[DiagramWS] Deduplication check warning: {e_dup}")
+
                     # Check if locked by another user
                     if manager.is_locked_by_other(diagram_id, edge_id, user_id):
                         await websocket.send_json({
@@ -243,10 +384,22 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                             "element_id": edge_id,
                             "reason": "locked"
                         })
+                        if op_id:
+                            await websocket.send_json({
+                                "type": "NACK",
+                                "op_id": op_id,
+                                "diagram_id": diagram_id,
+                                "element_id": edge_id,
+                                "error_code": "LOCKED",
+                                "message": "La relación está bloqueada por otro usuario"
+                            })
                         continue
 
+                    new_rev = 1
                     try:
-                        await update_diagram_graph_data(diagram_id, edge_id, op, edge_data, "edge")
+                        res_rev = await update_diagram_graph_data(diagram_id, edge_id, op, edge_data, "edge")
+                        if isinstance(res_rev, int):
+                            new_rev = res_rev
                     except Exception as exc:
                         logger.error(f"[DiagramWS] Failed to persist EDGE_OPERATION: {exc}")
                         await websocket.send_json({
@@ -254,14 +407,55 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                             "element_id": edge_id,
                             "reason": "persist_failed"
                         })
+                        if op_id:
+                            await websocket.send_json({
+                                "type": "NACK",
+                                "op_id": op_id,
+                                "diagram_id": diagram_id,
+                                "element_id": edge_id,
+                                "error_code": "PERSIST_FAILED",
+                                "message": "Error al persistir la operación"
+                            })
                         continue
+
+                    event_id = None
+                    if db is not None:
+                        try:
+                            from app.modules.collaboration.outbox import DiagramOutboxRepository
+                            outbox_repo = DiagramOutboxRepository(db)
+                            ev_doc = await outbox_repo.record_event(
+                                diagram_id=str(diagram_id),
+                                project_id=diagram.get("project_id") if isinstance(diagram, dict) else None,
+                                revision=new_rev,
+                                previous_revision=max(1, new_rev - 1),
+                                actor_id=user_id,
+                                operations=[{"type": op, "edge_id": edge_id, "data": edge_data}],
+                                operation_id=op_id,
+                                origin_connection_id=str(id(websocket)),
+                            )
+                            event_id = ev_doc.get("event_id")
+                            await outbox_repo.mark_dispatched(event_id)
+                        except Exception as e_out:
+                            logger.warning(f"[DiagramWS] Outbox record error: {e_out}")
+
+                    if op_id:
+                        await websocket.send_json({
+                            "type": "ACK",
+                            "op_id": op_id,
+                            "diagram_id": diagram_id,
+                            "revision": new_rev,
+                            "event_id": event_id,
+                            "status": "success"
+                        })
 
                     broadcast_msg = {
                         "type": "EDGE_OPERATION",
                         "op": op,
                         "edge_id": edge_id,
                         "data": edge_data,
-                        "user_id": user_id
+                        "user_id": user_id,
+                        "revision": new_rev,
+                        "event_id": event_id,
                     }
                     await manager.broadcast(diagram_id, broadcast_msg, exclude_websocket=websocket)
                     spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
@@ -321,6 +515,79 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         "status": status
                     })
 
+            elif msg_type == "SYNC_REQUEST":
+                known_rev = int(message.get("known_revision", 0) or 0)
+                if db is not None:
+                    try:
+                        from app.modules.collaboration.outbox import DiagramOutboxRepository
+                        outbox_repo = DiagramOutboxRepository(db)
+                        oid = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
+                        diag_doc = await db["diagrams"].find_one({"_id": oid, "is_deleted": False})
+                        current_rev = int(diag_doc.get("version", 1) or 1) if diag_doc else 1
+
+                        if known_rev >= current_rev:
+                            await websocket.send_json({
+                                "type": "SYNC_RESPONSE",
+                                "status": "up_to_date",
+                                "revision": current_rev,
+                            })
+                        else:
+                            missing_events = await outbox_repo.get_events_since(diagram_id, known_rev, limit=100)
+                            is_contiguous = False
+                            if missing_events:
+                                expected = known_rev + 1
+                                is_contiguous = True
+                                for ev in missing_events:
+                                    if ev.get("revision") != expected:
+                                        is_contiguous = False
+                                        break
+                                    expected += 1
+                                if expected - 1 < current_rev:
+                                    is_contiguous = False
+
+                            if is_contiguous and missing_events:
+                                clean_events = []
+                                for ev in missing_events:
+                                    clean_events.append({
+                                        "event_id": ev["event_id"],
+                                        "event_type": ev.get("event_type", "diagram.operation.committed"),
+                                        "revision": ev["revision"],
+                                        "previous_revision": ev.get("previous_revision"),
+                                        "operations": ev.get("operations", []),
+                                        "graph_data": ev.get("graph_data"),
+                                        "created_at": ev["created_at"].isoformat() if hasattr(ev["created_at"], "isoformat") else str(ev["created_at"])
+                                    })
+                                await websocket.send_json({
+                                    "type": "SYNC_RESPONSE",
+                                    "status": "incremental",
+                                    "from_revision": known_rev,
+                                    "to_revision": current_rev,
+                                    "events": clean_events
+                                })
+                            else:
+                                await websocket.send_json({
+                                    "type": "SYNC_RESPONSE",
+                                    "status": "snapshot",
+                                    "revision": current_rev,
+                                    "graph_data": diag_doc.get("graph_data", {"nodes": [], "edges": []}) if diag_doc else {"nodes": [], "edges": []}
+                                })
+                    except Exception as s_err:
+                        logger.error(f"[DiagramWS] SYNC_REQUEST error: {s_err}")
+                        await websocket.send_json({
+                            "type": "SYNC_RESPONSE",
+                            "status": "error",
+                            "message": str(s_err)
+                        })
+                else:
+                    await websocket.send_json({
+                        "type": "SYNC_RESPONSE",
+                        "status": "snapshot",
+                        "revision": 1,
+                        "graph_data": {"nodes": [], "edges": []}
+                    })
+            else:
+                await websocket.send_json({"type": "OP_REJECTED", "reason": "unrecognized_operation"})
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -349,7 +616,7 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
     if db is not None:
         try:
             pid_obj = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
-            project = await db.projects.find_one({"_id": pid_obj})
+            project = await db.projects.find_one({"_id": pid_obj, "is_deleted": False})
             if not project:
                 await websocket.close(code=4003, reason="Project not found")
                 return
@@ -357,7 +624,7 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
             team = None
             if project.get("team_id"):
                 tid_obj = ObjectId(project["team_id"]) if ObjectId.is_valid(project["team_id"]) else project["team_id"]
-                team = await db.teams.find_one({"_id": tid_obj})
+                team = await db.teams.find_one({"_id": tid_obj, "is_deleted": False})
 
             if not can_access_project(user, project, team):
                 await websocket.close(code=4003, reason="Forbidden")
@@ -436,6 +703,9 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
                     },
                     exclude_user_id=user_id,
                 )
+
+            else:
+                await websocket.send_json({"type": "OP_REJECTED", "reason": "unrecognized_operation"})
 
     except WebSocketDisconnect:
         pass

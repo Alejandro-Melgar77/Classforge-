@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class DiagramRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
         self.collection = db["diagrams"]
         self.ws_tokens = db["ws_tokens"]
         self.versions_collection = db["diagram_versions"]
@@ -116,6 +117,37 @@ class DiagramRepository:
             raise ConflictError("Otro participante modificó el diagrama durante el guardado.")
         committed = {**diagram, "graph_data": graph_data, "version": new_version, "updated_at": now}
         committed.pop('_pending_snapshot', None)
+
+        # SYNC-01 & H06: Transactional Outbox and unified broadcast
+        try:
+            from app.modules.collaboration.outbox import DiagramOutboxRepository
+            from app.modules.collaboration.connection_manager import manager
+            outbox_repo = DiagramOutboxRepository(self.db)
+            event = await outbox_repo.record_event(
+                diagram_id=str(diagram_id),
+                project_id=str(diagram.get("project_id")) if diagram.get("project_id") else None,
+                revision=new_version,
+                previous_revision=current_version,
+                actor_id=str(saved_by),
+                operations=[],
+                graph_data=graph_data,
+            )
+            broadcast_msg = {
+                "type": "DIAGRAM_COMMITTED",
+                "event_id": event["event_id"],
+                "diagram_id": str(diagram_id),
+                "revision": new_version,
+                "previous_revision": current_version,
+                "actor_id": str(saved_by),
+                "comment": comment,
+                "graph_data": graph_data,
+                "created_at": now.isoformat(),
+            }
+            await manager.broadcast(str(diagram_id), broadcast_msg)
+            await outbox_repo.mark_dispatched(event["event_id"])
+        except Exception as exc:
+            logger.warning("Error registrando o difundiendo evento outbox: %s", exc)
+
         try:
             await self._flush_snapshot(diagram_id, {"_pending_snapshot": version_entry})
         except Exception:

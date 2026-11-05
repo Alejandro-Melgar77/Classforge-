@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -172,41 +173,81 @@ class ConnectionManager:
         return users
 
     def get_locks(self, room_id: str) -> Dict[str, str]:
-        """Returns a copy of the active element locks for a room."""
+        """Returns a copy of the active element locks for a room, filtering out expired locks."""
         key = self._resolve_room_key(room_id)
-        return dict(self.locks.get(key) or {})
+        lock_data = self.locks.get(key) or {}
+        now = time.monotonic()
+        active: Dict[str, str] = {}
+        for el_id, val in list(lock_data.items()):
+            if isinstance(val, dict):
+                if now <= val.get("expires_at", float("inf")):
+                    active[el_id] = val["user_id"]
+                else:
+                    lock_data.pop(el_id, None)
+            else:
+                active[el_id] = val
+        return active
 
     def is_locked_by_other(self, diagram_id: str, element_id: str, user_id: str) -> bool:
         key = self._resolve_room_key(diagram_id)
         lock_data = self.locks.get(key)
         if not lock_data:
             return False
-        owner = lock_data.get(element_id)
-        if owner is not None and owner != user_id:
-            return True
-        return False
+        val = lock_data.get(element_id)
+        if val is None:
+            return False
+        if isinstance(val, dict):
+            if time.monotonic() > val.get("expires_at", float("inf")):
+                lock_data.pop(element_id, None)
+                return False
+            owner = val.get("user_id")
+        else:
+            owner = val
+        return owner is not None and owner != user_id
 
-    def acquire_lock(self, diagram_id: str, user_id: str, element_id: str) -> bool:
+    def acquire_lock(self, diagram_id: str, user_id: str, element_id: str, ttl_seconds: float = 60.0) -> bool:
         key = self._resolve_room_key(diagram_id)
         if key not in self.locks:
             self.locks[key] = {}
         
         lock_data = self.locks[key]
-        current_owner = lock_data.get(element_id)
-        if current_owner is None or current_owner == user_id:
-            lock_data[element_id] = user_id
-            return True
-        return False
+        now = time.monotonic()
+        val = lock_data.get(element_id)
+        if val is not None:
+            if isinstance(val, dict):
+                if now > val.get("expires_at", float("inf")):
+                    val = None
+                else:
+                    owner = val.get("user_id")
+            else:
+                owner = val
+            if val is not None and owner != user_id:
+                return False
+                
+        lock_data[element_id] = {"user_id": user_id, "expires_at": now + ttl_seconds}
+        return True
 
     def get_lock_owner(self, diagram_id: str, element_id: str) -> Optional[str]:
         key = self._resolve_room_key(diagram_id)
         lock_data = self.locks.get(key)
-        return lock_data.get(element_id) if lock_data else None
+        if not lock_data or element_id not in lock_data:
+            return None
+        val = lock_data[element_id]
+        if isinstance(val, dict):
+            if time.monotonic() > val.get("expires_at", float("inf")):
+                lock_data.pop(element_id, None)
+                return None
+            return val.get("user_id")
+        return val
 
     def release_lock(self, diagram_id: str, user_id: str, element_id: str):
         key = self._resolve_room_key(diagram_id)
         lock_data = self.locks.get(key)
-        if lock_data and lock_data.get(element_id) == user_id:
+        if not lock_data or element_id not in lock_data:
+            return False
+        val = lock_data[element_id]
+        owner = val.get("user_id") if isinstance(val, dict) else val
+        if owner == user_id:
             del lock_data[element_id]
             return True
         return False
@@ -216,9 +257,13 @@ class ConnectionManager:
         key = self._resolve_room_key(diagram_id)
         lock_data = self.locks.get(key)
         if lock_data:
-            to_remove = [el_id for el_id, uid in lock_data.items() if uid == user_id]
+            to_remove = []
+            for el_id, val in list(lock_data.items()):
+                owner = val.get("user_id") if isinstance(val, dict) else val
+                if owner == user_id:
+                    to_remove.append(el_id)
             for el_id in to_remove:
-                del lock_data[el_id]
+                lock_data.pop(el_id, None)
                 released_elements.append(el_id)
         return released_elements
 
