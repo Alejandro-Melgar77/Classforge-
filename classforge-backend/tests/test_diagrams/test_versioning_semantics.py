@@ -104,3 +104,17 @@ async def test_restore_version_restores_intended_state():
     restored_entry = await repo.get_history_entry(diagram_id, 3)
     assert restored_entry["version"] == 3
     assert restored_entry["graph_data"]["nodes"][0]["data"]["name"] == "InitialState"
+
+
+async def test_operations_endpoint_rejects_stale_revision():
+    repo = DiagramRepository(db_instance.db)
+    created = await _seed_diagram(repo)
+    diagram_id = str(created['_id'])
+    payload = {'base_version': 1, 'operations': [
+        {'type': 'move_node', 'id': 'n1', 'patch': {'x': 10, 'y': 20}}]}
+    async with await _client() as ac:
+        first = await ac.post(f'/api/v1/diagrams/{diagram_id}/operations', json=payload)
+        second = await ac.post(f'/api/v1/diagrams/{diagram_id}/operations', json=payload)
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert (await repo.get_by_id(diagram_id))['version'] == 2

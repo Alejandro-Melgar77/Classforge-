@@ -26,6 +26,7 @@ export interface ShellNavItem {
   children?: ShellNavItem[];
   roles?: UserRole[];
   expanded?: boolean;
+  dataTour?: string;
 }
 
 @Component({
@@ -68,10 +69,10 @@ export class ShellComponent implements OnInit, OnDestroy {
   unreadCount = this.notificationService.unreadCount;
 
   navItems: ShellNavItem[] = [
-    { icon: '🏠', label: 'Inicio', route: '/dashboard' },
-    { icon: '📁', label: 'Proyectos', route: '/projects' },
-    { icon: '📊', label: 'Diagramas', route: '/diagrams' },
-    { icon: '👥', label: 'Mis Equipos', route: '/projects/teams' },
+    { icon: '🏠', label: 'Inicio', route: '/dashboard', dataTour: 'nav-dashboard' },
+    { icon: '📁', label: 'Proyectos', route: '/projects', dataTour: 'nav-projects' },
+    { icon: '📊', label: 'Diagramas', route: '/diagrams', dataTour: 'nav-diagrams' },
+    { icon: '👥', label: 'Mis Equipos', route: '/projects/teams', dataTour: 'nav-teams' },
     { icon: '🔔', label: 'Notificaciones', action: 'notifications' },
     { icon: '👤', label: 'Perfil', action: 'profile' },
     {

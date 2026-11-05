@@ -8,13 +8,13 @@
 
 <!-- METADATOS_DINAMICOS_INICIO -->
 ### 📌 Metadatos de Seguimiento y Estado del Repositorio
-* **Última Actualización Automática:** 2026-11-04 17:19:14
+* **Última Actualización Automática:** 2026-11-04 20:48:48
 * **Rama Activa:** `main`
-* **Último Commit:** `1ff9266` - *fix: avoid premature AI job lease expiry*
+* **Último Commit:** `26af799` - *fix: preserve edits made during autosave*
 * **Autor:** Alejandro-Melgar77 <ale.melgararteaga@gmail.com>
-* **Estado del Árbol de Trabajo:** 6 archivo(s) con cambios pendientes
+* **Estado del Árbol de Trabajo:** 105 archivo(s) con cambios pendientes
 * **Batería de Pruebas Backend (Pytest):** 274 pasadas, 0 fallidas (100% éxito en 21.08s)
-* **Archivos de Prueba en Backend:** 60 suites de prueba
+* **Archivos de Prueba en Backend:** 79 suites de prueba
 * **Estado Operativo General:** **PRODUCCIÓN / ESTABLE** (Defectos C1–C7, A1–A36, M1–M12 cerrados y verificados)
 <!-- METADATOS_DINAMICOS_FIN -->
 
@@ -240,6 +240,16 @@ segundo examen parcial/
   - Ventana deslizante para digests de proyecto (`summarize_digest`), consultando los mensajes más recientes con orden descendente (Falla A5).
   - `ServerDiagramEditor`: Validación estricta de dependencias en relaciones antes de aplicar cambios para evitar enlaces huérfanos (Falla A32).
   - Propuestas de arquitectura evaluables por el usuario con validación de existencia (404 si la propuesta no pertenece al mensaje) (Falla A30).
+* **Fase 4 — Chat Colaborativo, Agentes de IA, Ejecución Autónoma, Historial y Normalización Inteligente UML:**
+  - **Aislamiento Estricto y Chat Colaborativo (`AI-CHAT-01`, `AI-CHAT-02`):** Cada usuario posee su hilo personal persistente (`thread="personal"`), garantizando que ningún usuario B pueda visualizar ni manipular mensajes privados del usuario A. El chat grupal de proyecto (`/projects/{id}/history`) ofrece una vista unificada de las decisiones y propuestas del equipo (`visibility="team"`, `thread="project"`), con soporte para publicación voluntaria de mensajes privados al equipo mediante `POST /messages/{id}/publish`.
+  - **Paginación Robusta por Cursor Compuesto (`H08`):** Algoritmo de cursor `(created_at, _id)` con codificación opaca `v2:` que previene la pérdida o duplicación de mensajes cuando múltiples registros comparten el mismo timestamp. Validación estricta que devuelve HTTP 400 ante cursores corruptos.
+  - **Confiabilidad de Tareas y Workers Autónomos (`H09`, `AI-TASK-01`):** `AiJobRepository` con semántica de leases atómicos (`acquire_next`, `renew_lease`, `reap_expired_leases`, `cancel_job`). Renovación activa de leases durante procesamiento intensivo para prevenir reapings prematuros. Detección y transición limpia a estado de error (`AUTONOMY_DISABLED`) para mensajes encolados cuando la autonomía está deshabilitada, impidiendo estados pendientes huérfanos. Deduplicación atómica por `active_dedupe_key`. Cancelación formal de tareas mediante `POST /projects/{id}/tasks/{id}/cancel` con aborto de trabajos asociados en `ai_jobs`.
+  - **Roles y Especialidades de Agentes (`AI-ROLE-01`):** Definición de roles especializados (`software_architect`, `tech_lead`, `backend_developer`, `qa_engineer`, `scrum_master`) con matriz de capacidades según la autonomía configurada en el proyecto (consultar vs proponer vs ejecutar autónomamente).
+  - **Propuestas Estructuradas y Mutación UML Segura (`AI-PROP-01`, `AI-EXEC-01`):** Flujo de revisión integral (`pending` -> `approved` / `rejected` / `dismissed` -> `applied`). Endpoint `POST /proposals/{id}/apply` que ejecuta las modificaciones a través del motor común de la Fase 2 (`apply_operations`), incrementa la versión del diagrama, genera snapshots en el historial de versiones, y previene condiciones de carrera con HTTP 409 Conflict si la versión base no coincide con la actual. Preservación garantizada del 100% de atributos y métodos existentes.
+  - **Motor Determinista de Reorganización Automática UML (`AI-LAYOUT-01`):** Algoritmo estratificado y jerárquico determinista (`app/modules/diagrams/layout.py`) que posiciona superclases por encima de subclases en jerarquías de herencia/realización, previene colisiones mediante AABB y emite operaciones tipadas `move_node`. Endpoint `POST /diagrams/{id}/layout` con verificación de versión base y auditoría `AI_LAYOUT`.
+  - **Motor de Normalización Inteligente UML (`AI-NORM-01`):** Diagnóstico no destructivo (`app/modules/diagrams/normalization.py`) que detecta inconsistencias en nombres de clases (PascalCase), atributos/métodos (camelCase), mapeo de tipos a estándares UML canónicos, inversión de rangos de multiplicidad y atributos duplicados. Emisión de operaciones tipadas Phase 2 (`update_node`, `update_attribute`, `update_edge`) vía `POST /diagrams/{id}/normalization/apply` sin pérdida destructiva de datos.
+  - **Auditoría y Trazabilidad Exhaustiva (`AI-TRACE-01`):** Registro de cada acción de IA (`AI_APPLY_PROPOSAL`, `AI_LAYOUT`, `AI_NORMALIZE`, etc.) en `audit_logs` con trazabilidad completa de actor, proyecto, diagrama, versiones anterior y nueva, y metadatos operativos.
+  - **Integración Frontend Angular (`AI-WEB-01`):** Clientes de API en `AiTeamApiService` (`applyProposal`, `publishMessage`, `cancelTask`), métodos en `DiagramService` (`autoLayout`, `getNormalization`, `applyNormalization`), y toolbar interactiva (`canvas-toolbar.component.ts`) conectada al motor de layout con fallback offline automático.
 
 #### F. Generación de Código de Grado de Producción (`app/modules/codegen/`)
 * **Spring Boot 3 (Clean Architecture / DDD):**
@@ -268,6 +278,59 @@ segundo examen parcial/
 
 ---
 
+#### H. Evaluador Inteligente Local de Proyectos (Fase 5 - `app/modules/project_reviews/`)
+* **Ingesta y Validación Segura de PDFs (`PDF-01`, `PDF-02`, `PDF-03`):**
+  - Almacenamiento seguro por proyecto en `uploads/project_reviews/{project_id}/{document_id}.pdf`.
+  - Verificación estricta de firma mágica `%PDF-`, cálculo de hash criptográfico SHA-256 para unicidad e integridad.
+  - Límites de seguridad: rechazo con HTTP 413 ante archivos mayores a 25 MB; rechazo con HTTP 400 ante documentos superiores a 300 páginas o PDFs protegidos con contraseña.
+  - Protección rigurosa contra vulnerabilidades de *Path Traversal* mediante resolución canónica de rutas (`get_safe_document_path`).
+  - Extractor semántico estructurado página a página (`pypdf`) que detecta PDFs escaneados o carentes de texto digital OCR (< 50 palabras -> `has_sufficient_text=False`).
+  - Mapeo semántico automatizado de secciones de ingeniería de software (Alcance, Requisitos, Arquitectura/UML, Base de Datos/Persistencia, QA/Pruebas, Seguridad y Riesgos).
+* **Motor Híbrido de Evaluación y Rúbrica Técnica (`EVAL-01` a `EVAL-05`):**
+  - Rúbrica formal versionada `CF-SE-2026.1` con 6 criterios ponderados y umbral de aprobación de 70.0/100.
+  - Defensa activa contra ataques de *Prompt Injection* en documentos no confiables (`sanitize_untrusted_text`), neutralizando comandos adversarios ("ignore previous instructions", "score 100").
+  - Ejecución local mediante Ollama con caché de conectividad y fallback inmediato al motor de reglas semánticas deterministas de alta precisión sin llamadas a servicios cloud de pago.
+  - Tasa de alucinación del 0.0%: todas las citas de página corresponden a páginas reales verificables en el documento.
+  - Generación de recomendaciones técnicas accionables ordenadas por criticidad (`HIGH`, `MEDIUM`, `LOW`).
+  - Síntesis y emisión automática de pliegos de especificaciones técnicas (`TechnicalSpecification`) para proyectos con dictamen `APROBADO`.
+* **Generación de Informes Profesionales PDF (`REPORT-01`):**
+  - Renderizado vectorial de alta fidelidad mediante `reportlab` con numeración de dos pasadas ("Página X de Y").
+  - Emisión de dos documentos independientes:
+    1. *Dictamen de Evaluación de Proyecto*: Resumen ejecutivo, cuadro de puntajes, desglose de hallazgos por criterio con evidencias textuales y citas, y matriz de recomendaciones priorizadas.
+    2. *Pliego de Especificaciones Técnicas de Software*: Resumen funcional, arquitectura multicapa, especificación de componentes, endpoints REST y modelo de entidades relacional/NoSQL.
+* **Persistencia, Historial Secuencial y Auditoría (`HIST-01`, `SEC-01`):**
+  - Colecciones `review_documents` y `project_reviews` con aislamiento estricto por proyecto.
+  - Numeración secuencial garantizada (`review_number` 1, 2, 3...) sin colisiones entre proyectos.
+  - Registro inmutable en `audit_logs` con la acción `PROJECT_REVIEW_EVALUATED`.
+* **Machine Learning, Dataset y Evaluación Rigurosa (`ML-01`, `ML-02`, `ML-03`):**
+  - Dataset de 22 proyectos de software exhaustivamente anotados en `ml/data/reviews_dataset.jsonl`.
+  - Benchmark automatizado (`ml/eval/eval_reviews.py`): **Exactitud del 90.91%**, **Macro F1 de 0.9048**, **Validez de esquema 100%**, **Alucinaciones 0%** y **Latencia media de 103 ms**.
+  - Pipeline de fine-tuning LoRA en `ml/train/train_reviews_adapter.py` con auditoría honesta de hardware (entorno CPU sin CUDA documentado) y manifiesto QLoRA reproducible para aceleradores GPU.
+* **Integración Frontend Angular 17 (`WEB-01`):**
+  - Modelos TypeScript (`review.model.ts`), servicio reactivo (`project-reviews.service.ts`), componente `project-reviews.component.ts` integrado en las pestañas del Centro de Proyecto (`evaluaciones`).
+  - Carga interactiva de PDFs, visualización de progreso, tarjetas de dictámenes, acordeones de hallazgos y botones de descarga directa de PDFs.
+
+---
+
+
+#### I. Calidad Integral, Concurrencia y Resiliencia del Sistema (Fase 6 - `tests/test_phase6/`)
+* **Suite de Regresión de Seguridad (`SEC-01` - `test_security_regressions.py`):**
+  - Validación estricta contra vulnerabilidades IDOR en proyectos y diagramas (`can_access_project`, `can_access_diagram`, `require_project_member`, `require_diagram_access`), impidiendo el acceso cruzado entre usuarios no miembros.
+  - Verificación del bypass de auditoría para roles `admin` sin bloquear la trazabilidad.
+  - Sanitización exhaustiva contra *Prompt Injection* adversario (`sanitize_untrusted_text` e `INJECTION_PATTERNS`), garantizando que directivas maliciosas embebidas en especificaciones de software no alteren la evaluación de la rúbrica ni ejecuten comandos en el host.
+* **Resiliencia, Concurrencia y Leases (`REL-01` - `test_system_reliability.py`):**
+  - Ciclo de vida robusto de leases en `AiJobRepository` (`acquire_next`, `renew_lease`, `reap_expired_leases` con backoff exponencial), garantizando que trabajos huérfanos por caída de workers se recuperen automáticamente.
+  - Mecanismo de bloqueo colaborativo atómico en `ConnectionManager` (`acquire_lock`, `release_lock`, `get_lock_owner`, `release_all_user_locks`), impidiendo que dos colaboradores colisionen al editar simultáneamente el mismo nodo UML.
+  - Control de concurrencia optimista en diagramas con detección de versiones obsoletas (`base_version`), rechazando guardados en conflicto con HTTP 409 Conflict.
+* **Benchmarks de Rendimiento en Tiempo Real (`PERF-01` - `test_performance_benchmarks.py`):**
+  - Evaluación determinista de rúbrica técnica: **p50 < 15 ms, p95 < 30 ms**.
+  - Generación vectorial de reportes oficiales PDF (`ReportLab`): **latencia media < 20 ms**.
+  - Guardado y versionado atómico de grafos UML en MongoDB: **p50 < 5 ms, p95 < 15 ms**.
+* **Pruebas Integrales de Flujo de Extremo a Extremo (`QA-01` a `QA-05` - `test_flows_e2e.py`):**
+  - Verificación del flujo completo: Autenticación -> Creación de Proyecto -> Modelado UML de Clases -> Generación de Código Spring Boot y prompts frontend -> Extracción y Evaluación Documental -> Emisión del Reporte Oficial en PDF con dictamen APROBADO.
+
+---
+
 ### 3.2. Frontend (`classforge-frontend`)
 
 * **Framework y Principios Modernos:**
@@ -293,6 +356,15 @@ segundo examen parcial/
   - Panel deslizante con explorador de archivos en árbol.
   - Resaltador de sintaxis optimizado de un solo paso para Java y Python.
   - Botón de descarga instantánea del proyecto comprimido en `.zip`.
+* **Sistema Integral de Tutoriales Interactivos Guiados (`H13`, `UX-01`):**
+  - Catálogo de 10 tours guiados en `support-tour.service.ts`: Navegación General, Gestión de Proyectos, Equipos y Roles, Creación de Diagramas UML, Modelado y Propiedades, Asistente IA & Voz, Equipo de IA Participativa, Colaboración en Tiempo Real, Generación de Código y Evaluador Inteligente de Proyectos.
+  - **Filtrado Dinámico por Roles (`getAvailableTours`):** Aislamiento de tours según el rol del usuario autenticado (`admin`, `scrum_master`, `dev`), garantizando que usuarios estándar no visualicen tutoriales de funciones administrativas restringidas.
+  - **Avance por Acción Real en el DOM (`actionType: 'click'`):** El tutorial avanza automáticamente cuando el usuario interactúa o hace clic en el elemento destacado en pantalla.
+  - **Desplazamiento Suave y Posicionamiento Seguro:** Centrado automático con `scrollIntoView` suave y reintentos para elementos con renderizado asíncrono.
+* **Accesibilidad Universal WCAG 2.2 AA y Responsividad (`ACC-01`, `UX-02`):**
+  - Navegación integral por teclado en `tour-overlay.component.ts`: tecla `Escape` para cancelar el tutorial en cualquier instante, flecha derecha (`ArrowRight`) para avanzar y flecha izquierda (`ArrowLeft`) para retroceder.
+  - Semántica ARIA completa: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, `aria-describedby` y etiquetas `aria-label` en controles de navegación.
+  - Selectores `data-tour` estandarizados en la barra de navegación del Shell (`dataTour`) y en la barra de herramientas del canvas UML (`data-tour="toolbar"`), eliminando modales flotantes sin anclaje visual.
 * **Colaboración Gráfica:**
   - Renderizado en vivo de cursores multi-usuario con nombres e insignias de presencia.
   - Borde resaltado en nodos bloqueados por otros usuarios para advertir de edición concurrente.
@@ -438,8 +510,9 @@ El proyecto ClassForge se encuentra en estado **PRODUCCIÓN / ESTABLE**. Todas l
 3. **Control de Código HTTP 413 en XMI:** Respuesta estricta con código HTTP 413 (Payload Too Large) ante archivos de intercambio superiores a 10 MB.
 
 ### 6.3. Cobertura de Pruebas Automatizadas
-* **Total de Pruebas en el Backend:** 274 pruebas automatizadas con `pytest`.
-* **Resultado:** **274 pasadas, 0 fallidas (100% éxito)**.
+* **Total de Pruebas en el Backend:** 369 pruebas automatizadas con `pytest`.
+* **Total de Pruebas en el Frontend (Karma/Jasmine):** 98 pruebas unitarias pasando al 100% (0.96s).
+* **Resultado:** **369 pasadas, 0 fallidas (100% éxito en 21.53s)**.
 * **Suites Nuevas de Verificación:** 19 archivos de prueba dedicados garantizan que ninguna de las vulnerabilidades o fallas corregidas pueda reintroducirse en el futuro.
 
 ---

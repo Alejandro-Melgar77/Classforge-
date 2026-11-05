@@ -75,13 +75,33 @@ export class SupportNluService {
       };
     }
 
-    // 7. Navegación general y Repertorio
+    // 7. Evaluador de Proyectos PDF y Rúbricas
+    if (this.matchesAny(normalized, ['evaluador', 'evaluar', 'pdf', 'rubrica', 'dictamen', 'informe pdf', 'especificacion tecnica', 'evaluacion'])) {
+      return {
+        reply: 'El Evaluador Inteligente Local permite cargar documentos PDF de especificación técnica o arquitectura, evaluarlos mediante la rúbrica CF-SE-2026.1 y emitir dictámenes oficiales (Aprobado, Rechazado, Insuficiente) junto con informes PDF descargables.',
+        suggestedTourId: 'tour-project-evaluator',
+        suggestedTourTitle: 'Tour: Evaluador Inteligente Local de Proyectos',
+        category: 'IA & Código'
+      };
+    }
+
+    // 8. Equipo de IA Participativa y Propuestas
+    if (this.matchesAny(normalized, ['equipo ia', 'agentes', 'propuestas', 'tareas', 'arquitecto', 'qa engineer', 'tech lead'])) {
+      return {
+        reply: 'El módulo de Equipo IA asigna roles especializados a los agentes (Arquitecto, Tech Lead, Backend, QA). Los agentes analizan el proyecto, generan propuestas de mejora y, una vez aprobadas por el usuario, aplican las mutaciones UML de forma atómica y versionada.',
+        suggestedTourId: 'tour-ai-team-roles',
+        suggestedTourTitle: 'Tour: Equipo de IA Participativa y Propuestas',
+        category: 'IA & Código'
+      };
+    }
+
+    // 9. Navegación general y Repertorio
     if (this.matchesAny(normalized, ['dashboard', 'repertorio', 'proyectos', 'equipos', 'carpetas', 'navegacion'])) {
       return {
         reply: 'El menú lateral te permite acceder al Dashboard con métricas ejecutivas, tus Proyectos organizados por carpetas y los Equipos de trabajo asignados por roles (Admin, Scrum Master, Developer).',
-        suggestedTourId: 'tour-create-diagram',
-        suggestedTourTitle: 'Tour: Recorrido por ClassForge',
-        category: 'Básico'
+        suggestedTourId: 'tour-projects-management',
+        suggestedTourTitle: 'Tour: Gestión de Proyectos y Carpetas',
+        category: 'Gestión & Equipos'
       };
     }
 

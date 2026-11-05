@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from bson import ObjectId
 
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.modules.ai_chat.domain.models import AiMessage
 
 logger = logging.getLogger(__name__)
@@ -180,6 +180,8 @@ class AiMessageRepository:
             message = await self.find_by_id(message_id)
             if not message or str(message.get("project_id")) != str(project_id):
                 return None
+            if message.get("thread") == "personal" and str(message.get("owner_id")) != str(user_id):
+                return None
 
             # Writing proposal_state for an id that does not exist used to answer
             # 200 with a phantom audit entry.
@@ -191,6 +193,8 @@ class AiMessageRepository:
             }
             if str(proposal_id) not in proposal_ids:
                 raise NotFoundError(f"Propuesta {proposal_id} no encontrada en el mensaje")
+            if status not in ("dismissed", "rejected", "approved"):
+                raise ValidationError("La aplicación de propuestas requiere una modificación confirmada del diagrama mediante el endpoint /apply")
 
             now = datetime.now(timezone.utc)
             state_record = {
@@ -203,23 +207,70 @@ class AiMessageRepository:
             if ObjectId.is_valid(message_id):
                 query = {"$or": [{"_id": message_id}, {"_id": ObjectId(message_id)}]}
             query["project_id"] = str(project_id)
+            query["$and"] = [
+                {"$or": [{"thread": {"$ne": "personal"}}, {"owner_id": str(user_id)}]},
+                {"proposals.id": proposal_id},
+            ]
+
+            msg_doc = await self.col.find_one(query)
+            update_fields: Dict[str, Any] = {field_key: state_record, "updated_at": now}
+            if msg_doc and "proposals" in msg_doc:
+                updated_proposals = []
+                for p in msg_doc.get("proposals", []):
+                    if isinstance(p, dict) and str(p.get("id")) == str(proposal_id):
+                        p_copy = dict(p)
+                        p_copy["state"] = state_record
+                        updated_proposals.append(p_copy)
+                    else:
+                        updated_proposals.append(p)
+                update_fields["proposals"] = updated_proposals
 
             result = await self.col.update_one(
                 query,
-                {"$set": {field_key: state_record, "updated_at": now}}
+                {"$set": update_fields}
             )
             if not result.matched_count:
                 return None
             return await self.find_by_id(message_id)
-        except NotFoundError:
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error(f"[AiMsgRepo] update_proposal_state error: {e}")
             return None
 
+    async def publish_message(
+        self,
+        message_id: str,
+        user_id: str,
+        project_id: str,
+    ) -> Optional[dict]:
+        """Publishes a personal thread message to the project team/group (sets visibility='team')."""
+        try:
+            message = await self.find_by_id(message_id)
+            if not message or str(message.get("project_id")) != str(project_id):
+                return None
+            if str(message.get("owner_id")) != str(user_id) and str(message.get("author_id")) != str(user_id):
+                raise ForbiddenError("Solo el propietario del mensaje puede publicarlo al equipo")
+
+            now = datetime.now(timezone.utc)
+            query = {"_id": message_id}
+            if ObjectId.is_valid(message_id):
+                query = {"$or": [{"_id": message_id}, {"_id": ObjectId(message_id)}]}
+            await self.col.update_one(
+                query,
+                {"$set": {"visibility": "team", "thread": "project", "updated_at": now}}
+            )
+            return await self.find_by_id(message_id)
+        except (NotFoundError, ForbiddenError, ValidationError):
+            raise
+        except Exception as e:
+            logger.error(f"[AiMsgRepo] publish_message error: {e}")
+            return None
+
     async def get_history(
         self,
         project_id: str,
+        user_id: Optional[str] = None,
         before: Optional[str] = None,
         after: Optional[str] = None,
         limit: int = 50,
@@ -227,24 +278,38 @@ class AiMessageRepository:
         role: Optional[str] = None,
         order: str = "asc",
     ) -> Tuple[List[dict], int, Optional[str]]:
-        """Cursor-paginated query of all project messages (group history).
+        """Cursor-paginated query of project messages (group history).
+        
+        Enforces visibility rules: only messages directed to the project/team,
+        explicitly published messages, or messages owned by the requesting user
+        are returned. Private personal messages belonging to other users are excluded.
         
         Returns:
             (messages, total_matching, next_cursor)
 
         ``order="desc"`` returns the newest messages first; ``"asc"`` returns the
         oldest. Callers that need "the most recent window" (e.g. the digest) must
-        use ``desc`` — the default used to hand back the first 50 messages ever
-        written.
+        use ``desc``.
         """
         limit = max(1, min(limit, 100))
         query: Dict[str, Any] = {"project_id": str(project_id)}
 
-        if member:
+        # Visibility filter: team-level messages + current user's personal messages
+        if user_id:
             query["$or"] = [
+                {"visibility": {"$ne": "private"}},
+                {"owner_id": str(user_id)},
+            ]
+
+        if member:
+            member_filter = [
                 {"owner_id": str(member)},
                 {"author_id": str(member)},
             ]
+            if "$or" in query:
+                query = {"$and": [query, {"$or": member_filter}]}
+            else:
+                query["$or"] = member_filter
 
         if role:
             query["ai_role"] = role
@@ -286,13 +351,7 @@ class AiMessageRepository:
             raise ValidationError('No se pueden combinar before y after')
         sort_dir = -1 if before else 1
 
-        total = await self.col.count_documents({
-            "project_id": str(project_id),
-            "$or": [
-                {"thread": "personal", "owner_id": str(user_id)},
-                {"thread": "project"},
-            ],
-        })
+        total = await self.col.count_documents(query)
 
         if before or after:
             query = _apply_cursor(query, before or after, '$lt' if before else '$gt')

@@ -161,7 +161,24 @@ class AiWorker:
         # turning it off must stop spend immediately, not after the queue drains.
         if not settings.AI_AUTONOMY_ENABLED:
             logger.info(f"[AiWorker] Autonomía deshabilitada; job {job.id} omitido.")
-            await self.job_repo.complete(job.id, result_ref={"skipped": "autonomy_disabled"})
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"skipped": "autonomy_disabled"})
+            ai_msg_id = job.payload.get("ai_msg_id")
+            if ai_msg_id:
+                try:
+                    await self.msg_repo.update_ai_response(
+                        message_id=ai_msg_id,
+                        content="El procesamiento autónomo de IA está temporalmente deshabilitado en la configuración del servidor.",
+                        status="error",
+                        error_code="AUTONOMY_DISABLED",
+                    )
+                    updated_msg = await self.msg_repo.find_by_id(ai_msg_id)
+                    if updated_msg:
+                        await manager.broadcast(f"project:{job.project_id}", {
+                            "type": "AI_MESSAGE_UPDATED",
+                            "message": updated_msg,
+                        })
+                except Exception as msg_err:
+                    logger.warning(f"[AiWorker] Error resolving skipped pending message: {msg_err}")
             return
 
         logger.info(f"[AiWorker] Executing job {job.id} (kind={job.kind}, role={job.role_id})")
@@ -176,11 +193,11 @@ class AiWorker:
                 await self._handle_summarize_digest(job)
             else:
                 logger.warning(f"[AiWorker] Unknown job kind: {job.kind}")
-                await self.job_repo.complete(job.id)
+                await self.job_repo.complete(job.id, self.worker_id, job.attempts)
 
         except Exception as exc:
             logger.error(f"[AiWorker] Job {job.id} failed: {exc}", exc_info=True)
-            await self.job_repo.fail(job.id, error=str(exc), max_attempts=job.max_attempts)
+            await self.job_repo.fail(job.id, self.worker_id, job.attempts, error=str(exc), max_attempts=job.max_attempts)
 
     # ── Job Handlers ───────────────────────────────────────────────────────────
 
@@ -201,10 +218,11 @@ class AiWorker:
             user_id=payload.get("user_id", ""),
             trigger_text=payload.get("trigger_text", ""),
             diagram_id=payload.get("diagram_id"),
-            api_key=payload.get("api_key"),
+            # Legacy payloads may contain credentials; never reuse them.
+            api_key=None,
             model=payload.get("model"),
         )
-        await self.job_repo.complete(job.id, result_ref={"message_id": ai_msg_id})
+        await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"message_id": ai_msg_id})
 
     async def _handle_run_task(self, job: AiJob) -> None:
         """Executes an AI task autonomously (Bloque F)."""
@@ -213,8 +231,8 @@ class AiWorker:
         room_key = f"project:{project_id}"
 
         task_doc = await self.task_repo.get_by_id(task_id)
-        if not task_doc:
-            await self.job_repo.complete(job.id)
+        if not task_doc or str(task_doc.get("project_id")) != str(project_id):
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts)
             return
 
         role_id = task_doc.get("ai_role", job.role_id or "tech_lead")
@@ -236,7 +254,10 @@ class AiWorker:
         diagram_doc = None
         if task_doc.get("diagram_id"):
             did = ObjectId(task_doc["diagram_id"]) if ObjectId.is_valid(task_doc["diagram_id"]) else task_doc["diagram_id"]
-            diagram_doc = await self.db["diagrams"].find_one({"_id": did})
+            pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+            diagram_doc = await self.db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
+            if not diagram_doc:
+                raise ValueError("Diagrama no encontrado en el proyecto")
 
         task_prompt = (
             f"TAREA ASIGNADA: {task_doc['title']}\n\n"
@@ -291,6 +312,7 @@ class AiWorker:
         ai_msg = AiMessage(
             project_id=project_id,
             thread="project",
+            visibility="team",
             owner_id=None,
             author_type="ai",
             author_name=f"{role_def.emoji} {role_def.label}",
@@ -334,7 +356,7 @@ class AiWorker:
             except Exception as n_err:
                 logger.warning(f"[AiWorker] Notification failed: {n_err}")
 
-        await self.job_repo.complete(job.id, result_ref={"task_id": task_id, "message_id": saved_msg["id"]})
+        await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"task_id": task_id, "message_id": saved_msg["id"]})
 
     async def _handle_review_diagram(self, job: AiJob) -> None:
         """Autonomous proactive review of diagram by an AI role (Bloques B, C, D, E)."""
@@ -348,14 +370,15 @@ class AiWorker:
         # Check project state & participative switch
         project_state = await self.state_repo.get_or_create(project_id)
         if not project_state or not project_state.get("participative", {}).get("enabled", False):
-            await self.job_repo.complete(job.id)
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts)
             return
 
         # Fetch diagram doc
         did = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
-        diagram_doc = await self.db["diagrams"].find_one({"_id": did})
+        pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+        diagram_doc = await self.db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
         if not diagram_doc:
-            await self.job_repo.complete(job.id)
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts)
             return
 
         canonical = from_graph_data(diagram_doc.get("graph_data", {}))
@@ -364,7 +387,7 @@ class AiWorker:
         role_config = next((r for r in project_state.get("roles", []) if r.get("role_id") == role_id), {})
         autonomy = role_config.get("autonomy", "suggest")
         if not role_config.get("enabled", True) or autonomy == "off":
-            await self.job_repo.complete(job.id)
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts)
             return
 
         # Fetch findings
@@ -374,14 +397,14 @@ class AiWorker:
         new_findings_docs = []
         if new_finding_ids:
             for fid in new_finding_ids:
-                doc = await self.db["ai_findings"].find_one({"_id": fid})
+                doc = await self.db["ai_findings"].find_one({"_id": fid, "project_id": project_id, "diagram_id": diagram_id})
                 if doc:
                     new_findings_docs.append(doc)
 
         resolved_findings_docs = []
         if resolved_finding_ids:
             for fid in resolved_finding_ids:
-                doc = await self.db["ai_findings"].find_one({"_id": fid})
+                doc = await self.db["ai_findings"].find_one({"_id": fid, "project_id": project_id, "diagram_id": diagram_id})
                 if doc:
                     resolved_findings_docs.append(doc)
 
@@ -492,6 +515,7 @@ class AiWorker:
         ai_msg = AiMessage(
             project_id=project_id,
             thread="project",
+            visibility="team",
             owner_id=None,
             author_type="ai",
             author_name=f"{role_def.emoji} {role_def.label}",
@@ -525,14 +549,14 @@ class AiWorker:
             },
         )
 
-        await self.job_repo.complete(job.id, result_ref={"message_id": saved_msg["id"]})
+        await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"message_id": saved_msg["id"]})
 
     async def _handle_summarize_digest(self, job: AiJob) -> None:
         """Periodically compiles executive project digest."""
         # ProjectDigestService exposes summarize_digest; generate_digest never
         # existed, so every digest job failed with AttributeError.
         await self.digest_service.summarize_digest(job.project_id)
-        await self.job_repo.complete(job.id)
+        await self.job_repo.complete(job.id, self.worker_id, job.attempts)
 
     def _serialize_task(self, doc: dict) -> dict:
         if not doc:

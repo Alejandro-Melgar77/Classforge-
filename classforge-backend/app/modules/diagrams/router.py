@@ -5,15 +5,16 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
-from app.core.errors import ForbiddenError, NotFoundError, ValidationError, ExternalServiceError
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError, ExternalServiceError, ConflictError
 from app.core.middleware import limiter
 from app.core.utils import validate_object_id
 from app.modules.auth.schemas import StandardResponse
 from app.modules.diagrams.schemas import (
-    CreateDiagram, UpdateDiagram, SaveGraph, 
+    CreateDiagram, UpdateDiagram, SaveGraph, ApplyDiagramOperations,
     DiagramResponse, DiagramResponseFull, HistoryEntry, WsTokenResponse,
     UpdateParticipants, DiagramParticipantsResponse,
-    DiagramFromImageRequest, DiagramAiPromptRequest
+    DiagramFromImageRequest, DiagramAiPromptRequest,
+    DiagramLayoutRequest, DiagramNormalizationApplyRequest
 )
 from app.modules.diagrams.service import DiagramService
 
@@ -164,6 +165,30 @@ async def save_graph(
         data=DiagramResponseFull.from_mongo(diagram).model_dump()
     )
 
+
+@router.post("/{diagram_id}/operations", response_model=StandardResponse)
+async def apply_diagram_operations(
+    diagram_id: str,
+    data: ApplyDiagramOperations,
+    current_user=Depends(get_current_user),
+    service: DiagramService = Depends(get_diagram_service),
+):
+    from app.modules.diagrams.operations import apply_operations
+    validate_object_id(diagram_id, "diagram_id")
+    diagram = await service.get_diagram(diagram_id, current_user)
+    if not diagram:
+        raise NotFoundError("Diagram not found")
+    from app.core.errors import ConflictError
+    if int(diagram.get('version', 1)) != data.base_version:
+        raise ConflictError("El diagrama cambió. Recarga la versión actual antes de guardar.")
+    graph = apply_operations(diagram.get('graph_data', {}), data.operations)
+    updated = await service.save_graph(diagram_id, SaveGraph(graph_data=graph,
+                                       base_version=data.base_version, comment=data.comment), current_user)
+    if not updated:
+        raise NotFoundError("Diagram not found")
+    return StandardResponse(success=True, message="Operations applied",
+                            data=DiagramResponseFull.from_mongo(updated).model_dump())
+
 @router.get("/{diagram_id}/history", response_model=StandardResponse)
 async def list_history(
     diagram_id: str,
@@ -217,7 +242,8 @@ async def restore_history_version(
 
     save_data = SaveGraph(
         graph_data=entry.get("graph_data", {}),
-        comment=f"Restaurado a versión {version}"
+        comment=f"Restaurado a versión {version}",
+        base_version=diagram.get("version", 1),
     )
     updated = await service.save_graph(diagram_id, save_data, current_user)
 
@@ -293,7 +319,7 @@ async def import_xmi(
     if not graph_data.get("nodes") and not graph_data.get("edges"):
         raise ValidationError("El archivo XMI no contiene clases ni relaciones importables")
 
-    save_data = SaveGraph(graph_data=graph_data, comment="Imported from XMI")
+    save_data = SaveGraph(graph_data=graph_data, comment="Imported from XMI", base_version=diagram.get("version", 1))
     updated = await service.save_graph(diagram_id, save_data, current_user)
     return StandardResponse(
         success=True,
@@ -364,7 +390,8 @@ async def generate_diagram_from_image_endpoint(
 
     save_data = SaveGraph(
         graph_data=vision_result["graph_data"],
-        comment=f"Generado con Gemini Vision ({vision_result.get('model_used', 'flash')})"
+        comment=f"Generado con Gemini Vision ({vision_result.get('model_used', 'flash')})",
+        base_version=diagram.get("version", 1),
     )
     updated = await service.save_graph(diagram_id, save_data, current_user)
 
@@ -432,3 +459,189 @@ async def apply_ai_prompt_to_diagram(
         message="Prompt procesado exitosamente por la IA",
         data=ai_res.model_dump()
     )
+
+
+@router.post("/{diagram_id}/layout", response_model=StandardResponse)
+async def apply_diagram_layout(
+    diagram_id: str,
+    data: Optional[DiagramLayoutRequest] = None,
+    current_user=Depends(get_current_user),
+    service: DiagramService = Depends(get_diagram_service),
+):
+    from bson import ObjectId
+    from datetime import datetime, timezone
+    from app.modules.diagrams.layout import calculate_auto_layout
+    from app.modules.diagrams.operations import apply_operations
+
+    validate_object_id(diagram_id, "diagram_id")
+    diagram = await service.get_diagram(diagram_id, current_user)
+    if not diagram:
+        raise NotFoundError("Diagram not found")
+
+    base_version = data.base_version if data else None
+    current_version = int(diagram.get("version", 1))
+    if base_version is not None and current_version != base_version:
+        raise ConflictError(
+            f"El diagrama cambió (versión actual: {current_version}, versión base: {base_version}). Recarga antes de reorganizar."
+        )
+
+    graph_data = diagram.get("graph_data", {})
+    ops = calculate_auto_layout(graph_data)
+    if not ops:
+        return StandardResponse(
+            success=True,
+            message="No hay nodos para reorganizar",
+            data=DiagramResponseFull.from_mongo(diagram).model_dump()
+        )
+
+    new_graph = apply_operations(graph_data, ops)
+    save_data = SaveGraph(
+        graph_data=new_graph,
+        comment="Organización automática de diagrama (AI Layout)",
+        base_version=base_version or current_version,
+    )
+    updated = await service.save_graph(diagram_id, save_data, current_user)
+    if not updated:
+        raise NotFoundError("Diagram not found")
+
+    await service.db["audit_logs"].insert_one({
+        "action": "AI_LAYOUT",
+        "user_id": ObjectId(current_user["_id"]),
+        "resource": "diagrams",
+        "resource_id": str(diagram_id),
+        "diagram_id": ObjectId(diagram_id),
+        "metadata": {
+            "operations_count": len(ops),
+            "old_version": current_version,
+            "new_version": updated.get("version"),
+        },
+        "created_at": datetime.now(timezone.utc),
+    })
+
+    project_id = str(diagram.get("project_id", ""))
+    if project_id:
+        from app.modules.collaboration.manager import manager
+        await manager.broadcast_to_diagram(
+            diagram_id=diagram_id,
+            message={
+                "type": "AI_LAYOUT_APPLIED",
+                "diagram_id": diagram_id,
+                "version": updated.get("version"),
+                "applied_by": str(current_user["_id"]),
+                "graph_data": new_graph,
+            }
+        )
+
+    return StandardResponse(
+        success=True,
+        message=f"Distribución automática completada ({len(ops)} nodos reposicionados)",
+        data=DiagramResponseFull.from_mongo(updated).model_dump()
+    )
+
+
+@router.get("/{diagram_id}/normalization", response_model=StandardResponse)
+async def get_diagram_normalization_diagnosis(
+    diagram_id: str,
+    current_user=Depends(get_current_user),
+    service: DiagramService = Depends(get_diagram_service),
+):
+    from app.modules.diagrams.normalization import diagnose_normalization
+
+    validate_object_id(diagram_id, "diagram_id")
+    diagram = await service.get_diagram(diagram_id, current_user)
+    if not diagram:
+        raise NotFoundError("Diagram not found")
+
+    findings = diagnose_normalization(diagram.get("graph_data", {}))
+    return StandardResponse(
+        success=True,
+        message="Diagnóstico de normalización generado",
+        data={
+            "diagram_id": diagram_id,
+            "version": diagram.get("version", 1),
+            "total_findings": len(findings),
+            "findings": findings,
+        }
+    )
+
+
+@router.post("/{diagram_id}/normalization/apply", response_model=StandardResponse)
+async def apply_diagram_normalization(
+    diagram_id: str,
+    data: Optional[DiagramNormalizationApplyRequest] = None,
+    current_user=Depends(get_current_user),
+    service: DiagramService = Depends(get_diagram_service),
+):
+    from bson import ObjectId
+    from datetime import datetime, timezone
+    from app.modules.diagrams.normalization import build_normalization_operations
+    from app.modules.diagrams.operations import apply_operations
+
+    validate_object_id(diagram_id, "diagram_id")
+    diagram = await service.get_diagram(diagram_id, current_user)
+    if not diagram:
+        raise NotFoundError("Diagram not found")
+
+    base_version = data.base_version if data else None
+    rules = data.rules if data else None
+    current_version = int(diagram.get("version", 1))
+    if base_version is not None and current_version != base_version:
+        raise ConflictError(
+            f"El diagrama cambió (versión actual: {current_version}, versión base: {base_version}). Recarga antes de normalizar."
+        )
+
+    graph_data = diagram.get("graph_data", {})
+    ops = build_normalization_operations(graph_data, rules=rules)
+    if not ops:
+        return StandardResponse(
+            success=True,
+            message="No hay operaciones de normalización necesarias",
+            data=DiagramResponseFull.from_mongo(diagram).model_dump()
+        )
+
+    new_graph = apply_operations(graph_data, ops)
+    comment = (data.comment if data and data.comment else None) or "Normalización inteligente UML"
+    save_data = SaveGraph(
+        graph_data=new_graph,
+        comment=comment,
+        base_version=base_version or current_version,
+    )
+    updated = await service.save_graph(diagram_id, save_data, current_user)
+    if not updated:
+        raise NotFoundError("Diagram not found")
+
+    await service.db["audit_logs"].insert_one({
+        "action": "AI_NORMALIZE",
+        "user_id": ObjectId(current_user["_id"]),
+        "resource": "diagrams",
+        "resource_id": str(diagram_id),
+        "diagram_id": ObjectId(diagram_id),
+        "metadata": {
+            "operations_count": len(ops),
+            "rules": rules,
+            "old_version": current_version,
+            "new_version": updated.get("version"),
+        },
+        "created_at": datetime.now(timezone.utc),
+    })
+
+    project_id = str(diagram.get("project_id", ""))
+    if project_id:
+        from app.modules.collaboration.manager import manager
+        await manager.broadcast_to_diagram(
+            diagram_id=diagram_id,
+            message={
+                "type": "AI_NORMALIZATION_APPLIED",
+                "diagram_id": diagram_id,
+                "version": updated.get("version"),
+                "applied_by": str(current_user["_id"]),
+                "graph_data": new_graph,
+            }
+        )
+
+    return StandardResponse(
+        success=True,
+        message=f"Normalización aplicada ({len(ops)} operaciones ejecutadas)",
+        data=DiagramResponseFull.from_mongo(updated).model_dump()
+    )
+

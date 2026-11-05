@@ -35,10 +35,14 @@
 
   <!-- Popover Flotante de Explicación (Canva / UserGuiding Style) -->
   <div class="tour-popover bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="tour-step-title"
+       aria-describedby="tour-step-desc"
        [ngStyle]="popoverStyle">
     
     <!-- Barra de progreso superior -->
-    <div class="w-full bg-[var(--surface-3)] h-1.5">
+    <div class="w-full bg-[var(--surface-3)] h-1.5" role="progressbar" [attr.aria-valuenow]="progress" aria-valuemin="0" aria-valuemax="100">
       <div class="bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] h-full transition-all duration-300 rounded-r"
            [style.width.%]="progress"></div>
     </div>
@@ -55,18 +59,19 @@
       </div>
 
       <button (click)="skip()" 
-              class="text-[var(--text-muted)] hover:text-white transition-colors p-1 rounded-lg hover:bg-[var(--surface-3)]" 
-              title="Cerrar tutorial (Esc)">
+              class="text-[var(--text-muted)] hover:text-white transition-colors p-1 rounded-lg hover:bg-[var(--surface-3)] cursor-pointer" 
+              title="Cerrar tutorial (Esc)"
+              aria-label="Cerrar tutorial">
         ✕
       </button>
     </div>
 
     <!-- Cuerpo con Título y Descripción -->
     <div class="px-5 py-3">
-      <h3 class="font-bold text-[var(--text-primary)] text-base mb-1.5 flex items-center gap-2">
+      <h3 id="tour-step-title" class="font-bold text-[var(--text-primary)] text-base mb-1.5 flex items-center gap-2">
         <span>💡</span> {{ step?.title }}
       </h3>
-      <p class="text-sm text-[var(--text-secondary)] leading-relaxed">
+      <p id="tour-step-desc" class="text-sm text-[var(--text-secondary)] leading-relaxed">
         {{ step?.content }}
       </p>
 
@@ -78,19 +83,21 @@
 
     <!-- Pie con Botones de Navegación -->
     <div class="p-4 pt-2 border-t border-[var(--border)] bg-[var(--surface-3)]/30 flex items-center justify-between">
-      <button (click)="skip()" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] font-medium transition-colors">
-        Saltar
+      <button (click)="skip()" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] font-medium transition-colors cursor-pointer" aria-label="Saltar tutorial">
+        Saltar (Esc)
       </button>
 
       <div class="flex items-center gap-2">
         <button *ngIf="stepIndex > 0" 
                 (click)="prev()" 
-                class="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-4)] transition-colors">
-          Anterior
+                class="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-4)] transition-colors cursor-pointer"
+                aria-label="Paso anterior">
+          Anterior (←)
         </button>
 
         <button (click)="next()" 
-                class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--primary)] hover:bg-blue-600 text-white transition-all shadow-md flex items-center gap-1">
+                class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--primary)] hover:bg-blue-600 text-white transition-all shadow-md flex items-center gap-1 cursor-pointer"
+                [attr.aria-label]="isLastStep ? 'Finalizar tutorial' : 'Siguiente paso'">
           <span>{{ isLastStep ? '¡Entendido!' : 'Siguiente' }}</span>
           <span *ngIf="!isLastStep">→</span>
         </button>

@@ -34,6 +34,7 @@ class AiMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
     thread: Literal["personal", "project"] = "personal"
+    visibility: Literal["private", "team"] = "team"
     owner_id: Optional[str] = None  # user_id (only populated when thread == "personal")
     author_type: Literal["user", "ai"]
     author_id: Optional[str] = None  # user_id or None for AI

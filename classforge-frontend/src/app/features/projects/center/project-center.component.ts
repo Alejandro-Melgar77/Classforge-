@@ -121,6 +121,15 @@ import { PageStateComponent, PageStateType } from '../../../shared/components/pa
             </a>
 
             <a
+              routerLink="evaluaciones"
+              routerLinkActive="text-primary border-primary font-bold"
+              class="px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-white border-b-2 border-transparent transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            >
+              <span>📑</span>
+              <span>Evaluador IA</span>
+            </a>
+
+            <a
               routerLink="tareas"
               routerLinkActive="text-primary border-primary font-bold"
               class="px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-white border-b-2 border-transparent transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"

@@ -12,11 +12,14 @@ from app.modules.collaboration.router import websocket_endpoint
     {'type': 'NODE_OPERATION', 'op': 'update', 'node_id': 'n', 'data': 'bad'},
     {'type': 'EDGE_OPERATION', 'op': 'move', 'edge_id': 'e', 'data': {}},
     {'type': 'EDGE_OPERATION', 'op': 'add', 'edge_id': [], 'data': {}},
+    {'type': 'NODE_OPERATION', 'op': 'add', 'node_id': 'n', 'data': {}},
+    {'type': 'EDGE_OPERATION', 'op': 'update', 'edge_id': 'e', 'data': {}},
 ])
 async def test_invalid_operations_are_rejected_without_persistence(message):
     ws = AsyncMock()
     ws.receive_text.side_effect = [json.dumps(message), WebSocketDisconnect()]
     with patch('app.modules.collaboration.router.verify_ws_token', new=AsyncMock(return_value={'_id': 'u'})), \
+         patch('app.modules.collaboration.router._current_ws_access', new=AsyncMock(return_value=True)), \
          patch('app.modules.collaboration.router.get_db', return_value=None), \
          patch('app.modules.collaboration.router.manager.connect', new=AsyncMock()), \
          patch('app.modules.collaboration.router.manager.disconnect', new=AsyncMock()), \
@@ -25,3 +28,19 @@ async def test_invalid_operations_are_rejected_without_persistence(message):
         await websocket_endpoint(ws, 'd', 'token')
     persist.assert_not_awaited()
     assert any(call.args[0].get('reason') == 'invalid_operation' for call in ws.send_json.await_args_list)
+
+
+@pytest.mark.anyio
+async def test_non_object_message_does_not_close_connection():
+    ws = AsyncMock()
+    ws.receive_text.side_effect = [json.dumps(['bad']), json.dumps({'type': 'PING'}), WebSocketDisconnect()]
+    with patch('app.modules.collaboration.router.verify_ws_token', new=AsyncMock(return_value={'_id': 'u'})), \
+         patch('app.modules.collaboration.router._current_ws_access', new=AsyncMock(return_value=True)), \
+         patch('app.modules.collaboration.router.get_db', return_value=None), \
+         patch('app.modules.collaboration.router.manager.connect', new=AsyncMock()), \
+         patch('app.modules.collaboration.router.manager.disconnect', new=AsyncMock()), \
+         patch('app.modules.collaboration.router.manager.broadcast', new=AsyncMock()):
+        await websocket_endpoint(ws, 'd', 'token')
+    sent = [call.args[0] for call in ws.send_json.await_args_list]
+    assert {'type': 'OP_REJECTED', 'reason': 'invalid_message'} in sent
+    assert {'type': 'PONG'} in sent

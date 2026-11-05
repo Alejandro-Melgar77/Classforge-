@@ -61,6 +61,8 @@ class AiChatService:
         """Processes and saves a user message, resolves AI role responders,
         spawns background LLM tasks, and returns immediate response with ai_pending.
         """
+        if request.api_key:
+            raise ValidationError("Las claves por solicitud no están disponibles para trabajos diferidos; configure el proveedor en el servidor")
         project_id = str(request.project_id)
         content_text = (request.content or request.message or "").strip()
 
@@ -447,6 +449,7 @@ class AiChatService:
             ai_msg = AiMessage(
                 project_id=project_id,
                 thread="project",
+                visibility="team",
                 owner_id=None,
                 author_type="ai",
                 author_name=f"{role_def.emoji} {role_def.label}",
@@ -491,6 +494,234 @@ class AiChatService:
                 "type": "AI_TASK_UPDATED",
                 "task": self._serialize_task(failed_task),
             })
+
+    async def cancel_task(self, task_id: str, project_id: str, current_user: dict) -> Dict[str, Any]:
+        """Cancels a pending or in-progress task and any associated queued job."""
+        task_doc = await self.task_repo.get_by_id(task_id)
+        if not task_doc:
+            raise NotFoundError("Tarea no encontrada")
+        if str(task_doc.get("project_id", "")) != str(project_id):
+            raise ForbiddenError("La tarea no pertenece a este proyecto")
+
+        user_id = str(current_user["_id"])
+        is_creator = str(task_doc.get("assigned_by") or "") == user_id
+        if not is_creator and current_user.get("role") not in ("admin", "scrum_master"):
+            raise ForbiddenError("Solo el creador, Scrum Master o Admin puede cancelar la tarea")
+
+        await self.task_repo.update_status(task_id, "cancelled", result="Cancelada por el usuario")
+        # Cancel any active/queued job in ai_jobs
+        await self.db["ai_jobs"].update_many(
+            {"project_id": str(project_id), "payload.task_id": str(task_id), "status": {"$in": ["queued", "running"]}},
+            {"$set": {"status": "cancelled", "error": "Tarea cancelada por el usuario"}},
+        )
+
+        updated_doc = await self.task_repo.get_by_id(task_id)
+        serialized = self._serialize_task(updated_doc)
+        await manager.broadcast(f"project:{project_id}", {
+            "type": "AI_TASK_UPDATED",
+            "task": serialized,
+        })
+        return {"success": True, "message": "Tarea cancelada exitosamente", "task": serialized}
+
+    async def update_proposal_state(
+        self,
+        project_id: str,
+        message_id: str,
+        proposal_id: str,
+        data: Any,
+        user_id: str,
+    ) -> Dict[str, Any]:
+        """Audits and records the state transition for a structured proposal."""
+        status = getattr(data, "status", data)
+        updated_msg = await self.msg_repo.update_proposal_state(
+            message_id=message_id,
+            proposal_id=proposal_id,
+            status=status,
+            user_id=user_id,
+            project_id=project_id,
+        )
+        if not updated_msg:
+            raise NotFoundError("Mensaje no encontrado para actualizar propuesta")
+
+        await manager.broadcast(f"project:{project_id}", {
+            "type": "AI_MESSAGE_UPDATED",
+            "message": updated_msg,
+        })
+        return {
+            "message": updated_msg,
+            "proposal_id": proposal_id,
+            "status": status,
+            "reviewed_by": user_id,
+        }
+
+    async def apply_proposal(
+        self,
+        project_id: str,
+        message_id: str,
+        proposal_id: str,
+        user_id: str,
+        diagram_id: Optional[str] = None,
+        base_version: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Applies a structured proposal to a diagram using the common Phase 2 engine."""
+        from fastapi import HTTPException
+        message = await self.msg_repo.find_by_id(message_id)
+        if not message or str(message.get("project_id")) != str(project_id):
+            raise NotFoundError("Mensaje no encontrado en este proyecto")
+
+        proposals = message.get("proposals", [])
+        prop = next(
+            (p for p in proposals if isinstance(p, dict) and str(p.get("id")) == str(proposal_id)),
+            None
+        )
+        if not prop:
+            raise NotFoundError(f"Propuesta {proposal_id} no encontrada en el mensaje")
+
+        proposal_states = message.get("proposal_state", {})
+        current_state = proposal_states.get(str(proposal_id), {}).get("status")
+        if current_state == "applied":
+            raise ValidationError("La propuesta ya ha sido aplicada previamente")
+
+        # Resolve diagram ID
+        resolved_diagram_id = diagram_id or prop.get("diagram_id")
+        if not resolved_diagram_id:
+            snap_diag = await self._get_diagram(None, project_id)
+            if snap_diag:
+                resolved_diagram_id = str(snap_diag.get("_id") or snap_diag.get("id"))
+        if not resolved_diagram_id:
+            raise ValidationError("No se pudo determinar el diagrama destino para aplicar la propuesta")
+
+        resolved_diagram_id = str(resolved_diagram_id)
+
+        # Check diagram existence and permissions
+        from app.modules.diagrams.service import DiagramService
+        diag_service = DiagramService(self.db)
+        user_oid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        user_doc = await self.db["users"].find_one({"_id": user_oid}) or {"_id": user_oid, "role": "dev"}
+        diagram_doc = await diag_service.get_diagram(resolved_diagram_id, user_doc)
+        if not diagram_doc:
+            raise NotFoundError("Diagrama no encontrado")
+
+        current_version = diagram_doc.get("version", 1)
+        expected_version = base_version or prop.get("base_version")
+        if expected_version is not None and expected_version != current_version:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflicto de versiones: el diagrama está en la versión {current_version} (base de la propuesta: {expected_version})"
+            )
+
+        # Apply using Phase 2 engine
+        applied_ops = 0
+        from app.ai_team.application.server_diagram_editor import ServerDiagramEditor
+        editor = ServerDiagramEditor(self.db)
+
+        if prop.get("kind") == "uml_command" and prop.get("command"):
+            from app.modules.ai.schemas import UMLCommandResponse
+            cmd_data = prop["command"]
+            cmd_obj = UMLCommandResponse.model_validate(cmd_data) if isinstance(cmd_data, dict) else cmd_data
+            success, applied_ops, msg = await editor.apply_command(
+                diagram_id=resolved_diagram_id,
+                role_id=message.get("ai_role", "architect"),
+                command=cmd_obj,
+                title=prop.get("title", "Aplicación de propuesta"),
+            )
+            if not success:
+                raise ValidationError(f"No se pudo aplicar la propuesta: {msg}")
+        elif prop.get("operations"):
+            from app.modules.diagrams.operations import apply_operations
+            from app.modules.diagrams.repository import DiagramRepository
+            current_graph = diagram_doc.get("graph_data", {"nodes": [], "edges": []})
+            new_graph = apply_operations(current_graph, prop["operations"])
+            diag_repo = DiagramRepository(self.db)
+            saved = await diag_repo.save_graph(
+                resolved_diagram_id,
+                new_graph,
+                saved_by=str(user_id),
+                comment=f"Propuesta aplicada: {prop.get('title', proposal_id)}",
+                base_version=current_version,
+            )
+            if not saved:
+                raise ValidationError("Error al guardar el nuevo grafo del diagrama")
+            applied_ops = len(prop["operations"])
+        else:
+            raise ValidationError("El formato de la propuesta no contiene comandos u operaciones aplicables")
+
+        # Get updated version
+        did = ObjectId(resolved_diagram_id) if ObjectId.is_valid(resolved_diagram_id) else resolved_diagram_id
+        updated_diag = await self.db["diagrams"].find_one({"_id": did})
+        new_version = updated_diag.get("version", current_version + 1)
+
+        # Mark proposal as applied
+        now = datetime.now(timezone.utc)
+        state_record = {
+            "status": "applied",
+            "by": str(user_id),
+            "at": now,
+            "applied_version": new_version,
+            "diagram_id": resolved_diagram_id,
+        }
+        field_key = f"proposal_state.{proposal_id}"
+        query = {"_id": message_id}
+        if ObjectId.is_valid(message_id):
+            query = {"$or": [{"_id": message_id}, {"_id": ObjectId(message_id)}]}
+
+        msg_doc = await self.db["ai_messages"].find_one(query)
+        update_fields: Dict[str, Any] = {field_key: state_record, "updated_at": now}
+        if msg_doc and "proposals" in msg_doc:
+            updated_proposals = []
+            for p in msg_doc.get("proposals", []):
+                if isinstance(p, dict) and str(p.get("id")) == str(proposal_id):
+                    p_copy = dict(p)
+                    p_copy["state"] = state_record
+                    updated_proposals.append(p_copy)
+                else:
+                    updated_proposals.append(p)
+            update_fields["proposals"] = updated_proposals
+
+        await self.db["ai_messages"].update_one(
+            query,
+            {"$set": update_fields}
+        )
+
+        # Audit AI proposal application (AI-TRACE-01)
+        await self.db["audit_logs"].insert_one({
+            "action": "AI_APPLY_PROPOSAL",
+            "user_id": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,
+            "resource": "diagrams",
+            "resource_id": resolved_diagram_id,
+            "metadata": {
+                "project_id": str(project_id),
+                "message_id": str(message_id),
+                "proposal_id": str(proposal_id),
+                "role_id": message.get("ai_role", "architect"),
+                "old_version": current_version,
+                "new_version": new_version,
+                "operations_count": applied_ops,
+            },
+            "created_at": now,
+        })
+
+        updated_msg = await self.msg_repo.find_by_id(message_id)
+
+        # Broadcast WebSocket notification
+        await manager.broadcast(f"project:{project_id}", {
+            "type": "AI_PROPOSAL_APPLIED",
+            "message_id": message_id,
+            "proposal_id": proposal_id,
+            "diagram_id": resolved_diagram_id,
+            "version": new_version,
+            "message": updated_msg,
+        })
+
+        return {
+            "success": True,
+            "status": "applied",
+            "message": f"Propuesta '{prop.get('title', proposal_id)}' aplicada exitosamente.",
+            "proposal_id": proposal_id,
+            "diagram_id": resolved_diagram_id,
+            "version": new_version,
+            "operations_count": applied_ops,
+        }
 
     async def _execute_llm(self, req: LlmRequest) -> Tuple[Optional[AiTeamResponse], str, str]:
         """Calls LLM provider and returns (structured_response, raw_text, model_name)."""

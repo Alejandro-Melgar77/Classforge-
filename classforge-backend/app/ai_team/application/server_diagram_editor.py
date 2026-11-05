@@ -30,6 +30,7 @@ from app.ai_team.domain.lint import lint_diagram
 from app.modules.ai.schemas import UMLCommandResponse
 from app.modules.collaboration.connection_manager import manager
 from app.modules.diagrams.repository import DiagramRepository
+from app.modules.diagrams.operations import apply_operations
 
 logger = logging.getLogger(__name__)
 
@@ -133,12 +134,13 @@ class ServerDiagramEditor:
 
             # 6. Apply changes and broadcast WS operations
             applied_ops = 0
-            new_graph = simulated_canonical.to_graph_data()
+            new_graph = self._apply_to_raw_graph(current_graph, canonical, simulated_canonical, command)
 
             # Persist before notifying clients. A failed write must not create
             # a remote state that cannot be recovered from the database.
             comment = f"IA {role_id.capitalize()}: {title}"
-            saved = await self.repo.save_graph(diagram_id, new_graph, saved_by=bot_user_id, comment=comment)
+            saved = await self.repo.save_graph(diagram_id, new_graph, saved_by=bot_user_id, comment=comment,
+                                              base_version=diagram_doc.get('version', 1))
             if not saved:
                 return False, 0, "No se pudo guardar el diagrama"
 
@@ -214,6 +216,56 @@ class ServerDiagramEditor:
         finally:
             # 8. Release all locks
             manager.release_all_user_locks(diagram_id, bot_user_id)
+
+    def _apply_to_raw_graph(self, graph, original, simulated, command):
+        """Translate the simulated command into patches without normalizing old data."""
+        operations = []
+        raw_nodes = {n['id']: n for n in graph.get('nodes', [])}
+        serialized = simulated.to_graph_data()
+        for node in serialized['nodes']:
+            if node['id'] not in raw_nodes:
+                operations.append({'type': 'add_node', 'id': node['id'], 'data': node})
+        for class_command in command.classes:
+            old_node = original.get_node_by_name(class_command.name)
+            if not old_node:
+                continue
+            raw = raw_nodes[old_node.id]
+            nested = isinstance(raw.get('data'), dict)
+            data = raw['data'] if nested else raw
+            data_patch = {}
+            top_patch = {}
+            for field in ('attributes', 'methods'):
+                incoming = getattr(class_command, field)
+                if not incoming:
+                    continue
+                # Legacy graphs can mix nested names with top-level members.
+                use_top = nested and field not in data and field in raw
+                source = raw if use_top else data
+                members = copy.deepcopy(source.get(field, []))
+                if not isinstance(members, list):
+                    raise ValueError(f'Lista {field} inválida')
+                for member in incoming:
+                    existing = next((m for m in members if isinstance(m, dict) and m.get('name') == member.name), None)
+                    if existing is None:
+                        members.append(member.model_dump())
+                    else:
+                        # Pydantic defaults are not an instruction to overwrite
+                        # existing type, visibility, parameters or extensions.
+                        existing.update(member.model_dump(exclude_unset=True))
+                (top_patch if use_top else data_patch)[field] = members
+            if class_command.stereotype is not None:
+                data_patch['stereotype'] = class_command.stereotype
+            patch = top_patch
+            if nested and data_patch:
+                patch['data'] = data_patch
+            elif not nested:
+                patch.update(data_patch)
+            if patch:
+                operations.append({'type': 'update_node', 'id': old_node.id, 'patch': patch})
+        original_edges = {edge.id for edge in original.edges}
+        operations.extend({'type': 'add_edge', 'id': edge['id'], 'data': edge}
+                          for edge in serialized['edges'] if edge['id'] not in original_edges)
+        return apply_operations(graph, operations) if operations else copy.deepcopy(graph)
 
     def _simulate_apply(self, diagram: Diagram, cmd: UMLCommandResponse) -> Tuple[bool, str]:
         """Mutates simulated Diagram in place based on command instructions."""

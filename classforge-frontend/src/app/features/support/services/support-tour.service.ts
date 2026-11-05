@@ -1,17 +1,22 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { TourDefinition, TourStep } from '../models/support-tour.model';
+import { TourDefinition, TourStep, UserRole } from '../models/support-tour.model';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class SupportTourService {
   private router = inject(Router);
+  private authService = inject(AuthService);
 
   // State Signals (Angular 17)
   public activeTour = signal<TourDefinition | null>(null);
   public currentStepIndex = signal<number>(0);
   public targetRect = signal<DOMRect | null>(null);
+
+  // Action-based advancement listeners
+  private currentActionCleanup: (() => void) | null = null;
 
   public isTourActive = computed(() => this.activeTour() !== null);
   public currentStep = computed(() => {
@@ -26,14 +31,101 @@ export class SupportTourService {
     return Math.round(((this.currentStepIndex() + 1) / tour.steps.length) * 100);
   });
 
-  // Catálogo de Tours Guiados Predefinidos
+  // Catálogo Completo de Tours Guiados Predefinidos
   private tours: TourDefinition[] = [
+    {
+      id: 'tour-auth-navigation',
+      title: 'Navegación General y Dashboard',
+      description: 'Conoce las secciones principales de ClassForge, acceso a proyectos y barra lateral.',
+      icon: '🧭',
+      category: 'Básico',
+      estimatedTime: '2 min',
+      steps: [
+        {
+          id: 'step-nav-dashboard',
+          targetSelector: '[data-tour="nav-dashboard"]',
+          title: 'Panel Principal (Dashboard)',
+          content: 'Accede a tus estadísticas consolidadas, proyectos recientes y actividad en tiempo real.',
+          position: 'right',
+          actionHint: 'Observa la barra de navegación lateral',
+          actionType: 'click'
+        },
+        {
+          id: 'step-nav-projects',
+          targetSelector: '[data-tour="nav-projects"]',
+          title: 'Centro de Proyectos',
+          content: 'Gestiona tus proyectos personales y los espacios colaborativos compartidos con tu equipo.',
+          position: 'right',
+          actionHint: 'Haz clic en Proyectos para ingresar'
+        },
+        {
+          id: 'step-nav-diagrams',
+          targetSelector: '[data-tour="nav-diagrams"]',
+          title: 'Explorador de Diagramas',
+          content: 'Acceso directo a todos los diagramas de clases UML 2.5+ registrados en tu cuenta.',
+          position: 'right'
+        }
+      ]
+    },
+    {
+      id: 'tour-projects-management',
+      title: 'Gestión de Proyectos y Carpetas',
+      description: 'Aprende a estructurar tus espacios de trabajo, crear proyectos y organizar carpetas.',
+      icon: '📁',
+      category: 'Gestión & Equipos',
+      estimatedTime: '2 min',
+      allowedRoles: ['admin', 'scrum_master', 'dev'],
+      steps: [
+        {
+          id: 'step-proj-new-btn',
+          targetSelector: '[data-tour="new-project-btn"]',
+          title: 'Crear Proyecto',
+          content: 'Pulsa aquí para iniciar un nuevo proyecto de software. Puedes configurarlo como personal o asignarlo a un equipo.',
+          position: 'bottom',
+          requiredRoute: '/projects',
+          actionHint: 'Haz clic en "Nuevo Proyecto"'
+        },
+        {
+          id: 'step-proj-filters',
+          targetSelector: '[data-tour="project-filters"]',
+          title: 'Filtros y Búsqueda',
+          content: 'Organiza la vista por estado (En progreso, Revisión, Completado) o filtra por equipo de desarrollo.',
+          position: 'bottom',
+          requiredRoute: '/projects'
+        }
+      ]
+    },
+    {
+      id: 'tour-teams-roles',
+      title: 'Equipos y Asignación de Roles',
+      description: 'Administra miembros del equipo, roles ágiles (Scrum Master, Dev) e invitaciones seguras.',
+      icon: '👥',
+      category: 'Gestión & Equipos',
+      estimatedTime: '3 min',
+      allowedRoles: ['admin', 'scrum_master'],
+      steps: [
+        {
+          id: 'step-teams-nav',
+          targetSelector: '[data-tour="nav-teams"]',
+          title: 'Administración de Equipos',
+          content: 'Visualiza la lista de equipos de trabajo a los que perteneces o tienes permisos de gestión.',
+          position: 'right'
+        },
+        {
+          id: 'step-team-members',
+          targetSelector: '[data-tour="team-members-list"]',
+          title: 'Miembros y Roles',
+          content: 'Supervisa los integrantes del equipo. Como Scrum Master o Administrador puedes asignar responsabilidades y permisos.',
+          position: 'bottom'
+        }
+      ]
+    },
     {
       id: 'tour-create-diagram',
       title: 'Creación de Diagramas UML',
-      description: 'Aprende a crear tu primer diagrama, organizar proyectos y acceder al lienzo.',
+      description: 'Crea tu primer diagrama, organiza proyectos y accede al lienzo interactivo.',
       icon: '📐',
-      category: 'Básico',
+      category: 'Modelado UML',
       estimatedTime: '2 min',
       steps: [
         {
@@ -66,7 +158,7 @@ export class SupportTourService {
     {
       id: 'tour-uml-modeling',
       title: 'Modelado en el Lienzo y Herramientas',
-      description: 'Descubre la barra flotante, tipos de clases UML y edición de atributos en tiempo real.',
+      description: 'Descubre la barra flotante, tipos de clases UML, edición de atributos y autoguardado.',
       icon: '🛠️',
       category: 'Modelado UML',
       estimatedTime: '3 min',
@@ -91,7 +183,7 @@ export class SupportTourService {
           id: 'step-save-controls',
           targetSelector: '[data-tour="save-controls"]',
           title: 'Guardado y Versionado Automático',
-          content: 'ClassForge cuenta con auto-guardado en segundo plano cada 30 segundos y guarda hasta 20 versiones en MongoDB. También puedes guardar manualmente con un solo clic.',
+          content: 'ClassForge cuenta con auto-guardado en segundo plano cada 30 segundos y guarda versiones atómicas en MongoDB. También puedes guardar manualmente con un solo clic.',
           position: 'bottom'
         }
       ]
@@ -122,38 +214,26 @@ export class SupportTourService {
       ]
     },
     {
-      id: 'tour-codegen-spring',
-      title: 'Proyección Spring Boot 3 & ZIP',
-      description: 'Genera microservicios Java 17 / Spring Boot 3 limpios y descarga el proyecto completo.',
-      icon: '💻',
-      category: 'IA & Código',
-      estimatedTime: '2 min',
-      steps: [
-        {
-          id: 'step-live-code-btn',
-          targetSelector: '[data-tour="live-code-btn"]',
-          title: 'Código en Vivo',
-          content: 'Haz clic aquí para abrir el panel de código. Cada clase y relación que diseñes se traduce instantáneamente (<15ms) a Entidades JPA, Repositorios, Servicios y Controladores REST.',
-          position: 'bottom',
-          actionHint: 'Observa la generación incremental'
-        }
-      ]
-    },
-    {
-      id: 'tour-frontend-prompt',
-      title: 'Meta-Prompt Frontend para IA Externa',
-      description: 'Sintetiza contratos REST listos para Claude 3.5 Sonnet, GPT-4o o v0.dev sin sobrecargar tu app.',
+      id: 'tour-ai-team-roles',
+      title: 'Equipo de IA Participativa y Propuestas',
+      description: 'Interactúa con agentes especializados (Arquitecto, Backend, QA), revisa propuestas y aplica cambios.',
       icon: '🤖',
       category: 'IA & Código',
-      estimatedTime: '2 min',
+      estimatedTime: '3 min',
       steps: [
         {
-          id: 'step-prompt-frontend-btn',
-          targetSelector: '[data-tour="prompt-frontend-btn"]',
-          title: 'Prompt Frontend IA',
-          content: 'Genera en <5ms una especificación completa de contratos REST, payloads JSON y componentes para construir tu frontend en React, Angular o Vue con IA externa.',
-          position: 'bottom',
-          actionHint: 'Copia el prompt en un clic'
+          id: 'step-ai-team-tab',
+          targetSelector: '[data-tour="ai-team-tab"]',
+          title: 'Pestaña Equipo IA',
+          content: 'Accede al espacio donde los agentes de IA analizan el proyecto, sugieren tareas y presentan propuestas de mejora arquitectónica.',
+          position: 'bottom'
+        },
+        {
+          id: 'step-ai-proposals',
+          targetSelector: '[data-tour="ai-proposals-panel"]',
+          title: 'Propuestas de Modificación',
+          content: 'Revisa las propuestas emitidas por la IA. Como usuario autorizado puedes aprobarlas y aplicarlas directamente al modelo UML con control de versiones.',
+          position: 'left'
         }
       ]
     },
@@ -174,17 +254,78 @@ export class SupportTourService {
           actionHint: 'Chatea y colabora en vivo'
         }
       ]
+    },
+    {
+      id: 'tour-codegen-spring',
+      title: 'Generación de Código Spring Boot & FastAPI',
+      description: 'Genera microservicios limpios con arquitectura hexagonal / DDD y descarga el proyecto en ZIP.',
+      icon: '💻',
+      category: 'IA & Código',
+      estimatedTime: '2 min',
+      steps: [
+        {
+          id: 'step-live-code-btn',
+          targetSelector: '[data-tour="live-code-btn"]',
+          title: 'Generador de Código',
+          content: 'Haz clic aquí para abrir el panel de código. Cada clase y relación que diseñes se traduce instantáneamente a Entidades JPA/SQLAlchemy, Repositorios, Servicios y Controladores REST.',
+          position: 'bottom',
+          actionHint: 'Observa la generación incremental'
+        }
+      ]
+    },
+    {
+      id: 'tour-project-evaluator',
+      title: 'Evaluador Inteligente Local de Proyectos',
+      description: 'Audita especificaciones técnicas en PDF, aplica la rúbrica CF-SE-2026.1 y descarga dictámenes oficiales.',
+      icon: '📑',
+      category: 'IA & Código',
+      estimatedTime: '3 min',
+      steps: [
+        {
+          id: 'step-eval-tab',
+          targetSelector: '[data-tour="eval-tab"]',
+          title: 'Módulo Evaluador IA',
+          content: 'Sube la documentación PDF de tu proyecto. El motor local analiza el alcance, requisitos, arquitectura UML, persistencia y seguridad.',
+          position: 'bottom'
+        },
+        {
+          id: 'step-eval-results',
+          targetSelector: '[data-tour="eval-results"]',
+          title: 'Dictamen e Informes PDF',
+          content: 'Revisa el puntaje ponderado, hallazgos con evidencias de página y descarga el Dictamen Oficial o Pliego de Especificaciones Técnicas.',
+          position: 'top'
+        }
+      ]
     }
   ];
 
   constructor() {
-    // Listener para recalcular posición del foco en redimensionamiento o scroll
     window.addEventListener('resize', () => this.updateTargetPosition());
     window.addEventListener('scroll', () => this.updateTargetPosition(), true);
   }
 
   public getAllTours(): TourDefinition[] {
     return this.tours;
+  }
+
+  public getAvailableTours(): TourDefinition[] {
+    // Read current user role from AuthService
+    let userRole: UserRole = 'dev';
+    try {
+      const user = this.authService.getCurrentUser ? this.authService.getCurrentUser() : (this.authService as any).currentUserSubject?.value;
+      if (user && user.role) {
+        userRole = user.role as UserRole;
+      }
+    } catch {
+      userRole = 'dev';
+    }
+
+    return this.tours.filter(tour => {
+      if (!tour.allowedRoles || tour.allowedRoles.length === 0) {
+        return true;
+      }
+      return tour.allowedRoles.includes(userRole);
+    });
   }
 
   public getTourById(id: string): TourDefinition | null {
@@ -204,6 +345,8 @@ export class SupportTourService {
     const tour = this.activeTour();
     if (!tour) return;
 
+    this.cleanupActionListener();
+
     const nextIndex = this.currentStepIndex() + 1;
     if (nextIndex < tour.steps.length) {
       this.currentStepIndex.set(nextIndex);
@@ -216,15 +359,28 @@ export class SupportTourService {
   public previousStep() {
     const prevIndex = this.currentStepIndex() - 1;
     if (prevIndex >= 0) {
+      this.cleanupActionListener();
       this.currentStepIndex.set(prevIndex);
       this.executeStep(prevIndex);
     }
   }
 
+  public prevStep() {
+    this.previousStep();
+  }
+
   public endTour() {
+    this.cleanupActionListener();
     this.activeTour.set(null);
     this.currentStepIndex.set(0);
     this.targetRect.set(null);
+  }
+
+  private cleanupActionListener() {
+    if (this.currentActionCleanup) {
+      this.currentActionCleanup();
+      this.currentActionCleanup = null;
+    }
   }
 
   private executeStep(index: number) {
@@ -236,28 +392,39 @@ export class SupportTourService {
     // Si el paso requiere estar en otra ruta, navegar primero
     if (step.requiredRoute && this.router.url !== step.requiredRoute) {
       this.router.navigate([step.requiredRoute]).then(() => {
-        this.locateElementWithRetry(step.targetSelector);
+        this.locateElementWithRetry(step);
       });
     } else {
-      this.locateElementWithRetry(step.targetSelector);
+      this.locateElementWithRetry(step);
     }
   }
 
-  private locateElementWithRetry(selector: string, attempts = 0) {
-    const element = document.querySelector(selector);
+  private locateElementWithRetry(step: TourStep, attempts = 0) {
+    const element = document.querySelector(step.targetSelector) as HTMLElement | null;
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       setTimeout(() => {
         const rect = element.getBoundingClientRect();
         this.targetRect.set(rect);
+
+        // Bind real action listener if step requires it
+        if (step.actionType === 'click') {
+          const handler = () => {
+            this.nextStep();
+          };
+          element.addEventListener('click', handler, { once: true });
+          this.currentActionCleanup = () => {
+            element.removeEventListener('click', handler);
+          };
+        }
       }, 150);
-    } else if (attempts < 8) {
+    } else if (attempts < 6) {
       // Reintentar si el componente está cargando o animando
       setTimeout(() => {
-        this.locateElementWithRetry(selector, attempts + 1);
+        this.locateElementWithRetry(step, attempts + 1);
       }, 200);
     } else {
-      // Si el elemento no se encuentra (ej. estamos en otra pantalla), centrar popover
+      // Si el elemento no se encuentra, centrar el popover de forma elegante sin romper la app
       this.targetRect.set(null);
     }
   }

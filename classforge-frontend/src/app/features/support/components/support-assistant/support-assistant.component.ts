@@ -58,8 +58,9 @@ export class SupportAssistantComponent implements OnInit, OnDestroy {
   public quickSuggestions = [
     '¿Cómo creo un diagrama?',
     '¿Cómo funciona el Asistente IA?',
-    '¿Cómo genero código Spring Boot?',
-    '¿Cómo genero el prompt para Frontend?',
+    '¿Cómo uso el Equipo de IA y propuestas?',
+    '¿Cómo evalúo un proyecto en PDF?',
+    '¿Cómo genero código Spring Boot y FastAPI?',
     '¿Cómo colaboro en tiempo real?'
   ];
 
@@ -93,7 +94,7 @@ export class SupportAssistantComponent implements OnInit, OnDestroy {
   }
 
   public get tours(): TourDefinition[] {
-    return this.tourService.getAllTours();
+    return this.tourService.getAvailableTours();
   }
 
   public askQuery(text?: string) {

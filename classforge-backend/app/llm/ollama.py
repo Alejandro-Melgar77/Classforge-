@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import ipaddress
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional
 from urllib.parse import urlparse
@@ -20,6 +21,18 @@ from app.llm.gemini import CircuitBreaker
 from app.llm.models import LlmMessage, LlmRequest, LlmResponse, LlmUsage
 
 logger = logging.getLogger(__name__)
+
+
+def _enforce_local_destination(url: str) -> None:
+    if not settings.AI_LOCAL_ONLY:
+        return
+    host = (urlparse(url).hostname or "").lower()
+    try:
+        local = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        local = host == "localhost"
+    if not local:
+        raise LlmUnavailable("AI_LOCAL_ONLY exige una dirección Ollama de loopback local")
 
 
 def validate_and_sanitize_ollama_url(url: str) -> str:
@@ -104,6 +117,7 @@ class OllamaProvider:
         client: httpx.AsyncClient,
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        _enforce_local_destination(self.base_url)
         url = f"{self.base_url}/api/chat"
         resp = await client.post(url, json=payload, headers=self._get_headers())
         if resp.status_code in (401, 403):
@@ -118,6 +132,7 @@ class OllamaProvider:
         Pings Ollama /api/tags to verify connectivity and measure latency.
         Does not count against the operational circuit breaker.
         """
+        _enforce_local_destination(self.base_url)
         start = time.monotonic()
         url = f"{self.base_url}/api/tags"
         try:
@@ -271,6 +286,7 @@ class OllamaProvider:
         NOTE (M6): Actualmente este método no tiene consumidor activo en los endpoints,
         pero se mantiene implementado para uso futuro.
         """
+        _enforce_local_destination(self.base_url)
         await self.circuit_breaker.check()
         messages = self._build_messages(req)
         payload = {

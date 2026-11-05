@@ -1,0 +1,249 @@
+{
+  "samples_evaluated": 22,
+  "correct_predictions": 20,
+  "accuracy": 0.9091,
+  "macro_precision": 0.9167,
+  "macro_recall": 0.9167,
+  "macro_f1": 0.9048,
+  "mean_absolute_error_score": 7.12,
+  "schema_validity_percent": 100.0,
+  "hallucination_rate_percent": 0.0,
+  "avg_latency_ms": 103.15,
+  "per_class": {
+    "APROBADO": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 8
+    },
+    "RECHAZADO": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1_score": 0.8571,
+      "support": 8
+    },
+    "INFORMACION_INSUFICIENTE": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1_score": 0.8571,
+      "support": 6
+    }
+  },
+  "confusion_matrix": {
+    "APROBADO": {
+      "APROBADO": 8,
+      "RECHAZADO": 0,
+      "INFORMACION_INSUFICIENTE": 0
+    },
+    "RECHAZADO": {
+      "APROBADO": 0,
+      "RECHAZADO": 6,
+      "INFORMACION_INSUFICIENTE": 2
+    },
+    "INFORMACION_INSUFICIENTE": {
+      "APROBADO": 0,
+      "RECHAZADO": 0,
+      "INFORMACION_INSUFICIENTE": 6
+    }
+  },
+  "individual_results": [
+    {
+      "id": "proj-01-ecommerce-microservices",
+      "title": "Plataforma de Comercio Electrónico Distribuida Basada en Microservicios",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 93.5,
+      "match": true,
+      "latency_ms": 2262.7
+    },
+    {
+      "id": "proj-02-hospital-clinical-records",
+      "title": "Sistema Hospitalario de Historia Clínica Electrónica",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 91.2,
+      "match": true,
+      "latency_ms": 1.79
+    },
+    {
+      "id": "proj-03-logistics-tracking",
+      "title": "Sistema de Trazabilidad Logística y Monitoreo Vehicular en Tiempo Real",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 91.2,
+      "match": true,
+      "latency_ms": 0.68
+    },
+    {
+      "id": "proj-04-academic-management",
+      "title": "Portal Integral de Gestión Académica y Matrícula Universitaria",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 80.0,
+      "match": true,
+      "latency_ms": 0.53
+    },
+    {
+      "id": "proj-05-iot-telemetry-dashboard",
+      "title": "Panel de Telemetría y Mantenimiento Predictivo para Maquinaria Industrial",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 87.5,
+      "match": true,
+      "latency_ms": 0.51
+    },
+    {
+      "id": "proj-06-financial-expense-tracker",
+      "title": "Sistema de Gestión Financiera y Control de Presupuestos Empresariales",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 75.5,
+      "match": true,
+      "latency_ms": 0.46
+    },
+    {
+      "id": "proj-07-mobile-food-delivery",
+      "title": "Plataforma de Despacho Gastronómico y Envíos a Domicilio",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 75.5,
+      "match": true,
+      "latency_ms": 0.49
+    },
+    {
+      "id": "proj-08-hotel-booking",
+      "title": "Sistema de Reservas Hoteleras y Gestión de Habitaciones",
+      "expected": "APROBADO",
+      "predicted": "APROBADO",
+      "score_pred": 86.8,
+      "match": true,
+      "latency_ms": 0.45
+    },
+    {
+      "id": "proj-09-incomplete-chat-app",
+      "title": "Borrador de Aplicación de Chat Instantáneo",
+      "expected": "RECHAZADO",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 27.5,
+      "match": false,
+      "latency_ms": 0.27
+    },
+    {
+      "id": "proj-10-library-catalog-draft",
+      "title": "Documento Preliminar para Catálogo de Libros",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 33.2,
+      "match": true,
+      "latency_ms": 0.21
+    },
+    {
+      "id": "proj-11-crypto-portfolio-tracker",
+      "title": "Monitor de Criptomonedas Personal",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 38.2,
+      "match": true,
+      "latency_ms": 0.22
+    },
+    {
+      "id": "proj-12-social-network-prototype",
+      "title": "Prototipo de Red Social Universitaria",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 34.5,
+      "match": true,
+      "latency_ms": 0.25
+    },
+    {
+      "id": "proj-13-smart-home-controller",
+      "title": "Controlador Domótico Casero",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 43.5,
+      "match": true,
+      "latency_ms": 0.21
+    },
+    {
+      "id": "proj-14-gym-member-manager",
+      "title": "Sistema de Control de Socios de Gimnasio",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 51.0,
+      "match": true,
+      "latency_ms": 0.19
+    },
+    {
+      "id": "proj-15-car-rental-prototype",
+      "title": "Propuesta de Alquiler de Vehículos",
+      "expected": "RECHAZADO",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": false,
+      "latency_ms": 0.03
+    },
+    {
+      "id": "proj-16-job-board-concept",
+      "title": "Bolsa de Trabajo para Egresados",
+      "expected": "RECHAZADO",
+      "predicted": "RECHAZADO",
+      "score_pred": 40.5,
+      "match": true,
+      "latency_ms": 0.2
+    },
+    {
+      "id": "proj-17-scanned-document-receipts",
+      "title": "Documento Escaneado de Facturas",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    },
+    {
+      "id": "proj-18-empty-placeholder",
+      "title": "Documento en Blanco Placeholder",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    },
+    {
+      "id": "proj-19-single-page-memo",
+      "title": "Memorando Corto de Asignación",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    },
+    {
+      "id": "proj-20-blank-template",
+      "title": "Plantilla Vacía",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    },
+    {
+      "id": "proj-21-corrupted-ocr",
+      "title": "PDF Corrupto o Ilegible",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    },
+    {
+      "id": "proj-22-adhoc-notes",
+      "title": "Apuntes Sueltos de Brainstorming",
+      "expected": "INFORMACION_INSUFICIENTE",
+      "predicted": "INFORMACION_INSUFICIENTE",
+      "score_pred": 0.0,
+      "match": true,
+      "latency_ms": 0.02
+    }
+  ]
+}

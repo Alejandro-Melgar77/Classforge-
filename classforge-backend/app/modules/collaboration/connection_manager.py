@@ -1,5 +1,7 @@
 from __future__ import annotations
 import hashlib
+import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
@@ -66,7 +68,7 @@ class ConnectionManager:
             return room_id
         return f"diagram:{room_id}"
 
-    async def connect(self, room_id: str, user: dict, websocket: WebSocket):
+    async def connect(self, room_id: str, user: dict, websocket: WebSocket, authorize=None):
         await websocket.accept()
         key = self._resolve_room_key(room_id)
         if key not in self.rooms:
@@ -79,8 +81,13 @@ class ConnectionManager:
         # hashlib (not hash()) so the colour is stable across processes/restarts.
         digest = hashlib.sha1(user_id.encode("utf-8")).hexdigest()
         user_color = user.get("color") or palette[int(digest[:8], 16) % len(palette)]
+        existing = self.rooms[key].get(user_id)
+        if existing:
+            existing['connections'][id(websocket)] = {'websocket': websocket, 'id': uuid.uuid4().hex, 'authorize': authorize}
+            return
         self.rooms[key][user_id] = {
             "websocket": websocket,
+            "connections": {id(websocket): {'websocket': websocket, 'id': uuid.uuid4().hex, 'authorize': authorize}},
             "user_id": user_id,
             "user_name": user.get("name", "Usuario"),
             "user_color": user_color,
@@ -89,10 +96,16 @@ class ConnectionManager:
             "status": "online"
         }
 
-    async def disconnect(self, room_id: str, user_id: str):
+    async def disconnect(self, room_id: str, user_id: str, websocket: Optional[WebSocket] = None):
         key = self._resolve_room_key(room_id)
         room_data = self.rooms.get(key)
         if room_data and user_id in room_data:
+            user_data = room_data[user_id]
+            if websocket is not None:
+                user_data['connections'].pop(id(websocket), None)
+                if user_data['connections']:
+                    user_data['websocket'] = next(iter(user_data['connections'].values()))['websocket']
+                    return False
             del room_data[user_id]
             if not room_data:
                 # Release per-room state along with the room itself; otherwise
@@ -104,19 +117,42 @@ class ConnectionManager:
                         pass
         
         self.release_all_user_locks(room_id, user_id)
+        return True
 
-    async def broadcast(self, room_id: str, message: dict, exclude_user_id: Optional[str] = None):
+    async def broadcast(self, room_id: str, message: dict, exclude_user_id: Optional[str] = None, exclude_websocket: Optional[WebSocket] = None):
         key = self._resolve_room_key(room_id)
         room_data = self.rooms.get(key)
-        if room_data:
-            for uid, user_data in list(room_data.items()):
-                if exclude_user_id and uid == exclude_user_id:
-                    continue
-                ws = user_data["websocket"]
+        async def deliver(uid, connection):
+            ws = connection['websocket']
+            if ws is exclude_websocket:
+                return
+            try:
+                if connection['authorize'] and not await asyncio.wait_for(connection['authorize'](), timeout=2):
+                    await asyncio.wait_for(ws.close(code=4003, reason='Authorization revoked'), timeout=2)
+                    await self.disconnect(room_id, uid, ws)
+                    return
+                await asyncio.wait_for(ws.send_json(message), timeout=2)
+            except Exception:
                 try:
-                    await ws.send_json(message)
+                    await asyncio.wait_for(ws.close(code=1011, reason='Delivery failed'), timeout=2)
                 except Exception:
                     pass
+                await self.disconnect(room_id, uid, ws)
+
+        if room_data:
+            # Project rooms also carry personal AI messages. Only the thread
+            # owner may receive those payloads, regardless of team membership.
+            ai_message = message.get('message') if isinstance(message, dict) else None
+            private_owner = (str(ai_message.get('owner_id')) if isinstance(ai_message, dict)
+                             and ai_message.get('thread') == 'personal' and ai_message.get('owner_id') else None)
+            if isinstance(ai_message, dict) and ai_message.get('thread') == 'personal' and not private_owner:
+                return
+            deliveries = [deliver(uid, conn) for uid, user_data in list(room_data.items())
+                          if not exclude_user_id or uid != exclude_user_id
+                          if private_owner is None or uid == private_owner
+                          for conn in list(user_data['connections'].values())]
+            if deliveries:
+                await asyncio.gather(*deliveries)
 
     def get_room_users(self, room_id: str) -> List[dict]:
         key = self._resolve_room_key(room_id)
@@ -162,11 +198,18 @@ class ConnectionManager:
             return True
         return False
 
+    def get_lock_owner(self, diagram_id: str, element_id: str) -> Optional[str]:
+        key = self._resolve_room_key(diagram_id)
+        lock_data = self.locks.get(key)
+        return lock_data.get(element_id) if lock_data else None
+
     def release_lock(self, diagram_id: str, user_id: str, element_id: str):
         key = self._resolve_room_key(diagram_id)
         lock_data = self.locks.get(key)
         if lock_data and lock_data.get(element_id) == user_id:
             del lock_data[element_id]
+            return True
+        return False
 
     def release_all_user_locks(self, diagram_id: str, user_id: str) -> List[str]:
         released_elements = []

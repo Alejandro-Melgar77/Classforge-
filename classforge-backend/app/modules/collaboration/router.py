@@ -23,6 +23,39 @@ MAX_MESSAGE_BYTES = 64 * 1024  # 64 KB
 MAX_BURST_PER_SECOND = 60      # 60 msg/s
 
 
+async def _current_ws_access(db, user_id: str, resource_id: str, is_project: bool) -> bool:
+    """Recheck live identity and membership, including revocation after handshake."""
+    if db is None:
+        return False
+    def ref(value):
+        return ObjectId(str(value)) if ObjectId.is_valid(str(value)) else value
+    user = await db.users.find_one({"_id": ref(user_id), "is_active": True, "is_deleted": False})
+    if not user:
+        return False
+    if is_project:
+        project = await db.projects.find_one({"_id": ref(resource_id), "is_deleted": False})
+        diagram = None
+    else:
+        diagram = await db.diagrams.find_one({"_id": ref(resource_id), "is_deleted": False})
+        if not diagram:
+            return False
+        project = await db.projects.find_one({"_id": ref(diagram['project_id']), "is_deleted": False}) if diagram.get('project_id') else None
+        if diagram.get('project_id') and not project:
+            return False
+    team_id = (project or {}).get('team_id') or (diagram or {}).get('team_id')
+    team = await db.teams.find_one({"_id": ref(team_id), "is_deleted": False}) if team_id else None
+    if team_id and not team:
+        return False
+    # The team document is authoritative; stale denormalized user.team_ids must
+    # not retain access after removal from the team.
+    user = {**user, "team_ids": []}
+    if project and not can_access_project(user, project, team):
+        return False
+    if is_project:
+        return bool(project)
+    return can_access_diagram(user, diagram, team, project)
+
+
 async def _trigger_diagram_changed_helper(diagram_id: str, user_id: str):
     """Notifies trigger manager of diagram edit events with origin checks."""
     try:
@@ -77,13 +110,20 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
             await websocket.close(code=4003, reason="Forbidden")
             return
 
-    await manager.connect(diagram_id, user, websocket)
     user_id = str(user.get("_id", user.get("id")))
+    if get_db() is not None and not await _current_ws_access(get_db(), user_id, diagram_id, False):
+        await websocket.close(code=4003, reason="Forbidden")
+        return
+    await manager.connect(diagram_id, user, websocket,
+                          authorize=lambda: _current_ws_access(get_db(), user_id, diagram_id, False))
     message_timestamps = []
 
     try:
         while True:
             data = await websocket.receive_text()
+            if not await _current_ws_access(get_db(), user_id, diagram_id, False):
+                await websocket.close(code=4003, reason="Authorization revoked")
+                break
 
             # 1. Message size check (64 KB)
             if len(data.encode("utf-8")) > MAX_MESSAGE_BYTES:
@@ -103,6 +143,10 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
             try:
                 message = json.loads(data)
             except json.JSONDecodeError:
+                continue
+
+            if not isinstance(message, dict):
+                await websocket.send_json({"type": "OP_REJECTED", "reason": "invalid_message"})
                 continue
 
             msg_type = message.get("type")
@@ -148,7 +192,7 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                 op = message.get("op")
                 node_id = message.get("node_id")
                 node_data = message.get("data")
-                if op not in ("add", "move", "update", "delete") or not isinstance(node_id, str) or not node_id or (op != "delete" and not isinstance(node_data, dict)):
+                if op not in ("add", "move", "update", "delete") or not isinstance(node_id, str) or not node_id or (op != "delete" and (not isinstance(node_data, dict) or not node_data)):
                     await websocket.send_json({"type": "OP_REJECTED", "element_id": node_id, "reason": "invalid_operation"})
                     continue
                 if op and node_id:
@@ -181,14 +225,14 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         "data": node_data,
                         "user_id": user_id
                     }
-                    await manager.broadcast(diagram_id, broadcast_msg, exclude_user_id=user_id)
+                    await manager.broadcast(diagram_id, broadcast_msg, exclude_websocket=websocket)
                     spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
 
             elif msg_type == "EDGE_OPERATION":
                 op = message.get("op")
                 edge_id = message.get("edge_id")
                 edge_data = message.get("data")
-                if op not in ("add", "update", "delete") or not isinstance(edge_id, str) or not edge_id or (op != "delete" and not isinstance(edge_data, dict)):
+                if op not in ("add", "update", "delete") or not isinstance(edge_id, str) or not edge_id or (op != "delete" and (not isinstance(edge_data, dict) or not edge_data)):
                     await websocket.send_json({"type": "OP_REJECTED", "element_id": edge_id, "reason": "invalid_operation"})
                     continue
                 if op and edge_id:
@@ -219,12 +263,12 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                         "data": edge_data,
                         "user_id": user_id
                     }
-                    await manager.broadcast(diagram_id, broadcast_msg, exclude_user_id=user_id)
+                    await manager.broadcast(diagram_id, broadcast_msg, exclude_websocket=websocket)
                     spawn(_trigger_diagram_changed_helper(diagram_id, user_id))
 
             elif msg_type == "LOCK_ACQUIRE":
                 element_id = message.get("element_id")
-                if element_id:
+                if isinstance(element_id, str) and 0 < len(element_id) <= 256:
                     success = manager.acquire_lock(diagram_id, user_id, element_id)
                     if success:
                         await manager.broadcast(diagram_id, {
@@ -237,16 +281,19 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
                             "type": "LOCK_REJECTED",
                             "element_id": element_id
                         })
+                else:
+                    await websocket.send_json({"type": "OP_REJECTED", "reason": "invalid_operation"})
 
             elif msg_type == "LOCK_RELEASE":
                 element_id = message.get("element_id")
-                if element_id:
-                    manager.release_lock(diagram_id, user_id, element_id)
+                if isinstance(element_id, str) and element_id and manager.release_lock(diagram_id, user_id, element_id):
                     await manager.broadcast(diagram_id, {
                         "type": "LOCK_RELEASED",
                         "element_id": element_id,
                         "user_id": user_id
                     })
+                else:
+                    await websocket.send_json({"type": "OP_REJECTED", "element_id": element_id, "reason": "lock_not_owned"})
 
             elif msg_type == "PING":
                 await websocket.send_json({"type": "PONG"})
@@ -279,20 +326,14 @@ async def websocket_endpoint(websocket: WebSocket, diagram_id: str, token: str =
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
-        released = manager.release_all_user_locks(diagram_id, user_id)
-        for el_id in released:
-            await manager.broadcast(diagram_id, {
-                "type": "LOCK_RELEASED",
-                "element_id": el_id,
-                "user_id": user_id
-            }, exclude_user_id=user_id)
-            
-        await manager.disconnect(diagram_id, user_id)
-        
-        await manager.broadcast(diagram_id, {
-            "type": "USER_LEFT",
-            "user_id": user_id
-        })
+        owned = [element_id for element_id, owner in manager.get_locks(diagram_id).items() if owner == user_id]
+        last_connection = await manager.disconnect(diagram_id, user_id, websocket)
+        if last_connection:
+            for el_id in owned:
+                await manager.broadcast(diagram_id, {
+                    "type": "LOCK_RELEASED", "element_id": el_id, "user_id": user_id
+                }, exclude_user_id=user_id)
+            await manager.broadcast(diagram_id, {"type": "USER_LEFT", "user_id": user_id})
 
 
 @router.websocket("/projects/{project_id}")
@@ -327,8 +368,12 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
             return
 
     room_key = f"project:{project_id}"
-    await manager.connect(room_key, user, websocket)
     user_id = str(user.get("_id", user.get("id")))
+    if get_db() is not None and not await _current_ws_access(get_db(), user_id, project_id, True):
+        await websocket.close(code=4003, reason="Forbidden")
+        return
+    await manager.connect(room_key, user, websocket,
+                          authorize=lambda: _current_ws_access(get_db(), user_id, project_id, True))
     message_timestamps = []
 
     # Broadcast initial PRESENCE to the room
@@ -342,6 +387,9 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
     try:
         while True:
             data = await websocket.receive_text()
+            if not await _current_ws_access(get_db(), user_id, project_id, True):
+                await websocket.close(code=4003, reason="Authorization revoked")
+                break
 
             # 1. Message size check (64 KB)
             if len(data.encode("utf-8")) > MAX_MESSAGE_BYTES:
@@ -361,6 +409,10 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
             try:
                 message = json.loads(data)
             except json.JSONDecodeError:
+                continue
+
+            if not isinstance(message, dict):
+                await websocket.send_json({"type": "OP_REJECTED", "reason": "invalid_message"})
                 continue
 
             msg_type = message.get("type")
@@ -390,7 +442,7 @@ async def project_websocket_endpoint(websocket: WebSocket, project_id: str, toke
     except Exception as e:
         logger.error(f"[ProjectWS] WebSocket error: {e}")
     finally:
-        await manager.disconnect(room_key, user_id)
+        await manager.disconnect(room_key, user_id, websocket)
         remaining_members = manager.get_room_users(room_key)
         await manager.broadcast(
             room_key,

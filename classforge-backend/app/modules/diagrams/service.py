@@ -438,7 +438,7 @@ class DiagramService:
         if not diagram:
             return None
             
-        updated_diagram = await self.repository.save_graph(diagram_id, data.graph_data, str(user["_id"]), data.comment)
+        updated_diagram = await self.repository.save_graph(diagram_id, data.graph_data, str(user["_id"]), data.comment, base_version=data.base_version)
         
         await self.db["audit_logs"].insert_one({
             "action": "SAVE_GRAPH",

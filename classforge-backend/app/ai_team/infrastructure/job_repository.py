@@ -6,10 +6,23 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, List, Optional
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from app.ai_team.domain.jobs import AiJob
 
 logger = logging.getLogger(__name__)
+
+
+def _contains_credentials(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(
+            (str(key).lower().replace('-', '_') in {'api_key', 'apikey', 'authorization', 'access_token', 'refresh_token', 'secret', 'password'} and bool(item))
+            or _contains_credentials(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_credentials(item) for item in value)
+    return False
 
 
 class AiJobRepository:
@@ -27,6 +40,8 @@ class AiJobRepository:
         """Enqueues an AI job. If a job with the same dedupe_key is queued or running,
         returns the existing job to prevent duplicates.
         """
+        if _contains_credentials(job.payload):
+            raise ValueError("Las credenciales no pueden almacenarse en trabajos")
         now = self._now()
         if job.run_after <= job.created_at:
             job.run_after = now
@@ -34,6 +49,8 @@ class AiJobRepository:
 
         if job.dedupe_key:
             existing = await self.col.find_one({
+                "project_id": job.project_id,
+                "kind": job.kind,
                 "dedupe_key": job.dedupe_key,
                 "status": {"$in": ["queued", "running"]},
             })
@@ -42,9 +59,17 @@ class AiJobRepository:
                 return AiJob.from_mongo(existing)
 
         doc = job.to_mongo()
+        if job.dedupe_key:
+            doc["active_dedupe_key"] = job.dedupe_key
         doc["created_at"] = doc.get("created_at") or now
         doc["updated_at"] = now
-        await self.col.insert_one(doc)
+        try:
+            await self.col.insert_one(doc)
+        except DuplicateKeyError:
+            existing = await self.col.find_one({"project_id": job.project_id, "kind": job.kind, "active_dedupe_key": job.dedupe_key})
+            if not existing:
+                raise
+            return AiJob.from_mongo(existing)
         return job
 
     async def acquire_next(
@@ -80,7 +105,7 @@ class AiJobRepository:
             return None
         return AiJob.from_mongo(updated_doc)
 
-    async def complete(self, job_id: str, result_ref: Optional[Dict[str, Any]] = None) -> bool:
+    async def complete(self, job_id: str, worker_id: str, attempts: int, result_ref: Optional[Dict[str, Any]] = None) -> bool:
         """Marks a job as done."""
         now = self._now()
         update_doc: Dict[str, Any] = {
@@ -91,13 +116,36 @@ class AiJobRepository:
         if result_ref is not None:
             update_doc["result_ref"] = result_ref
 
-        res = await self.col.update_one({"_id": job_id}, {"$set": update_doc})
+        res = await self.col.update_one({"_id": job_id, "status": "running", "worker_id": worker_id, "attempts": attempts, "lease_until": {"$gt": now}}, {"$set": update_doc, "$unset": {"active_dedupe_key": ""}})
         return res.modified_count > 0 or res.matched_count > 0
 
-    async def fail(self, job_id: str, error: str, max_attempts: int = 3) -> bool:
+    async def renew_lease(
+        self,
+        job_id: str,
+        worker_id: str,
+        attempts: int,
+        additional_seconds: int = 120,
+    ) -> bool:
+        """Extends lease_until for an actively running job to prevent premature reaping."""
+        now = self._now()
+        new_lease = now + timedelta(seconds=additional_seconds)
+        res = await self.col.update_one(
+            {
+                "_id": job_id,
+                "status": "running",
+                "worker_id": worker_id,
+                "attempts": attempts,
+                "lease_until": {"$gt": now},
+            },
+            {"$set": {"lease_until": new_lease, "updated_at": now}},
+        )
+        return res.modified_count > 0
+
+    async def fail(self, job_id: str, worker_id: str, attempts: int, error: str, max_attempts: int = 3) -> bool:
         """Handles job failure with exponential backoff if attempts < max_attempts."""
         now = self._now()
-        job_doc = await self.col.find_one({"_id": job_id})
+        lease_filter = {"_id": job_id, "status": "running", "worker_id": worker_id, "attempts": attempts, "lease_until": {"$gt": now}}
+        job_doc = await self.col.find_one(lease_filter)
         if not job_doc:
             return False
 
@@ -107,7 +155,7 @@ class AiJobRepository:
             backoff_secs = (2 ** attempts) * 5
             run_after = now + timedelta(seconds=backoff_secs)
             res = await self.col.update_one(
-                {"_id": job_id},
+                lease_filter,
                 {
                     "$set": {
                         "status": "queued",
@@ -120,14 +168,15 @@ class AiJobRepository:
             )
         else:
             res = await self.col.update_one(
-                {"_id": job_id},
+                lease_filter,
                 {
                     "$set": {
                         "status": "failed",
                         "lease_until": None,
                         "error": str(error),
                         "updated_at": now,
-                    }
+                    },
+                    "$unset": {"active_dedupe_key": ""},
                 },
             )
         return res.modified_count > 0 or res.matched_count > 0
@@ -157,7 +206,8 @@ class AiJobRepository:
                             "error": "Lease expiró y se alcanzó el límite de intentos",
                             "lease_until": None,
                             "updated_at": now,
-                        }
+                        },
+                        "$unset": {"active_dedupe_key": ""},
                     },
                 )
             else:
@@ -192,10 +242,28 @@ class AiJobRepository:
                     "status": "skipped",
                     "error": f"Trabajo expiró sin procesar (> {max_age_hours} h)",
                     "updated_at": now,
-                }
+                },
+                "$unset": {"active_dedupe_key": ""},
             },
         )
         return res.modified_count
+
+    async def cancel_job(self, job_id: str) -> bool:
+        """Cancels a specific queued or running job."""
+        now = self._now()
+        res = await self.col.update_one(
+            {"_id": job_id, "status": {"$in": ["queued", "running"]}},
+            {
+                "$set": {
+                    "status": "cancelled",
+                    "error": "Cancelado a solicitud del usuario o administrador",
+                    "lease_until": None,
+                    "updated_at": now,
+                },
+                "$unset": {"active_dedupe_key": ""},
+            },
+        )
+        return res.modified_count > 0
 
     async def cancel_project_queued_jobs(self, project_id: str, origin: Optional[str] = None) -> int:
         """Instantly cancels queued jobs for a given project (e.g. when participative AI is turned off)."""
@@ -214,7 +282,8 @@ class AiJobRepository:
                     "status": "cancelled",
                     "error": "Cancelado por cambio en la configuración de IA participativa",
                     "updated_at": now,
-                }
+                },
+                "$unset": {"active_dedupe_key": ""},
             },
         )
         if res.modified_count > 0:

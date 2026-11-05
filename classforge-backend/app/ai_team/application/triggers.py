@@ -184,7 +184,8 @@ class TriggersManager:
         # 2. Retrieve diagram data
         try:
             did = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
-            diagram_doc = await self.db["diagrams"].find_one({"_id": did})
+            pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+            diagram_doc = await self.db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
             if not diagram_doc:
                 return
         except Exception as e:
@@ -297,6 +298,9 @@ class TriggersManager:
         model: Optional[str] = None,
     ) -> Optional[AiJob]:
         """Enqueues an answer_message job for an AI role responder."""
+        if api_key:
+            from app.core.errors import ValidationError
+            raise ValidationError("Las claves por solicitud no están disponibles para trabajos diferidos; configure el proveedor en el servidor")
         job = AiJob(
             project_id=project_id,
             role_id=role_id,
@@ -306,7 +310,6 @@ class TriggersManager:
                 "user_id": user_id,
                 "trigger_text": trigger_text,
                 "diagram_id": diagram_id,
-                "api_key": api_key,
                 "model": model,
             },
             dedupe_key=f"answer:{ai_msg_id}",

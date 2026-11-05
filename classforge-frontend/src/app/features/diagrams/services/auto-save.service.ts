@@ -108,6 +108,13 @@ export class AutoSaveService implements OnDestroy {
       this.retryCount = 0;
     } catch (e) {
       if (this.sessionRevision !== session) return;
+      if ((e as { status?: number })?.status === 409) {
+        this.hasError.set(true);
+        clearTimeout(this.retryTimer);
+        clearTimeout(this.saveTimer);
+        this.toastService.error('Otro participante modificó el diagrama. Tus cambios están respaldados localmente; revisa la versión actual antes de guardar.');
+        return;
+      }
       console.error('Auto-save falló', e);
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
@@ -121,7 +128,7 @@ export class AutoSaveService implements OnDestroy {
     } finally {
       if (this.sessionRevision === session) {
         this.isSaving.set(false);
-        if (this.isDirty() && this.editRevision !== revision) this.scheduleAutoSave();
+        if (this.isDirty() && !this.hasError() && this.editRevision !== revision) this.scheduleAutoSave();
       }
     }
   }

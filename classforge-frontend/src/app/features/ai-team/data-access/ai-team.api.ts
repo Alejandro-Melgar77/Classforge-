@@ -139,6 +139,27 @@ export class AiTeamApiService {
     });
   }
 
+  public applyProposal(
+    projectId: string,
+    messageId: string,
+    proposalId: string,
+    baseVersion?: number
+  ): Observable<{ message: AiMessage; proposal_id: string; status: string; diagram_id?: string; version?: number }> {
+    const url = `${this.baseUrl}/projects/${projectId}/messages/${messageId}/proposals/${proposalId}/apply`;
+    return this.http.post<{ message: AiMessage; proposal_id: string; status: string; diagram_id?: string; version?: number }>(
+      url,
+      { base_version: baseVersion }
+    );
+  }
+
+  public publishMessage(
+    projectId: string,
+    messageId: string
+  ): Observable<{ success: boolean; message: string; data: AiMessage }> {
+    const url = `${this.baseUrl}/projects/${projectId}/messages/${messageId}/publish`;
+    return this.http.post<{ success: boolean; message: string; data: AiMessage }>(url, {});
+  }
+
   public listTasks(projectId: string): Observable<{ project_id: string; tasks: AiTask[]; total: number }> {
     const url = `${this.baseUrl}/projects/${projectId}/tasks`;
     return this.http.get<{ project_id: string; tasks: AiTask[]; total: number }>(url);
@@ -180,6 +201,11 @@ export class AiTeamApiService {
   public executeTask(projectId: string, taskId: string): Observable<any> {
     const url = `${this.baseUrl}/projects/${projectId}/tasks/${taskId}/execute`;
     return this.http.patch<any>(url, {});
+  }
+
+  public cancelTask(projectId: string, taskId: string): Observable<{ success: boolean; message: string; task_id: string; status: string }> {
+    const url = `${this.baseUrl}/projects/${projectId}/tasks/${taskId}/cancel`;
+    return this.http.post<{ success: boolean; message: string; task_id: string; status: string }>(url, {});
   }
 
   public getWsToken(projectId: string): Observable<WsTokenResponse> {

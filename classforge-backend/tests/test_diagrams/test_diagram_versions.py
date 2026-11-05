@@ -50,7 +50,7 @@ async def test_save_graph_creates_version_in_diagram_versions(repo):
     diagram_id = str(inserted.inserted_id)
 
     # Save graph (first update)
-    new_graph = {"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"source": "n1", "target": "n2"}]}
+    new_graph = {"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"id": "e1", "source": "n1", "target": "n2"}]}
     updated = await repo.save_graph(diagram_id, new_graph, str(user_id), "Agregado nodo n2")
 
     assert updated["version"] == 2

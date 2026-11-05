@@ -106,6 +106,20 @@ export class TourOverlayComponent {
     this.tourService.endTour();
   }
 
+  @HostListener('window:keydown.arrowright')
+  onArrowRight() {
+    if (!this.isLastStep) {
+      this.next();
+    }
+  }
+
+  @HostListener('window:keydown.arrowleft')
+  onArrowLeft() {
+    if (this.stepIndex > 0) {
+      this.prev();
+    }
+  }
+
   next() {
     this.tourService.nextStep();
   }

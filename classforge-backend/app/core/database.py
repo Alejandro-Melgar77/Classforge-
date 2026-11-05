@@ -67,6 +67,12 @@ async def connect_to_mongo():
         "dedupe_key",
         partialFilterExpression={"dedupe_key": {"$type": "string"}},
     )
+    await db_instance.db["ai_jobs"].create_index(
+        [("project_id", 1), ("kind", 1), ("active_dedupe_key", 1)],
+        unique=True,
+        partialFilterExpression={"active_dedupe_key": {"$type": "string"}},
+        name="unique_active_job_dedupe",
+    )
     # Indexes for AI findings lifecycle (P5 Bloque C)
     await db_instance.db["ai_findings"].create_index([("project_id", 1), ("diagram_id", 1), ("status", 1)])
     await db_instance.db["ai_findings"].create_index([("diagram_id", 1), ("fingerprint", 1)])

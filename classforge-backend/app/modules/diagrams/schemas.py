@@ -38,7 +38,13 @@ class DiagramParticipantsResponse(BaseModel):
 
 class SaveGraph(BaseModel):
     graph_data: Dict[str, Any]
+    base_version: Optional[int] = Field(default=None, ge=1)
     comment: Optional[str] = None
+
+class ApplyDiagramOperations(BaseModel):
+    base_version: int = Field(ge=1)
+    operations: List[Dict[str, Any]] = Field(min_length=1, max_length=100)
+    comment: Optional[str] = Field(default=None, max_length=1000)
 
 class HistoryEntry(BaseModel):
     version: int
@@ -164,4 +170,15 @@ class DiagramAiPromptRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000, description="Prompt text with max 4000 chars")
     api_key: Optional[str] = Field(default=None, repr=False)
     model: Optional[str] = None
+
+
+class DiagramLayoutRequest(BaseModel):
+    base_version: Optional[int] = Field(default=None, ge=1)
+    direction: Optional[str] = Field(default="TB")
+
+
+class DiagramNormalizationApplyRequest(BaseModel):
+    base_version: Optional[int] = Field(default=None, ge=1)
+    rules: Optional[List[str]] = None
+    comment: Optional[str] = None
 

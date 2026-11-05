@@ -345,6 +345,8 @@ class GeminiProvider:
         Executes generateContent against Gemini REST endpoint, traversing the
         configured model chain, applying retries, circuit breaking, and telemetry.
         """
+        if settings.AI_LOCAL_ONLY:
+            raise LlmUnavailable("El modo local impide usar Gemini")
         # 1. Circuit breaker pre-check
         await self.circuit_breaker.check()
 
@@ -518,6 +520,8 @@ class GeminiProvider:
         NOTE (M6): Actualmente este método no tiene consumidor activo en los endpoints,
         pero se mantiene con fallback entre modelos para uso futuro.
         """
+        if settings.AI_LOCAL_ONLY:
+            raise LlmUnavailable("El modo local impide usar Gemini")
         await self.circuit_breaker.check()
         api_key = self._resolve_api_key(req)
         models_to_try = self._build_model_chain(req.model)

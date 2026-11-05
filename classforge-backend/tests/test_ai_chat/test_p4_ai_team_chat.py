@@ -455,19 +455,22 @@ async def test_proposal_state_and_async_tasks(async_client: AsyncClient):
     )
     await msg_repo.create_message(test_msg)
 
-    # Apply proposal
+    # A client cannot claim application without a confirmed diagram mutation.
     res_prop = await async_client.post(
         f"/api/v1/ai-chat/projects/{project_id}/messages/msg-prop-test-1/proposals/prop-101/state",
         json={"status": "applied"},
         headers=headers,
     )
-    assert res_prop.status_code == 200
-    assert res_prop.json()["status"] == "applied"
+    assert res_prop.status_code == 400
 
     # Check in DB
     saved_msg = await msg_repo.find_by_id("msg-prop-test-1")
-    assert saved_msg["proposal_state"]["prop-101"]["status"] == "applied"
-    assert saved_msg["proposal_state"]["prop-101"]["by"] == user_id
+    assert "prop-101" not in saved_msg["proposal_state"]
+    res_prop = await async_client.post(
+        f"/api/v1/ai-chat/projects/{project_id}/messages/msg-prop-test-1/proposals/prop-101/state",
+        json={"status": "dismissed"}, headers=headers,
+    )
+    assert res_prop.status_code == 200
 
     # 2. Tasks: Create, Update, Async Execute (202), Delete
     res_task_create = await async_client.post(

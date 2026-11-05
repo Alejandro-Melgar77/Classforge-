@@ -38,6 +38,7 @@ from app.modules.ai_chat.schemas import (
     AiProjectStateResponse,
     AiProjectStateUpdateRequest,
     ProposalStateUpdateRequest,
+    ProposalApplyRequest,
     AiTask,
     AiTaskCreate,
     AiTaskUpdateRequest,
@@ -184,10 +185,11 @@ async def get_group_history(
     current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    """Returns the full message history (all personal threads + project announcements) paginated in MongoDB."""
+    """Returns the message history visible to the team (project announcements, published messages, and own personal messages)."""
     repo = AiMessageRepository(db)
     messages, total, next_cursor = await repo.get_history(
         project_id,
+        user_id=str(current_user["_id"]),
         before=before,
         after=after,
         limit=limit,
@@ -203,6 +205,32 @@ async def get_group_history(
         "total": total,
         "next_cursor": next_cursor,
     }
+
+
+@router.post(
+    "/projects/{project_id}/messages/{message_id}/publish",
+    summary="Publish a personal chat message or proposal to the project team",
+)
+async def publish_message_to_team(
+    project_id: str,
+    message_id: str,
+    project: dict = Depends(require_project_member),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Allows an authorized user to publish a message from their personal thread to the team."""
+    repo = AiMessageRepository(db)
+    user_id = str(current_user["_id"])
+    published_msg = await repo.publish_message(message_id, user_id=user_id, project_id=project_id)
+    if not published_msg:
+        raise NotFoundError("Mensaje no encontrado o sin permisos para publicarlo")
+
+    # Broadcast to all members in the project room
+    await manager.broadcast(f"project:{project_id}", {
+        "type": "AI_MESSAGE_UPDATED",
+        "message": published_msg,
+    })
+    return {"success": True, "message": published_msg}
 
 
 @router.get(
@@ -269,6 +297,31 @@ async def set_proposal_state(
         "message": updated_msg,
     })
     return {"message": updated_msg, "proposal_id": proposal_id, "status": body.status}
+
+
+@router.post(
+    "/projects/{project_id}/messages/{message_id}/proposals/{proposal_id}/apply",
+    summary="Applies an approved AI proposal to modify the diagram using Phase 2 engine",
+)
+async def apply_proposal_endpoint(
+    project_id: str,
+    message_id: str,
+    proposal_id: str,
+    body: Optional[ProposalApplyRequest] = None,
+    project: dict = Depends(require_project_member),
+    current_user: dict = Depends(get_current_user),
+    service: AiChatService = Depends(_get_service),
+):
+    """Executes real diagram modification for an AI proposal with base version verification and audit."""
+    req_data = body or ProposalApplyRequest()
+    return await service.apply_proposal(
+        project_id=project_id,
+        message_id=message_id,
+        proposal_id=proposal_id,
+        user_id=str(current_user["_id"]),
+        diagram_id=req_data.diagram_id,
+        base_version=req_data.base_version,
+    )
 
 
 # ── Project AI State Endpoints ────────────────────────────────────────────────
@@ -573,6 +626,21 @@ async def execute_task(
     except Exception as e:
         logger.error(f"[AiChatRouter] execute_task error: {e}")
         raise ExternalServiceError("Error durante la ejecución de la tarea de IA")
+
+
+@router.post(
+    "/projects/{project_id}/tasks/{task_id}/cancel",
+    summary="Cancels a pending or in-progress AI task",
+)
+async def cancel_task_endpoint(
+    project_id: str,
+    task_id: str,
+    project: dict = Depends(require_project_member),
+    current_user: dict = Depends(get_current_user),
+    service: AiChatService = Depends(_get_service),
+):
+    """Cancels an active or pending AI task and cancels its associated worker job."""
+    return await service.cancel_task(task_id, project_id, current_user)
 
 
 # ── AI Findings Endpoints (P5 Bloque C) ─────────────────────────────────────────

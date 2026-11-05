@@ -1,0 +1,51 @@
+{
+  "pipeline_name": "classforge-project-evaluator-lora",
+  "version": "1.0.0",
+  "target_task": "software_project_review_and_rubric_scoring",
+  "base_model": {
+    "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "fallback_model": "meta-llama/Llama-3.2-3B-Instruct",
+    "load_in_4bit": true,
+    "bnb_4bit_quant_type": "nf4",
+    "bnb_4bit_compute_dtype": "bfloat16",
+    "bnb_4bit_use_double_quant": true
+  },
+  "lora_parameters": {
+    "r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "bias": "none",
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "task_type": "CAUSAL_LM"
+  },
+  "training_hyperparameters": {
+    "per_device_train_batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 8,
+    "learning_rate": 0.0002,
+    "weight_decay": 0.01,
+    "num_train_epochs": 3,
+    "warmup_ratio": 0.05,
+    "lr_scheduler_type": "cosine",
+    "max_seq_length": 4096,
+    "logging_steps": 5,
+    "save_strategy": "epoch",
+    "fp16": false,
+    "bf16": true
+  },
+  "hardware_environment": {
+    "pytorch_version": "2.14.1+cpu",
+    "cuda_available": false,
+    "device": "CPU",
+    "gpu_count": 0,
+    "recommended_gpu": "NVIDIA A10G (24 GB) / RTX 4090 (24 GB) / T4 (16 GB with batch=1)"
+  }
+}

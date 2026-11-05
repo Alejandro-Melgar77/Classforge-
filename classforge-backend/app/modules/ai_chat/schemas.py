@@ -161,7 +161,12 @@ class AiProjectStateUpdateRequest(BaseModel):
 
 
 class ProposalStateUpdateRequest(BaseModel):
-    status: Literal["applied", "dismissed"]
+    status: Literal["applied", "dismissed", "approved", "rejected"]
+
+
+class ProposalApplyRequest(BaseModel):
+    diagram_id: Optional[str] = None
+    base_version: Optional[int] = None
 
 
 class AiRoleActivate(BaseModel):

@@ -53,7 +53,27 @@ export class CanvasToolbarComponent {
   redo() { this.canvasService.redo(); }
   deleteSelected() { this.canvasService.deleteSelected(); }
   fitView() { this.canvasService.fitView(); }
-  autoLayout() { this.canvasService.autoLayout(); }
+  autoLayout() {
+    if (!this.diagramId) {
+      this.canvasService.autoLayout();
+      return;
+    }
+    this.toastService.info('Reorganizando diagrama automáticamente...');
+    this.diagramService.autoLayout(this.diagramId).subscribe({
+      next: (res) => {
+        if (res.success && res.data?.graph_data) {
+          this.canvasService.fromGraphData(res.data.graph_data);
+          this.canvasService.fitView();
+          this.toastService.success('Diagrama reorganizado con éxito');
+        } else {
+          this.canvasService.autoLayout();
+        }
+      },
+      error: () => {
+        this.canvasService.autoLayout();
+      }
+    });
+  }
   zoomIn() { this.canvasService.zoomIn(); }
   zoomOut() { this.canvasService.zoomOut(); }
 

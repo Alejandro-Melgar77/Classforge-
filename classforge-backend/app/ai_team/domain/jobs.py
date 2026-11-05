@@ -27,6 +27,7 @@ class AiJob(BaseModel):
     max_attempts: int = 3
     run_after: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     lease_until: Optional[datetime] = None
+    worker_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     result_ref: Optional[Dict[str, Any]] = None

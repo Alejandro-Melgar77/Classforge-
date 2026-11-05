@@ -99,12 +99,14 @@ async def update_diagram_graph_data(
     Uses $push, $pull, and $set with arrayFilters (with atomic positional fallback).
     """
     db = _get_db()
-    if db is None or not element_id or not op:
-        return
+    if db is None:
+        raise RuntimeError('Almacenamiento no disponible')
+    if not element_id or not op:
+        raise ValueError('Operación de diagrama incompleta')
     try:
         obj_id = ObjectId(diagram_id) if not isinstance(diagram_id, ObjectId) else diagram_id
-    except Exception:
-        return
+    except Exception as exc:
+        raise ValueError('Identificador de diagrama inválido') from exc
 
     now = datetime.now(timezone.utc)
 

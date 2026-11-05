@@ -73,6 +73,11 @@ def get_provider(purpose: str = "chat", custom_provider: Optional[str] = None) -
     global _GLOBAL_PROVIDER
 
     if _GLOBAL_PROVIDER is not None:
+        if settings.AI_LOCAL_ONLY:
+            from app.llm.ollama import OllamaProvider
+            from app.llm.errors import LlmUnavailable
+            if not isinstance(_GLOBAL_PROVIDER, (OllamaProvider, FakeLlmProvider)):
+                raise LlmUnavailable("El modo local impide usar proveedores no autorizados")
         return _GLOBAL_PROVIDER
 
     provider_name = (custom_provider or "").strip().lower()
@@ -84,7 +89,14 @@ def get_provider(purpose: str = "chat", custom_provider: Optional[str] = None) -
             provider_name = candidate
 
     if not provider_name:
+        if settings.AI_LOCAL_ONLY:
+            from app.llm.errors import LlmUnavailable
+            raise LlmUnavailable("No hay un proveedor local configurado para esta función")
         provider_name = (settings.LLM_PROVIDER or "gemini").strip().lower()
+
+    if settings.AI_LOCAL_ONLY and provider_name not in ("ollama", "local", "fake"):
+        from app.llm.errors import LlmUnavailable
+        raise LlmUnavailable("El modo local impide usar proveedores en la nube")
 
     if provider_name == "fake":
         return get_fake_provider()

@@ -26,6 +26,7 @@ from app.modules.ai.router import router as ai_router
 from app.modules.codegen.router import router as codegen_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.ai_chat.router import router as ai_chat_router
+from app.modules.project_reviews.router import router as project_reviews_router, global_router as project_reviews_global_router
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,8 @@ app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(codegen_router, prefix=f"{settings.API_V1_STR}/codegen", tags=["codegen"])
 app.include_router(notifications_router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
 app.include_router(ai_chat_router, prefix=f"{settings.API_V1_STR}/ai-chat", tags=["ai-chat"])
+app.include_router(project_reviews_router, prefix=f"{settings.API_V1_STR}/projects/{{project_id}}/reviews", tags=["project-reviews"])
+app.include_router(project_reviews_global_router, prefix=f"{settings.API_V1_STR}/project-reviews", tags=["project-reviews"])
 
 
 @app.get("/", tags=["health"])
