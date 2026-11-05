@@ -37,7 +37,13 @@ class ApiService {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
-    _activeBaseUrl = prefs.getString('custom_base_url') ?? ApiConstants.baseUrl;
+    final savedUrl = prefs.getString('custom_base_url');
+    if (savedUrl != null && !savedUrl.contains('10.0.2.2') && !savedUrl.contains('localhost') && savedUrl.trim().isNotEmpty) {
+      _activeBaseUrl = savedUrl.trim();
+    } else {
+      _activeBaseUrl = ApiConstants.baseUrl;
+      await prefs.setString('custom_base_url', ApiConstants.baseUrl);
+    }
     _isOfflineDemoMode = prefs.getBool('is_offline_demo_mode') ?? false;
 
     final userJson = prefs.getString('current_user');
@@ -438,7 +444,7 @@ class ApiService {
   }
 
   Future<bool> login(String email, String password) async {
-    if (email.contains('classforge.io') || email.contains('admin')) {
+    if (email.trim().endsWith('@classforge.io')) {
       await enableOfflineDemoMode();
       return true;
     }
@@ -449,12 +455,12 @@ class ApiService {
             Uri.parse('$_activeBaseUrl${ApiConstants.login}'),
             headers: _headers(auth: false),
             body: jsonEncode({
-              'email': email,
+              'email': email.trim(),
               'password': password,
               'device_info': 'ClassForge Mobile (Flutter)'
             }),
           )
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -466,12 +472,17 @@ class ApiService {
         await prefs.setString('access_token', _accessToken!);
         await prefs.setBool('is_offline_demo_mode', false);
 
-        await fetchCurrentUser();
+        if (tokenData['user'] != null) {
+          _currentUser = UserModel.fromJson(tokenData['user']);
+          await prefs.setString('current_user', jsonEncode(_currentUser!.toJson()));
+        } else {
+          await fetchCurrentUser();
+        }
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint('Login error: $e');
+      debugPrint('Login error: ');
       return false;
     }
   }
@@ -484,7 +495,7 @@ class ApiService {
             Uri.parse('$_activeBaseUrl${ApiConstants.me}'),
             headers: _headers(),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -516,7 +527,7 @@ class ApiService {
             Uri.parse('$_activeBaseUrl${ApiConstants.stats}'),
             headers: _headers(),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -547,7 +558,7 @@ class ApiService {
             Uri.parse(url),
             headers: _headers(),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -569,7 +580,7 @@ class ApiService {
             Uri.parse('$_activeBaseUrl/teams'),
             headers: _headers(),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -591,7 +602,7 @@ class ApiService {
             Uri.parse('$_activeBaseUrl/users'),
             headers: _headers(),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -607,13 +618,13 @@ class ApiService {
   Future<List<DiagramModel>> getDiagrams({String? projectId}) async {
     if (!_isOfflineDemoMode && _accessToken != null) {
       try {
-        String url = '';
+        String url = '$_activeBaseUrl${ApiConstants.diagrams}';
         if (projectId != null && projectId.isNotEmpty) {
-          url += '?project_id=';
+          url += '?project_id=$projectId';
         }
         final response = await http
             .get(Uri.parse(url), headers: _headers())
-            .timeout(const Duration(seconds: 8));
+            .timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -645,7 +656,7 @@ class ApiService {
               Uri.parse('$_activeBaseUrl${ApiConstants.diagrams}/$diagramId'),
               headers: _headers(),
             )
-            .timeout(const Duration(seconds: 3));
+            .timeout(const Duration(seconds: 12));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -664,7 +675,7 @@ class ApiService {
       try {
         final response = await http
             .get(
-              Uri.parse('//ws-token'),
+              Uri.parse('$_activeBaseUrl${ApiConstants.diagrams}/$diagramId/ws-token'),
               headers: _headers(),
             )
             .timeout(const Duration(seconds: 5));
@@ -800,13 +811,13 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse(target.replaceAll('/api/v1', '')))
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 12));
       return response.statusCode == 200;
     } catch (_) {
       try {
         final response = await http
             .get(Uri.parse(target))
-            .timeout(const Duration(seconds: 3));
+            .timeout(const Duration(seconds: 12));
         return response.statusCode < 500;
       } catch (_) {
         return false;
@@ -826,7 +837,7 @@ class ApiService {
                 'new_password': newPassword,
               }),
             )
-            .timeout(const Duration(seconds: 4));
+            .timeout(const Duration(seconds: 12));
 
         return response.statusCode == 200;
       } catch (e) {
@@ -862,7 +873,7 @@ class ApiService {
                 'avatar_url': avatarUrl,
               }),
             )
-            .timeout(const Duration(seconds: 4));
+            .timeout(const Duration(seconds: 12));
 
         return response.statusCode == 200;
       } catch (e) {
@@ -1098,7 +1109,7 @@ class ApiService {
     if (!_isOfflineDemoMode) {
       try {
         final url = '$_activeBaseUrl/notifications?page=$page&limit=$limit&unread_only=$unreadOnly';
-        final response = await http.get(Uri.parse(url), headers: _headers()).timeout(const Duration(seconds: 4));
+        final response = await http.get(Uri.parse(url), headers: _headers()).timeout(const Duration(seconds: 12));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -1124,7 +1135,7 @@ class ApiService {
 
     if (!_isOfflineDemoMode) {
       try {
-        await http.put(Uri.parse('$_activeBaseUrl/notifications/$id/read'), headers: _headers()).timeout(const Duration(seconds: 3));
+        await http.put(Uri.parse('$_activeBaseUrl/notifications/$id/read'), headers: _headers()).timeout(const Duration(seconds: 12));
       } catch (_) {}
     }
     return true;
@@ -1137,7 +1148,7 @@ class ApiService {
 
     if (!_isOfflineDemoMode) {
       try {
-        await http.put(Uri.parse('$_activeBaseUrl/notifications/read-all'), headers: _headers()).timeout(const Duration(seconds: 3));
+        await http.put(Uri.parse('$_activeBaseUrl/notifications/read-all'), headers: _headers()).timeout(const Duration(seconds: 12));
       } catch (_) {}
     }
     return _mockNotifications.length;
@@ -1148,7 +1159,7 @@ class ApiService {
 
     if (!_isOfflineDemoMode) {
       try {
-        await http.delete(Uri.parse('$_activeBaseUrl/notifications/$id'), headers: _headers()).timeout(const Duration(seconds: 3));
+        await http.delete(Uri.parse('$_activeBaseUrl/notifications/$id'), headers: _headers()).timeout(const Duration(seconds: 12));
       } catch (_) {}
     }
     return true;

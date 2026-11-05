@@ -16,13 +16,20 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    List<String> parsedTeamIds = [];
+    if (json['team_ids'] is List) {
+      parsedTeamIds = (json['team_ids'] as List).map((e) => e.toString()).toList();
+    } else if (json['team_ids'] is String && (json['team_ids'] as String).isNotEmpty) {
+      parsedTeamIds = (json['team_ids'] as String).split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+
     return UserModel(
       id: json['id'] ?? json['_id'] ?? '',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       role: json['role'] ?? 'dev',
       avatarUrl: json['avatar_url'],
-      teamIds: (json['team_ids'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      teamIds: parsedTeamIds,
     );
   }
 
