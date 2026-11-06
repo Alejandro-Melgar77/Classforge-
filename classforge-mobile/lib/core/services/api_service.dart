@@ -39,18 +39,24 @@ class ApiService {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
+    // Forzar el backend cloud en producción de Render como base predeterminada
     final savedUrl = prefs.getString('custom_base_url');
     if (savedUrl != null &&
         savedUrl.trim().isNotEmpty &&
-        savedUrl.startsWith('http') &&
-        !savedUrl.contains('10.0.2.2') &&
-        !savedUrl.contains('localhost') &&
-        !savedUrl.contains('127.0.0.1')) {
+        savedUrl.contains('onrender.com') &&
+        savedUrl.contains('-8a14')) {
       _activeBaseUrl = savedUrl.trim();
     } else {
       _activeBaseUrl = ApiConstants.baseUrl;
       await prefs.setString('custom_base_url', ApiConstants.baseUrl);
     }
+
+    // Ping en segundo plano para despertar la instancia de Render si estaba en suspensión
+    try {
+      http.get(Uri.parse('https://classforge-backend-8a14.onrender.com/health'))
+          .timeout(const Duration(seconds: 15))
+          .catchError((_) => http.Response('', 500));
+    } catch (_) {}
 
     // Purge fake mock tokens or non-production JWTs to always ensure cloud connectivity
     if (_accessToken == 'classforge_production_session_jwt' ||
@@ -479,53 +485,60 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_offline_demo_mode', false);
 
-    try {
-      final endpoint = '$_activeBaseUrl${ApiConstants.login}';
-      debugPrint('POST $endpoint con $cleanEmail');
+    int maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final endpoint = '$_activeBaseUrl${ApiConstants.login}';
+        debugPrint('POST $endpoint con $cleanEmail (intento $attempt)');
 
-      final response = await http
-          .post(
-            Uri.parse(endpoint),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'email': cleanEmail,
-              'password': password,
-              'device_info': 'ClassForge Mobile (Android Release)'
-            }),
-          )
-          .timeout(const Duration(seconds: 35));
+        final response = await http
+            .post(
+              Uri.parse(endpoint),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'email': cleanEmail,
+                'password': password,
+                'device_info': 'ClassForge Mobile (Android Release)'
+              }),
+            )
+            .timeout(const Duration(seconds: 45));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final tokenData = data['data'];
-        _accessToken = tokenData['access_token'];
-        _isOfflineDemoMode = false;
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final tokenData = data['data'];
+          _accessToken = tokenData['access_token'];
+          _isOfflineDemoMode = false;
 
-        await prefs.setString('access_token', _accessToken!);
-        await prefs.setBool('is_offline_demo_mode', false);
+          await prefs.setString('access_token', _accessToken!);
+          await prefs.setBool('is_offline_demo_mode', false);
 
-        if (tokenData['user'] != null) {
-          _currentUser = UserModel.fromJson(tokenData['user']);
-          await prefs.setString('current_user', jsonEncode(_currentUser!.toJson()));
+          if (tokenData['user'] != null) {
+            _currentUser = UserModel.fromJson(tokenData['user']);
+            await prefs.setString('current_user', jsonEncode(_currentUser!.toJson()));
+          } else {
+            await fetchCurrentUser();
+          }
+          return true;
         } else {
-          await fetchCurrentUser();
+          String msg = 'Error ${response.statusCode}';
+          try {
+            final errData = jsonDecode(response.body);
+            msg = errData['detail'] ?? errData['message'] ?? msg;
+          } catch (_) {}
+          _lastLoginError = msg;
+          debugPrint('Login rechazado: $msg');
+          return false;
         }
-        return true;
-      } else {
-        String msg = 'Error ${response.statusCode}';
-        try {
-          final errData = jsonDecode(response.body);
-          msg = errData['detail'] ?? errData['message'] ?? msg;
-        } catch (_) {}
-        _lastLoginError = msg;
-        debugPrint('Login rechazado: $msg');
-        return false;
+      } catch (e) {
+        debugPrint('Excepción en login intento $attempt: $e');
+        if (attempt == maxAttempts) {
+          _lastLoginError = 'No se pudo conectar al servidor cloud: $e';
+          return false;
+        }
+        await Future.delayed(const Duration(milliseconds: 1500));
       }
-    } catch (e) {
-      _lastLoginError = 'No se pudo conectar al servidor cloud: $e';
-      debugPrint('Excepción en login: $e');
-      return false;
     }
+    return false;
   }
 
   Future<void> fetchCurrentUser() async {

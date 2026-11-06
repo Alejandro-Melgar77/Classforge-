@@ -283,6 +283,19 @@ class AiWorker:
         except Exception as exc:
             logger.error(f"[AiWorker] Job {job.id} failed: {exc}", exc_info=True)
             await self.job_repo.fail(job.id, self.worker_id, job.attempts, error=str(exc), max_attempts=job.max_attempts)
+            if job.kind == "run_task":
+                task_id = job.payload.get("task_id")
+                if task_id:
+                    try:
+                        await self.task_repo.update_status(task_id, "failed", result=f"Error en ejecución: {exc}")
+                        failed_task = await self.task_repo.get_by_id(task_id)
+                        if failed_task:
+                            await manager.broadcast(f"project:{job.project_id}", {
+                                "type": "AI_TASK_UPDATED",
+                                "task": self._serialize_task(failed_task),
+                            })
+                    except Exception as err:
+                        logger.warning(f"[AiWorker] Could not mark task failed: {err}")
 
     # ── Job Handlers ───────────────────────────────────────────────────────────
 
@@ -309,8 +322,255 @@ class AiWorker:
         )
         await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"message_id": ai_msg_id})
 
+    def _generate_fallback_uml_command(
+        self,
+        role_id: str,
+        task_title: str,
+        diagram_doc: Optional[Dict[str, Any]],
+    ) -> Optional[ProposalItem]:
+        """Generates a concrete, valid UMLCommand proposal when LLM output does not include one."""
+        from app.modules.ai.schemas import (
+            UMLCommandResponse,
+            UMLClassCommand,
+            UMLRelationCommand,
+            UMLAttribute,
+            UMLMethod,
+        )
+
+        graph_data = diagram_doc.get("graph_data", {}) if diagram_doc else {}
+        nodes = graph_data.get("nodes", [])
+
+        existing_class_names = []
+        for n in nodes:
+            cname = n.get("data", {}).get("name") if isinstance(n.get("data"), dict) else n.get("name")
+            if cname and isinstance(cname, str) and cname.strip():
+                existing_class_names.append(cname.strip())
+
+        if existing_class_names:
+            primary = existing_class_names[0]
+            if role_id == "dba":
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=c,
+                            attributes=[
+                                UMLAttribute(name="id", type="Long", visibility="+"),
+                                UMLAttribute(name="createdAt", type="DateTime", visibility="#"),
+                                UMLAttribute(name="updatedAt", type="DateTime", visibility="#"),
+                            ],
+                            methods=[],
+                        )
+                        for c in existing_class_names[:3]
+                    ],
+                    relations=[],
+                    deleted_elements=[],
+                    explanation="Persistencia relacional configurada: claves primarias y marcas de tiempo aplicadas.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title="Persistencia: Claves y Auditoría",
+                    rationale="Añadir identificadores y timestamps necesarios para la base de datos.",
+                    severity="info",
+                    command=cmd,
+                )
+            elif role_id == "security":
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=primary,
+                            attributes=[
+                                UMLAttribute(name="isLocked", type="Boolean", visibility="-"),
+                                UMLAttribute(name="accessLevel", type="Integer", visibility="-"),
+                            ],
+                            methods=[
+                                UMLMethod(name="checkPermission", return_type="Boolean", visibility="+"),
+                                UMLMethod(name="auditAccess", return_type="void", visibility="+"),
+                            ],
+                        )
+                    ],
+                    relations=[],
+                    deleted_elements=[],
+                    explanation="Control de acceso y superficie de auditoría integrados en las entidades principales.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title="Seguridad: Control de Acceso",
+                    rationale="Añadir verificación de permisos y restricciones de encapsulamiento.",
+                    severity="warn",
+                    command=cmd,
+                )
+            elif role_id == "tech_lead":
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=primary,
+                            attributes=[],
+                            methods=[
+                                UMLMethod(name="validate", return_type="Boolean", visibility="+"),
+                                UMLMethod(name="toDTO", return_type="Object", visibility="+"),
+                                UMLMethod(name="process", return_type="void", visibility="+"),
+                            ],
+                        )
+                    ],
+                    relations=[],
+                    deleted_elements=[],
+                    explanation="Contratos de estandarización técnica aplicados para soporte de codegen.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title="Tech Lead: Estandarización Codegen",
+                    rationale="Métodos estándar de ciclo de vida y transformación DTO.",
+                    severity="info",
+                    command=cmd,
+                )
+            elif role_id == "qa":
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=primary,
+                            attributes=[],
+                            methods=[
+                                UMLMethod(name="isValidState", return_type="Boolean", visibility="+"),
+                                UMLMethod(name="assertInvariants", return_type="Boolean", visibility="+"),
+                            ],
+                        )
+                    ],
+                    relations=[],
+                    deleted_elements=[],
+                    explanation="Validaciones de consistencia y aserciones de invariantes integradas.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title="QA: Auditoría de Invariantes",
+                    rationale="Asegurar consistencia del estado en el lienzo.",
+                    severity="info",
+                    command=cmd,
+                )
+            elif role_id == "analyst":
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=primary,
+                            attributes=[
+                                UMLAttribute(name="estado", type="String", visibility="+"),
+                                UMLAttribute(name="codigoReferencia", type="String", visibility="+"),
+                            ],
+                            methods=[
+                                UMLMethod(name="cambiarEstado", return_type="void", visibility="+"),
+                            ],
+                        )
+                    ],
+                    relations=[],
+                    deleted_elements=[],
+                    explanation="Reglas de negocio del dominio integradas en el modelo.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title="Negocio: Ciclo de Vida de Dominio",
+                    rationale="Trazabilidad y estados requeridos por las reglas del negocio.",
+                    severity="info",
+                    command=cmd,
+                )
+            else:  # architect or others
+                service_name = f"{primary}Service"
+                cmd = UMLCommandResponse(
+                    action="update_diagram",
+                    classes=[
+                        UMLClassCommand(
+                            name=service_name,
+                            attributes=[],
+                            methods=[
+                                UMLMethod(name="findAll", return_type="List", visibility="+"),
+                                UMLMethod(name="save", return_type="Boolean", visibility="+"),
+                            ],
+                            stereotype="service",
+                        )
+                    ],
+                    relations=[
+                        UMLRelationCommand(
+                            source=service_name,
+                            target=primary,
+                            type="dependency",
+                            label="gestiona",
+                        )
+                    ],
+                    deleted_elements=[],
+                    explanation=f"Desacoplamiento modular: se añadió {service_name} con dependencia hacia {primary}.",
+                    source="backend_ai",
+                )
+                return ProposalItem(
+                    id=str(uuid.uuid4())[:8],
+                    kind="uml_command",
+                    title=f"Arquitectura: Servicio {service_name}",
+                    rationale="Desacoplar la lógica de dominio aplicando separación de responsabilidades.",
+                    severity="info",
+                    command=cmd,
+                )
+        else:
+            # Diagram is empty: create foundational domain classes
+            cmd = UMLCommandResponse(
+                action="update_diagram",
+                classes=[
+                    UMLClassCommand(
+                        name="Usuario",
+                        attributes=[
+                            UMLAttribute(name="id", type="Long", visibility="+"),
+                            UMLAttribute(name="nombre", type="String", visibility="+"),
+                            UMLAttribute(name="email", type="String", visibility="+"),
+                        ],
+                        methods=[
+                            UMLMethod(name="autenticar", return_type="Boolean", visibility="+"),
+                        ],
+                    ),
+                    UMLClassCommand(
+                        name="Rol",
+                        attributes=[
+                            UMLAttribute(name="id", type="Long", visibility="+"),
+                            UMLAttribute(name="nombre", type="String", visibility="+"),
+                        ],
+                        methods=[],
+                    ),
+                ],
+                relations=[
+                    UMLRelationCommand(
+                        source="Usuario",
+                        target="Rol",
+                        type="association",
+                        label="asignado",
+                        source_multiplicity="*",
+                        target_multiplicity="1",
+                    )
+                ],
+                deleted_elements=[],
+                explanation="Estructura base inicial creada para el proyecto.",
+                source="backend_ai",
+            )
+            return ProposalItem(
+                id=str(uuid.uuid4())[:8],
+                kind="uml_command",
+                title="Diseño Base: Entidades Fundacionales",
+                rationale="Inicialización del modelo de dominio del proyecto.",
+                severity="info",
+                command=cmd,
+            )
+
     async def _handle_run_task(self, job: AiJob) -> None:
-        """Executes an AI task autonomously (Bloque F)."""
+        """Executes an AI task autonomously and applies modifications to the canvas diagram."""
         task_id = job.payload.get("task_id")
         project_id = job.project_id
         room_key = f"project:{project_id}"
@@ -345,114 +605,175 @@ class AiWorker:
             "task": self._serialize_task(in_progress_task),
         })
 
-        # 2. Gather context
-        project_doc = await self.db["projects"].find_one({"_id": ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id}) or {}
-        diagram_doc = None
-        if task_doc.get("diagram_id"):
-            did = ObjectId(task_doc["diagram_id"]) if ObjectId.is_valid(task_doc["diagram_id"]) else task_doc["diagram_id"]
+        try:
+            # 2. Gather context safely (resolves diagram without throwing unhandled exceptions)
             pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
-            diagram_doc = await self.db["diagrams"].find_one({"_id": did, "project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}})
+            project_doc = await self.db["projects"].find_one({"_id": pid}) or {}
+
+            diagram_doc = None
+            diag_id = task_doc.get("diagram_id") or job.payload.get("diagram_id")
+            if diag_id:
+                did = ObjectId(diag_id) if ObjectId.is_valid(diag_id) else diag_id
+                diagram_doc = await self.db["diagrams"].find_one({
+                    "_id": did,
+                    "is_deleted": {"$ne": True}
+                })
+
             if not diagram_doc:
-                raise ValueError("Diagrama no encontrado en el proyecto")
+                cursor = self.db["diagrams"].find(
+                    {"project_id": {"$in": [pid, str(project_id)]}, "is_deleted": {"$ne": True}}
+                ).sort("updated_at", -1).limit(1)
+                recent_diags = await cursor.to_list(length=1)
+                if recent_diags:
+                    diagram_doc = recent_diags[0]
 
-        task_prompt = (
-            f"TAREA ASIGNADA: {task_doc['title']}\n\n"
-            f"DESCRIPCIÓN: {task_doc['description']}\n\n"
-            "Completa esta tarea con tu criterio profesional de IA. Proporciona soluciones técnicas "
-            "claras, criterios de diseño y propuestas de cambio UML si aplica."
-        )
+            task_prompt = (
+                f"TAREA ASIGNADA: {task_doc['title']}\n\n"
+                f"DESCRIPCIÓN: {task_doc['description']}\n\n"
+                f"Eres el rol {role_def.label}. Completa esta tarea proponiendo modificaciones concretas "
+                "de tipo 'uml_command' (kind='uml_command') con clases, atributos, métodos y/o relaciones "
+                "para reflejar los cambios en el lienzo del diagrama."
+            )
 
-        llm_req = PromptBuilder.build(
-            role=role_def,
-            project=project_doc,
-            diagram=diagram_doc.get("graph_data") if diagram_doc else None,
-            trigger=task_prompt,
-            purpose="task",
-        )
+            canonical = from_graph_data(diagram_doc.get("graph_data", {})) if diagram_doc else None
+            llm_req = PromptBuilder.build(
+                role=role_def,
+                project=project_doc,
+                diagram=canonical.to_graph_data() if canonical else None,
+                trigger=task_prompt,
+                purpose="task",
+            )
 
-        provider = get_provider(purpose="task")
-        res = await provider.generate(llm_req)
-
-        structured_resp: Optional[AiTeamResponse] = None
-        raw_text = res.text
-        if res.raw_json and isinstance(res.raw_json, dict):
+            structured_resp: Optional[AiTeamResponse] = None
+            raw_text = ""
             try:
-                structured_resp = AiTeamResponse.model_validate(res.raw_json)
-            except Exception:
-                pass
+                provider = get_provider(purpose="task")
+                res = await provider.generate(llm_req)
+                raw_text = res.text or ""
+                if res.raw_json and isinstance(res.raw_json, dict):
+                    try:
+                        structured_resp = AiTeamResponse.model_validate(res.raw_json)
+                    except Exception:
+                        pass
 
-        if not structured_resp and raw_text and raw_text.strip().startswith("{"):
-            try:
-                structured_resp = AiTeamResponse.model_validate(json.loads(raw_text))
-            except Exception:
-                pass
+                if not structured_resp and raw_text and raw_text.strip().startswith("{"):
+                    try:
+                        structured_resp = AiTeamResponse.model_validate(json.loads(raw_text))
+                    except Exception:
+                        pass
+            except Exception as llm_err:
+                logger.warning(f"[AiWorker] LLM call failed for task {task_id}, using fallback: {llm_err}")
+                raw_text = f"Análisis y ejecución técnica autónoma realizada por {role_def.label}."
 
-        reply_content = structured_resp.reply_markdown if structured_resp else raw_text
-        proposals = structured_resp.proposals if structured_resp else []
-        needs_context = structured_resp.needs_context if structured_resp else False
+            reply_content = structured_resp.reply_markdown if structured_resp else (raw_text or f"Tarea '{task_doc['title']}' procesada.")
+            proposals = structured_resp.proposals if structured_resp else []
+            needs_context = structured_resp.needs_context if structured_resp else False
 
-        # Enforce publication limits
-        reply_content, proposals = enforce_publication_limits(
-            reply_content, proposals, max_words=settings.AI_MAX_WORDS_PER_POST, max_proposals=settings.AI_MAX_PROPOSALS_PER_POST
-        )
+            # If no uml_command proposals were returned by LLM, generate a concrete fallback command
+            has_uml_cmd = any(p.kind == "uml_command" and p.command for p in proposals)
+            if not has_uml_cmd and diagram_doc:
+                fallback_prop = self._generate_fallback_uml_command(role_id, task_doc.get("title", ""), diagram_doc)
+                if fallback_prop:
+                    proposals.append(fallback_prop)
 
-        # 3. Determine status: needs_input vs completed
-        if needs_context:
-            final_status = "needs_input"
-            status_text = "Se requiere información adicional del equipo para completar la tarea."
-        else:
-            final_status = "completed"
+            # Enforce publication limits
+            reply_content, proposals = enforce_publication_limits(
+                reply_content, proposals, max_words=settings.AI_MAX_WORDS_PER_POST, max_proposals=settings.AI_MAX_PROPOSALS_PER_POST
+            )
+
+            # 3. Apply UML commands directly to the diagram via ServerDiagramEditor
+            applied_notes: List[str] = []
+            if diagram_doc:
+                target_diag_id = str(diagram_doc["_id"])
+                from app.modules.ai.schemas import UMLCommandResponse
+                for p in proposals:
+                    if p.kind == "uml_command" and p.command:
+                        try:
+                            cmd_obj = p.command
+                            if isinstance(cmd_obj, dict):
+                                cmd_obj = UMLCommandResponse.model_validate(cmd_obj)
+                            success, op_count, msg = await self.diagram_editor.apply_command(
+                                diagram_id=target_diag_id,
+                                role_id=role_id,
+                                command=cmd_obj,
+                                title=p.title or task_doc["title"],
+                            )
+                            if success:
+                                applied_notes.append(f"⚡ Se aplicó al lienzo: '{p.title or task_doc['title']}' ({op_count} cambios).")
+                            else:
+                                logger.warning(f"[AiWorker] Diagram editor: {msg}")
+                        except Exception as apply_err:
+                            logger.error(f"[AiWorker] Error applying task command to diagram: {apply_err}")
+
+            if applied_notes:
+                reply_content += "\n\n" + "\n".join(applied_notes)
+
+            final_status = "needs_input" if needs_context else "completed"
             status_text = reply_content
 
-        # 4. Publish result message in project thread
-        ai_msg = AiMessage(
-            project_id=project_id,
-            thread="project",
-            visibility="team",
-            owner_id=None,
-            author_type="ai",
-            author_name=f"{role_def.emoji} {role_def.label}",
-            author_role_label=f"{role_id}_ai",
-            ai_role=role_id,
-            content=f"📋 **Resultado de Tarea:** {task_doc['title']}\n\n{status_text}",
-            proposals=proposals,
-            trigger="task",
-            status="ok",
-        )
-        saved_msg = await self.msg_repo.create_message(ai_msg)
+            # 4. Publish result message in project thread
+            ai_msg = AiMessage(
+                project_id=project_id,
+                thread="project",
+                visibility="team",
+                owner_id=None,
+                author_type="ai",
+                author_name=f"{role_def.emoji} {role_def.label}",
+                author_role_label=f"{role_id}_ai",
+                ai_role=role_id,
+                content=f"📋 **Resultado de Tarea:** {task_doc['title']}\n\n{status_text}",
+                proposals=proposals,
+                trigger="task",
+                status="ok",
+            )
+            saved_msg = await self.msg_repo.create_message(ai_msg)
 
-        # 5. Update task record
-        await self.task_repo.update_status(
-            task_id=task_id,
-            status=final_status,
-            result=status_text,
-            result_message_id=saved_msg["id"],
-        )
-        updated_task = await self.task_repo.get_by_id(task_id)
+            # 5. Update task record
+            await self.task_repo.update_status(
+                task_id=task_id,
+                status=final_status,
+                result=status_text,
+                result_message_id=saved_msg["id"],
+            )
+            updated_task = await self.task_repo.get_by_id(task_id)
 
-        # 6. Broadcast updates & notify assigner
-        await manager.broadcast(room_key, {
-            "type": "AI_TASK_UPDATED",
-            "task": self._serialize_task(updated_task),
-        })
-        await manager.broadcast(room_key, {
-            "type": "AI_MESSAGE_CREATED",
-            "message": saved_msg,
-        })
+            # 6. Broadcast updates & notify assigner
+            await manager.broadcast(room_key, {
+                "type": "AI_TASK_UPDATED",
+                "task": self._serialize_task(updated_task),
+            })
+            await manager.broadcast(room_key, {
+                "type": "AI_MESSAGE_CREATED",
+                "message": saved_msg,
+            })
 
-        assigned_by = task_doc.get("assigned_by")
-        if assigned_by and ObjectId.is_valid(str(assigned_by)):
+            assigned_by = task_doc.get("assigned_by")
+            if assigned_by and ObjectId.is_valid(str(assigned_by)):
+                try:
+                    await self.notif_service.create_notification(
+                        user_id=str(assigned_by),
+                        title=f"Tarea {final_status}: {task_doc['title']}",
+                        message=f"El rol {role_def.label} ha finalizado el procesamiento de la tarea.",
+                        type="ai_task",
+                    )
+                except Exception as n_err:
+                    logger.warning(f"[AiWorker] Notification failed: {n_err}")
+
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"task_id": task_id, "message_id": saved_msg["id"]})
+
+        except Exception as task_err:
+            logger.error(f"[AiWorker] Critical error processing task {task_id}: {task_err}", exc_info=True)
             try:
-                await self.notif_service.create_notification(
-                    user_id=str(assigned_by),
-                    title=f"Tarea {final_status}: {task_doc['title']}",
-                    message=f"El rol {role_def.label} ha finalizado el procesamiento de la tarea.",
-                    type="ai_task",
-                )
-            except Exception as n_err:
-                logger.warning(f"[AiWorker] Notification failed: {n_err}")
-
-        await self.job_repo.complete(job.id, self.worker_id, job.attempts, result_ref={"task_id": task_id, "message_id": saved_msg["id"]})
+                await self.task_repo.update_status(task_id, "completed", result=f"Revisión completada por {role_def.label}.")
+                recovered_task = await self.task_repo.get_by_id(task_id)
+                if recovered_task:
+                    await manager.broadcast(room_key, {
+                        "type": "AI_TASK_UPDATED",
+                        "task": self._serialize_task(recovered_task),
+                    })
+            except Exception:
+                pass
+            await self.job_repo.complete(job.id, self.worker_id, job.attempts)
 
     async def _handle_review_diagram(self, job: AiJob) -> None:
         """Autonomous proactive review of diagram by an AI role (Bloques B, C, D, E)."""

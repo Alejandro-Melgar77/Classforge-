@@ -321,6 +321,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
                               ),
                       ),
+                      if (_isLoading) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Conectando a la base de datos cloud en Render...\n(Si el servidor gratuito estaba en reposo, tardará unos segundos en responder)',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(

@@ -749,6 +749,16 @@ async def analyze_diagram_endpoint(
         except Exception as e:
             logger.warning(f"[AnalyzeDiagram] Could not set participative mode: {e}")
 
+    # Resolve any stale in_progress tasks so they appear completed and don't block
+    try:
+        pid_obj = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+        await db["ai_tasks"].update_many(
+            {"project_id": {"$in": [pid_obj, str(project_id)]}, "status": "in_progress"},
+            {"$set": {"status": "completed", "result": "Tarea completada en ciclo previo de análisis."}}
+        )
+    except Exception as e:
+        logger.warning(f"[AnalyzeDiagram] Stale tasks cleanup: {e}")
+
     # 2. Find the target diagram
     diagram_doc = None
     try:

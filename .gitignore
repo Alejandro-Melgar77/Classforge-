@@ -6,6 +6,7 @@ agents/
 scratch/
 build_backend.py
 *.apk
+!Classforge-Visualizer.apk
 *.apk.zip
 *.exe
 pruebas*/

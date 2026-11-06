@@ -202,6 +202,14 @@ class ServerDiagramEditor:
                     })
                     applied_ops += 1
 
+            # Broadcast full updated graph to ensure complete sync
+            await manager.broadcast(room_key, {
+                "type": "GRAPH_UPDATED",
+                "graph_data": new_graph,
+                "version": diagram_doc.get("version", 1) + 1,
+                "user_id": bot_user_id,
+            })
+
             # Optional AI_FOCUS event (TODO P7b / lienzo highlighting)
             focus_ids = [n.id for n in simulated_canonical.nodes if not canonical.get_node(n.id)]
             if focus_ids:

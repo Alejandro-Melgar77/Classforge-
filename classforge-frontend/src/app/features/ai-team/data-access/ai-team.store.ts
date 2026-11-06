@@ -363,15 +363,26 @@ export class AiTeamStore implements OnDestroy {
             this._unreadProject.update((c) => c + 1);
           }
         }
-        // Notify when AI proactively applied diagram changes
+        // Notify and apply when AI proactively or via task produced diagram changes
         if (
-          event.message.trigger === 'proactive_review' &&
           event.message.author_type === 'ai' &&
           event.message.proposals &&
           event.message.proposals.length > 0
         ) {
           const applied = event.message.proposals.filter(p => p.kind === 'uml_command');
           if (applied.length > 0) {
+            // In participative mode, apply proposals directly to the canvas
+            if (this.isParticipativeEnabled() && this._projectId()) {
+              for (const p of applied) {
+                void this.commandBridge.applyProposal(
+                  this._projectId()!,
+                  event.message.id,
+                  p,
+                  this._currentDiagramId() || undefined,
+                  undefined
+                );
+              }
+            }
             this.pushNotification({
               title: `🔧 ${event.message.author_name} aplicó cambios`,
               message: `${applied.length} modificación(es) al diagrama: "${applied[0].title}"`,

@@ -265,7 +265,8 @@ export class CollaborationService implements OnDestroy {
       }
 
       case 'NODE_OPERATION':
-      case 'EDGE_OPERATION': {
+      case 'EDGE_OPERATION':
+      case 'GRAPH_UPDATED': {
         this.remoteOperationsSubj.next(msg);
         break;
       }

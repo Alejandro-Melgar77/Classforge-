@@ -439,6 +439,18 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
   // ─── Manejo de Operaciones Remotas ───────────────────────────
   private handleRemoteOperation(msg: any) {
     if (!this.graph) return;
+    if (msg.type === 'GRAPH_UPDATED' && msg.graph_data) {
+      this.isApplyingRemoteUpdate = true;
+      try {
+        this.canvasService.fromGraphData(msg.graph_data);
+      } finally {
+        this.isApplyingRemoteUpdate = false;
+        this.triggerCodegenPreview();
+        this.updateFloatingToolbarsPosition();
+        this.cdr.markForCheck();
+      }
+      return;
+    }
     this.isApplyingRemoteUpdate = true;
     try {
       const isNodeOp = msg.type === 'NODE_OPERATION' || msg.type === 'node_operation';
