@@ -4,7 +4,11 @@ import {
   inject,
   signal,
   computed,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+  effect
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AiTeamHeaderComponent } from '../ai-team-header/ai-team-header.component';
@@ -24,7 +28,7 @@ const TASK_COLUMNS: TaskStatus[] = ['pending', 'in_progress', 'needs_input', 'co
   styleUrl: './ai-team-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AiTeamPanelComponent {
+export class AiTeamPanelComponent implements OnInit, OnChanges {
   @Input() diagramId?: string;
   @Input() projectId?: string;
 
@@ -33,6 +37,32 @@ export class AiTeamPanelComponent {
 
   public readonly i18n = AI_TEAM_I18N;
   public readonly taskColumns = TASK_COLUMNS;
+
+  constructor() {
+    // When analysis starts or completes, automatically bring the tasks tab forward
+    effect(() => {
+      const status = this.store.analysisStatus();
+      if (status === 'analyzing' || status === 'complete') {
+        this.activeSubTab.set('tasks');
+      }
+    }, { allowSignalWrites: true });
+  }
+
+  ngOnInit(): void {
+    if (this.diagramId) {
+      this.store.setCurrentDiagramId(this.diagramId);
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['diagramId'] && this.diagramId) {
+      this.store.setCurrentDiagramId(this.diagramId);
+    }
+  }
+
+  public async onManualAnalyze(): Promise<void> {
+    await this.store.triggerDiagramAnalysis(this.projectId, this.diagramId);
+  }
 
   public selectSubTab(tab: AiTeamSubTab): void {
     this.activeSubTab.set(tab);

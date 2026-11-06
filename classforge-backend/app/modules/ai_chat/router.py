@@ -708,3 +708,155 @@ async def dismiss_finding(
     if not success:
         raise NotFoundError("Hallazgo no encontrado o no activo")
     return {"success": True, "message": "Hallazgo descartado correctamente"}
+
+
+# ── Autonomous Diagram Analysis ───────────────────────────────────────────────
+
+@router.post(
+    "/projects/{project_id}/analyze-diagram",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Triggers autonomous diagram analysis and creates tasks for active roles",
+)
+async def analyze_diagram_endpoint(
+    project_id: str,
+    diagram_id: Optional[str] = Query(None),
+    project: dict = Depends(require_project_member),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """
+    1. Finds the diagram (current or most recent).
+    2. Runs linter on diagram to detect real inconsistencies/findings.
+    3. Creates AiTask records for detected issues and active specialist roles.
+    4. Triggers background review jobs.
+    5. Broadcasts AI_ANALYSIS_STARTED to WS room.
+    Returns list of created task IDs.
+    """
+    from app.ai_team.application.triggers import get_triggers
+    from app.ai_team.domain.roles import get_role, ROLES_REGISTRY
+    from app.ai_team.domain.diagram_model import from_graph_data
+    from app.ai_team.domain.lint import lint_diagram
+
+    user_id = str(current_user["_id"])
+    triggers = get_triggers(db)
+
+    # 1. Ensure participative mode is enabled in project state
+    state_repo = AiProjectStateRepository(db)
+    state = await state_repo.get_or_create(project_id)
+    if not state.get("participative", {}).get("enabled", False):
+        try:
+            state = await state_repo.set_participative(project_id, True, user_id)
+        except Exception as e:
+            logger.warning(f"[AnalyzeDiagram] Could not set participative mode: {e}")
+
+    # 2. Find the target diagram
+    diagram_doc = None
+    try:
+        pid_obj = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+        if diagram_id:
+            did_obj = ObjectId(diagram_id) if ObjectId.is_valid(diagram_id) else diagram_id
+            diagram_doc = await db["diagrams"].find_one({
+                "_id": did_obj,
+                "project_id": {"$in": [pid_obj, str(project_id)]},
+                "is_deleted": {"$ne": True}
+            })
+
+        if not diagram_doc:
+            cursor = db["diagrams"].find(
+                {"project_id": pid_obj, "is_deleted": {"$ne": True}}
+            ).sort("updated_at", -1).limit(1)
+            diagrams = await cursor.to_list(length=1)
+            if diagrams:
+                diagram_doc = diagrams[0]
+                diagram_id = str(diagram_doc["_id"])
+    except Exception as e:
+        logger.warning(f"[AnalyzeDiagram] Could not fetch diagram: {e}")
+
+    task_repo = AiTaskRepository(db)
+    created_tasks: List[str] = []
+
+    # 3. If diagram found, lint it to detect real domain tasks
+    findings = []
+    if diagram_doc and diagram_doc.get("graph_data"):
+        try:
+            canonical_diagram = from_graph_data(diagram_doc["graph_data"])
+            findings = lint_diagram(canonical_diagram)
+        except Exception as e:
+            logger.warning(f"[AnalyzeDiagram] Error during diagram lint: {e}")
+
+    # Create tasks from findings if any
+    for finding in findings[:4]:
+        try:
+            target_role = "qa" if finding.severity in ("warn", "critical") else "architect"
+            task_data = AiTaskCreate(
+                ai_role=target_role,
+                title=f"Resolver: {finding.title}",
+                description=f"{finding.description}. Sugerencia: {finding.suggestion or 'Corregir inconsistencia en el lienzo.'}",
+                diagram_id=diagram_id,
+            )
+            task_id = await task_repo.create(project_id, user_id, task_data)
+            if task_id:
+                created_tasks.append(str(task_id))
+        except Exception as e:
+            logger.warning(f"[AnalyzeDiagram] Could not create finding task: {e}")
+
+    # 4. Also create domain tasks for active roles that don't have pending tasks
+    for role_cfg in state.get("roles", []):
+        role_id = role_cfg.get("role_id")
+        if not role_cfg.get("enabled", True):
+            continue
+        autonomy = role_cfg.get("autonomy", "suggest")
+        if autonomy == "off":
+            continue
+        if role_id not in ROLES_REGISTRY:
+            continue
+        try:
+            role_def = get_role(role_id)
+            # Custom title per role
+            role_action_map = {
+                "architect": ("Revisión de arquitectura y modularidad", "Evaluar cohesión de clases y dependencias circulares en el lienzo."),
+                "qa": ("Auditoría de consistencia y cardinalidades", "Verificar multiplicidades, nomenclatura y relaciones huérfanas."),
+                "tech_lead": ("Factibilidad para codegen", "Verificar que las clases tengan visibilidad, tipos de retorno y convenciones limpias."),
+                "dba": ("Diseño de persistencia relacional", "Verificar claves foráneas, normalización y tipos de atributos."),
+                "security": ("Auditoría de control de acceso", "Verificar encapsulamiento y superficie de exposición de métodos."),
+                "analyst": ("Verificación de requisitos de negocio", "Validar trazabilidad entre casos de uso y modelos de dominio."),
+            }
+            title, desc = role_action_map.get(
+                role_id,
+                (f"Revisión autónoma: {role_def.label}", f"Analizar diagrama como {role_def.label}.")
+            )
+            task_data = AiTaskCreate(
+                ai_role=role_id,
+                title=title,
+                description=desc,
+                diagram_id=diagram_id,
+            )
+            task_id = await task_repo.create(project_id, user_id, task_data)
+            if task_id:
+                created_tasks.append(str(task_id))
+        except Exception as e:
+            logger.warning(f"[AnalyzeDiagram] Could not create task for {role_id}: {e}")
+
+    # 5. Trigger background review jobs (non-blocking)
+    if diagram_id:
+        try:
+            await triggers._evaluate_diagram_after_debounce(project_id, diagram_id)
+        except Exception as e:
+            logger.warning(f"[AnalyzeDiagram] evaluate_diagram trigger failed: {e}")
+
+    # 6. Broadcast task list refresh signal
+    try:
+        await manager.broadcast(f"project:{project_id}", {
+            "type": "AI_ANALYSIS_STARTED",
+            "task_ids": created_tasks,
+            "diagram_id": diagram_id,
+        })
+    except Exception as e:
+        logger.warning(f"[AnalyzeDiagram] Broadcast failed: {e}")
+
+    return {
+        "success": True,
+        "task_ids": created_tasks,
+        "diagram_id": diagram_id,
+        "tasks_created": len(created_tasks),
+    }

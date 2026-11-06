@@ -71,6 +71,10 @@ export class AiTeamStore implements OnDestroy {
   private _availableModels = signal<string[]>(['gemini-3.8-flash']);
   private _activeModel = signal<string>('gemini-3.8-flash');
 
+  // Autonomous Diagram Analysis Status
+  private _analysisStatus = signal<'idle' | 'analyzing' | 'complete'>('idle');
+  private _currentDiagramId = signal<string | null>(null);
+
   // Polling fallback state
   private pollingTimer: any = null;
   private pollingIntervalMs = 5000;
@@ -111,6 +115,8 @@ export class AiTeamStore implements OnDestroy {
 
   public availableModels = this._availableModels.asReadonly();
   public activeModel = this._activeModel.asReadonly();
+  public analysisStatus = this._analysisStatus.asReadonly();
+  public currentDiagramId = this._currentDiagramId.asReadonly();
 
   public isParticipativeEnabled = computed(() => this._state()?.participative?.enabled ?? false);
   public isLocalOnly = computed(() => this._state()?.local_only ?? false);
@@ -428,6 +434,20 @@ export class AiTeamStore implements OnDestroy {
       }
       case 'PRESENCE': {
         this._presence.set(event.members || []);
+        break;
+      }
+      case 'AI_ANALYSIS_STARTED': {
+        const pid = this._projectId();
+        if (pid) {
+          this.api.listTasks(pid).subscribe({
+            next: (res) => {
+              this._tasks.set(res.tasks || []);
+              if (this.isParticipativeEnabled()) {
+                void this.autoExecutePendingTasks(pid);
+              }
+            }
+          });
+        }
         break;
       }
     }
@@ -826,6 +846,52 @@ export class AiTeamStore implements OnDestroy {
     this._aiNotifications.update(list => list.filter(n => n.id !== id));
   }
 
+  public setCurrentDiagramId(id?: string | null): void {
+    this._currentDiagramId.set(id || null);
+  }
+
+  public async triggerDiagramAnalysis(projectId?: string, diagramId?: string): Promise<void> {
+    const pid = projectId || this._projectId();
+    if (!pid) return;
+    const did = diagramId || this._currentDiagramId() || undefined;
+
+    this._analysisStatus.set('analyzing');
+    this.pushNotification({
+      title: '🔍 Analizando diagrama...',
+      message: 'La IA está revisando la estructura y detectando tareas necesarias.',
+      type: 'review'
+    });
+
+    try {
+      const result = await firstValueFrom(this.api.analyzeDiagram(pid, did));
+
+      // Refresh task list
+      const tasksRes = await firstValueFrom(this.api.listTasks(pid));
+      this._tasks.set(tasksRes.tasks || []);
+
+      this._analysisStatus.set('complete');
+      const count = result.tasks_created || result.task_ids?.length || 0;
+      this.pushNotification({
+        title: '✅ Análisis completo',
+        message: `Se crearon ${count} tarea(s) en la lista. Iniciando ejecución autónoma...`,
+        type: 'task'
+      });
+
+      // Auto-execute newly created tasks
+      await this.autoExecutePendingTasks(pid);
+
+      // Reset to idle after 12 seconds
+      setTimeout(() => {
+        if (this._analysisStatus() === 'complete') {
+          this._analysisStatus.set('idle');
+        }
+      }, 12000);
+    } catch {
+      this._analysisStatus.set('idle');
+      this._errorMessage.set('Error al analizar el diagrama del lienzo.');
+    }
+  }
+
   public async toggleParticipative(): Promise<void> {
     const pid = this._projectId();
     const curState = this._state();
@@ -851,9 +917,9 @@ export class AiTeamStore implements OnDestroy {
       this._state.set(updated);
       this.syncRolesWithState(updated);
 
-      // When enabling participative mode, auto-execute all pending tasks
+      // When enabling participative mode, auto-analyze diagram and execute tasks
       if (newEnabled) {
-        await this.autoExecutePendingTasks(pid);
+        void this.triggerDiagramAnalysis(pid, this._currentDiagramId() || undefined);
       }
     } catch {
       // Revert optimistic update
@@ -927,6 +993,9 @@ export class AiTeamStore implements OnDestroy {
 
     try {
       await firstValueFrom(this.api.setRole(pid, roleId, enabled));
+      if (enabled && this.isParticipativeEnabled()) {
+        void this.triggerDiagramAnalysis(pid, this._currentDiagramId() || undefined);
+      }
     } catch {
       this._errorMessage.set(`Error al cambiar el estado del rol ${roleId}.`);
     }
@@ -949,6 +1018,9 @@ export class AiTeamStore implements OnDestroy {
       );
       this._state.set(updated);
       this.syncRolesWithState(updated);
+      if (autonomy !== 'off' && this.isParticipativeEnabled()) {
+        void this.triggerDiagramAnalysis(pid, this._currentDiagramId() || undefined);
+      }
     } catch (err: any) {
       if (err?.status === 403) {
         this._errorMessage.set(
@@ -1160,6 +1232,8 @@ export class AiTeamStore implements OnDestroy {
     this._nextCursor.set(null);
     this._errorMessage.set(null);
     this._forbidden.set(false);
+    this._analysisStatus.set('idle');
+    this._currentDiagramId.set(null);
   }
 
   ngOnDestroy(): void {

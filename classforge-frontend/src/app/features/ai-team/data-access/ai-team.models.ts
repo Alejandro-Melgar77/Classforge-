@@ -229,4 +229,5 @@ export type WsServerEvent =
   | { type: 'AI_MESSAGE_UPDATED'; message: AiMessage }
   | { type: 'AI_STATE_CHANGED'; state: AiProjectState }
   | { type: 'AI_TASK_UPDATED'; task: AiTask }
+  | { type: 'AI_ANALYSIS_STARTED'; task_ids: string[]; diagram_id?: string }
   | { type: 'PONG' };

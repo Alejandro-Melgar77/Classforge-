@@ -213,6 +213,18 @@ export class AiTeamApiService {
     return this.http.get<WsTokenResponse>(url);
   }
 
+  public analyzeDiagram(
+    projectId: string,
+    diagramId?: string
+  ): Observable<{ success: boolean; task_ids: string[]; diagram_id?: string; tasks_created: number }> {
+    const url = `${this.baseUrl}/projects/${projectId}/analyze-diagram`;
+    let params = new HttpParams();
+    if (diagramId) params = params.set('diagram_id', diagramId);
+    return this.http.post<{ success: boolean; task_ids: string[]; diagram_id?: string; tasks_created: number }>(
+      url, {}, { params, headers: this.getCustomHeaders() }
+    );
+  }
+
   public getAiHealth(): Observable<AiHealthResponse> {
     const url = `${environment.apiUrl}/ai/health`;
     return this.http.get<AiHealthResponse>(url);
