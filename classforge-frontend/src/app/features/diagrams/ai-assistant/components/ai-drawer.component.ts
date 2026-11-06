@@ -57,6 +57,9 @@ export class AiDrawerComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['diagramId'] && this.diagramId) {
+      this.store.setCurrentDiagramId(this.diagramId);
+    }
     if (changes['projectId'] && !changes['projectId'].firstChange) {
       this.syncTeamSession();
     }
@@ -71,6 +74,9 @@ export class AiDrawerComponent implements OnInit, OnDestroy, OnChanges {
       const user = this.authService.getCurrentUser();
       this.store.setSocketService(this.socketService);
       this.store.init(this.projectId, user?.id, user?.name);
+      if (this.diagramId) {
+        this.store.setCurrentDiagramId(this.diagramId);
+      }
     }
   }
 

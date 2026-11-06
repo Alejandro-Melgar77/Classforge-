@@ -461,6 +461,20 @@ export class AiTeamStore implements OnDestroy {
         }
         break;
       }
+      case 'GRAPH_UPDATED' as any: {
+        const graphData = (event as any).graph_data;
+        if (graphData) {
+          try {
+            const canvasService = this.commandBridge.getCanvasService();
+            if (canvasService && canvasService.getGraph()) {
+              canvasService.fromGraphData(graphData);
+            }
+          } catch {
+            // Ignore if canvas is not initialized
+          }
+        }
+        break;
+      }
     }
   }
 

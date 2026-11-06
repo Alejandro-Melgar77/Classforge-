@@ -10,6 +10,7 @@ Acts as bot user 'ai:<role>' in the diagram collaboration room:
 - Releases all locks
 """
 from __future__ import annotations
+import asyncio
 import copy
 import logging
 import uuid
@@ -18,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bson import ObjectId
 
 from app.core.config import settings
+from app.core.errors import ConflictError
 from app.ai_team.domain.diagram_model import (
     Diagram,
     Node,
@@ -139,8 +141,24 @@ class ServerDiagramEditor:
             # Persist before notifying clients. A failed write must not create
             # a remote state that cannot be recovered from the database.
             comment = f"IA {role_id.capitalize()}: {title}"
-            saved = await self.repo.save_graph(diagram_id, new_graph, saved_by=bot_user_id, comment=comment,
-                                              base_version=diagram_doc.get('version', 1))
+            saved = None
+            for save_attempt in range(3):
+                try:
+                    cur_v = diagram_doc.get("version", 1) if save_attempt == 0 else (await self.repo.get_by_id(diagram_id) or {}).get("version", 1)
+                    saved = await self.repo.save_graph(diagram_id, new_graph, saved_by=bot_user_id, comment=comment, base_version=cur_v)
+                    if saved:
+                        break
+                except ConflictError:
+                    if save_attempt == 2:
+                        return False, 0, "Conflicto de concurrencia al guardar el diagrama tras 3 intentos."
+                    await asyncio.sleep(0.2)
+                    refreshed = await self.repo.get_by_id(diagram_id)
+                    if refreshed:
+                        diagram_doc = refreshed
+                        current_graph = diagram_doc.get("graph_data", {"nodes": [], "edges": []})
+                        canonical = from_graph_data(current_graph)
+                        new_graph = self._apply_to_raw_graph(current_graph, canonical, simulated_canonical, command)
+
             if not saved:
                 return False, 0, "No se pudo guardar el diagrama"
 
@@ -202,13 +220,24 @@ class ServerDiagramEditor:
                     })
                     applied_ops += 1
 
-            # Broadcast full updated graph to ensure complete sync
+            # Broadcast full updated graph to diagram room
             await manager.broadcast(room_key, {
                 "type": "GRAPH_UPDATED",
                 "graph_data": new_graph,
                 "version": diagram_doc.get("version", 1) + 1,
                 "user_id": bot_user_id,
             })
+
+            # Also broadcast to project room so all subscribers get notified
+            project_id = diagram_doc.get("project_id")
+            if project_id:
+                await manager.broadcast(f"project:{project_id}", {
+                    "type": "GRAPH_UPDATED",
+                    "diagram_id": diagram_id,
+                    "graph_data": new_graph,
+                    "version": diagram_doc.get("version", 1) + 1,
+                    "user_id": bot_user_id,
+                })
 
             # Optional AI_FOCUS event (TODO P7b / lienzo highlighting)
             focus_ids = [n.id for n in simulated_canonical.nodes if not canonical.get_node(n.id)]

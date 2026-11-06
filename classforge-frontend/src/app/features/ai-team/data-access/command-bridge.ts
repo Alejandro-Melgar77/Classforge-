@@ -19,6 +19,10 @@ export class CommandBridgeService {
   private commandExecutor = inject(CommandExecutorService);
   private api = inject(AiTeamApiService);
 
+  public getCanvasService() {
+    return this.commandExecutor.getCanvasService();
+  }
+
   /**
    * Applies an AI Proposal with kind 'uml_command' onto the canvas using CommandExecutorService.
    * Crucial: NEVER re-submits text to /ai/generate! Directly executes the pre-structured command.

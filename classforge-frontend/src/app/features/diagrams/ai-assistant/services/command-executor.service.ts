@@ -18,9 +18,13 @@ export interface ExecutionResult {
   providedIn: 'root'
 })
 export class CommandExecutorService {
-  private canvasService = inject(CanvasService);
+  public canvasService = inject(CanvasService);
   private collaborationService = inject(CollaborationService);
   private autoSaveService = inject(AutoSaveService);
+
+  public getCanvasService(): CanvasService {
+    return this.canvasService;
+  }
 
   public execute(command: UMLCommandResponse): ExecutionResult {
     const graph = this.canvasService.getGraph();

@@ -773,7 +773,7 @@ async def analyze_diagram_endpoint(
 
         if not diagram_doc:
             cursor = db["diagrams"].find(
-                {"project_id": pid_obj, "is_deleted": {"$ne": True}}
+                {"project_id": {"$in": [pid_obj, str(project_id)]}, "is_deleted": {"$ne": True}}
             ).sort("updated_at", -1).limit(1)
             diagrams = await cursor.to_list(length=1)
             if diagrams:
