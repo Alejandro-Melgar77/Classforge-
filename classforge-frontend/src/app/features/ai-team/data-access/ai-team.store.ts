@@ -229,10 +229,16 @@ export class AiTeamStore implements OnDestroy {
     // 3. Load initial history
     this.loadInitialHistory(projectId);
 
-    // 4. Load tasks
+    // 4. Load tasks — and auto-execute pending ones if participative is already on
     this.api.listTasks(projectId).subscribe({
       next: (res) => {
         this._tasks.set(res.tasks || []);
+        // If participative mode is already enabled when opening the project,
+        // auto-execute any pending tasks that the AI should work on.
+        const isParticipative = this._state()?.participative?.enabled ?? false;
+        if (isParticipative && (res.tasks || []).some(t => t.status === 'pending')) {
+          void this.autoExecutePendingTasks(projectId);
+        }
       },
       error: () => {}
     });
@@ -351,6 +357,28 @@ export class AiTeamStore implements OnDestroy {
             this._unreadProject.update((c) => c + 1);
           }
         }
+        // Notify when AI proactively applied diagram changes
+        if (
+          event.message.trigger === 'proactive_review' &&
+          event.message.author_type === 'ai' &&
+          event.message.proposals &&
+          event.message.proposals.length > 0
+        ) {
+          const applied = event.message.proposals.filter(p => p.kind === 'uml_command');
+          if (applied.length > 0) {
+            this.pushNotification({
+              title: `🔧 ${event.message.author_name} aplicó cambios`,
+              message: `${applied.length} modificación(es) al diagrama: "${applied[0].title}"`,
+              type: 'apply'
+            });
+          } else {
+            this.pushNotification({
+              title: `🧠 ${event.message.author_name} revisó el proyecto`,
+              message: event.message.content.substring(0, 80) + '…',
+              type: 'review'
+            });
+          }
+        }
         break;
       }
       case 'AI_MESSAGE_UPDATED': {
@@ -367,7 +395,35 @@ export class AiTeamStore implements OnDestroy {
         break;
       }
       case 'AI_TASK_UPDATED': {
+        // Detect status changes to push notifications
+        const existing = this._tasks().find(t => t.id === event.task.id);
+        const prevStatus = existing?.status;
+        const newStatus = event.task.status;
+
         this.upsertTask(event.task);
+
+        // Notify when AI completes or fails a task
+        if (prevStatus && prevStatus !== newStatus) {
+          if (newStatus === 'completed') {
+            this.pushNotification({
+              title: `✅ Tarea completada`,
+              message: `"${event.task.title}" fue ejecutada por la IA autónoma.`,
+              type: 'task'
+            });
+          } else if (newStatus === 'in_progress' && prevStatus === 'pending') {
+            this.pushNotification({
+              title: `⚡ IA trabajando`,
+              message: `Ejecutando: "${event.task.title}"`,
+              type: 'task'
+            });
+          } else if (newStatus === 'failed') {
+            this.pushNotification({
+              title: `❌ Tarea fallida`,
+              message: `"${event.task.title}" no pudo completarse.`,
+              type: 'task'
+            });
+          }
+        }
         break;
       }
       case 'PRESENCE': {
@@ -754,6 +810,22 @@ export class AiTeamStore implements OnDestroy {
   }
 
   // ── Project State Actions ──────────────────────────────────────────────────
+  // ── AI Notifications (toast) ───────────────────────────────────────────────
+  private _aiNotifications = signal<Array<{ id: string; title: string; message: string; type: 'task' | 'apply' | 'review'; timestamp: string }>>([]);
+  public aiNotifications = this._aiNotifications.asReadonly();
+
+  public pushNotification(notif: { title: string; message: string; type: 'task' | 'apply' | 'review' }): void {
+    const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const entry = { ...notif, id, timestamp: new Date().toISOString() };
+    this._aiNotifications.update(list => [entry, ...list].slice(0, 10));
+    // Auto-dismiss after 8 seconds
+    setTimeout(() => this.dismissNotification(id), 8000);
+  }
+
+  public dismissNotification(id: string): void {
+    this._aiNotifications.update(list => list.filter(n => n.id !== id));
+  }
+
   public async toggleParticipative(): Promise<void> {
     const pid = this._projectId();
     const curState = this._state();
@@ -778,10 +850,41 @@ export class AiTeamStore implements OnDestroy {
       );
       this._state.set(updated);
       this.syncRolesWithState(updated);
+
+      // When enabling participative mode, auto-execute all pending tasks
+      if (newEnabled) {
+        await this.autoExecutePendingTasks(pid);
+      }
     } catch {
       // Revert optimistic update
       this._state.set(curState);
       this._errorMessage.set('Error al actualizar el modo participativo en el servidor.');
+    }
+  }
+
+  /** Auto-executes all pending tasks when participative mode is turned on. */
+  public async autoExecutePendingTasks(projectId?: string): Promise<void> {
+    const pid = projectId || this._projectId();
+    if (!pid) return;
+
+    const pendingTasks = this._tasks().filter(t => t.status === 'pending');
+    if (pendingTasks.length === 0) return;
+
+    this.pushNotification({
+      title: '🤖 IA Autónoma activada',
+      message: `Iniciando ejecución de ${pendingTasks.length} tarea(s) pendiente(s)...`,
+      type: 'task'
+    });
+
+    for (const task of pendingTasks) {
+      try {
+        await firstValueFrom(this.api.executeTask(pid, task.id));
+        this._tasks.update(tasks =>
+          tasks.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t)
+        );
+      } catch {
+        // Individual task failures are non-blocking
+      }
     }
   }
 

@@ -1,15 +1,43 @@
-<div class="ai-team-panel flex flex-col h-full bg-slate-900 text-slate-200">
+<div class="ai-team-panel flex flex-col h-full bg-slate-900 text-slate-200 relative">
   <!-- Shared Team Header (Bloque B) -->
   <app-ai-team-header></app-ai-team-header>
+
+  <!-- ── AI Notifications Toast Overlay ───────────────────────────────────── -->
+  <div
+    *ngIf="store.aiNotifications().length > 0"
+    class="absolute top-2 right-2 z-50 flex flex-col gap-1.5 max-w-[280px]"
+    aria-live="polite"
+    aria-label="Notificaciones de IA"
+  >
+    <div
+      *ngFor="let notif of store.aiNotifications()"
+      class="flex items-start gap-2 p-2.5 rounded-xl border shadow-xl backdrop-blur-sm text-xs transition-all"
+      [ngClass]="{
+        'bg-blue-950/95 border-blue-500/60 text-blue-100': notif.type === 'review',
+        'bg-emerald-950/95 border-emerald-500/60 text-emerald-100': notif.type === 'task',
+        'bg-purple-950/95 border-purple-500/60 text-purple-100': notif.type === 'apply'
+      }"
+    >
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-[11px] leading-tight truncate">{{ notif.title }}</div>
+        <div class="text-[10px] opacity-85 mt-0.5 leading-snug line-clamp-2">{{ notif.message }}</div>
+      </div>
+      <button
+        (click)="store.dismissNotification(notif.id)"
+        class="shrink-0 text-[10px] opacity-60 hover:opacity-100 transition-opacity cursor-pointer leading-none mt-0.5"
+        aria-label="Cerrar notificación"
+      >✕</button>
+    </div>
+  </div>
 
   <!-- Sub-Tabs Navigation Bar -->
   <div class="flex items-center border-b border-slate-800 bg-slate-950/70 px-3 pt-2 select-none" role="tablist">
     <!-- Tab 1: Chat -->
-    <button 
+    <button
       (click)="selectSubTab('chat')"
       class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-      [ngClass]="activeSubTab() === 'chat' 
-        ? 'text-blue-400 border-blue-500' 
+      [ngClass]="activeSubTab() === 'chat'
+        ? 'text-blue-400 border-blue-500'
         : 'text-slate-400 border-transparent hover:text-slate-200'"
       role="tab"
       [attr.aria-selected]="activeSubTab() === 'chat'"
@@ -17,7 +45,7 @@
     >
       <span>💬</span>
       <span>{{ i18n.tabs.chat }}</span>
-      <span 
+      <span
         *ngIf="store.unreadCount().personal > 0"
         class="px-1.5 py-0.2 rounded-full text-[9px] bg-blue-600 text-white font-bold"
       >
@@ -26,11 +54,11 @@
     </button>
 
     <!-- Tab 2: Historial -->
-    <button 
+    <button
       (click)="selectSubTab('history')"
       class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-      [ngClass]="activeSubTab() === 'history' 
-        ? 'text-purple-400 border-purple-500' 
+      [ngClass]="activeSubTab() === 'history'
+        ? 'text-purple-400 border-purple-500'
         : 'text-slate-400 border-transparent hover:text-slate-200'"
       role="tab"
       [attr.aria-selected]="activeSubTab() === 'history'"
@@ -38,7 +66,7 @@
     >
       <span>📜</span>
       <span>{{ i18n.tabs.history }}</span>
-      <span 
+      <span
         *ngIf="store.unreadCount().project > 0"
         class="px-1.5 py-0.2 rounded-full text-[9px] bg-purple-600 text-white font-bold"
       >
@@ -47,11 +75,11 @@
     </button>
 
     <!-- Tab 3: Tareas -->
-    <button 
+    <button
       (click)="selectSubTab('tasks')"
       class="flex-1 pb-2 pt-1.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-      [ngClass]="activeSubTab() === 'tasks' 
-        ? 'text-emerald-400 border-emerald-500' 
+      [ngClass]="activeSubTab() === 'tasks'
+        ? 'text-emerald-400 border-emerald-500'
         : 'text-slate-400 border-transparent hover:text-slate-200'"
       role="tab"
       [attr.aria-selected]="activeSubTab() === 'tasks'"
@@ -59,7 +87,7 @@
     >
       <span>📋</span>
       <span>{{ i18n.tabs.tasks }}</span>
-      <span 
+      <span
         *ngIf="store.tasks().length > 0"
         class="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-800 text-slate-300 border border-slate-700 font-mono"
       >
@@ -70,61 +98,280 @@
 
   <!-- Sub-Tabs Content -->
   <div class="flex-1 overflow-hidden relative">
-    <!-- Chat View (Mi Hilo) -->
-    <section 
-      id="subtab-chat" 
-      *ngIf="activeSubTab() === 'chat'" 
-      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+
+    <!-- ── Chat View ────────────────────────────────────────────────────────── -->
+    <section
+      id="subtab-chat"
+      *ngIf="activeSubTab() === 'chat'"
+      class="h-full flex flex-col overflow-hidden"
       role="tabpanel"
     >
-      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
-        <span class="text-3xl select-none">💬</span>
-        <h4 class="text-sm font-bold text-slate-200">Chat con el Equipo IA</h4>
-        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Consulta individual y colaborativa con tus compañeros de IA especializados: Arquitecto, QA, Tech Lead, Mentor, DBA, Seguridad y Negocio.
-        </p>
-        <div class="text-[11px] text-blue-400 font-medium pt-2">
-          (Módulo de composición y renderizado de propuestas: Bloque C)
+      <!-- Messages feed -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-2 space-y-2">
+
+        <!-- Empty state -->
+        <div
+          *ngIf="store.filteredMessages().length === 0 && !store.isLoading()"
+          class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto"
+        >
+          <span class="text-3xl select-none">💬</span>
+          <h4 class="text-sm font-bold text-slate-200">Chat con el Equipo IA</h4>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+            Escribe tu primera consulta o activa la IA participativa para que los roles intervengan automáticamente.
+          </p>
         </div>
+
+        <!-- Loading -->
+        <div *ngIf="store.isLoading()" class="flex justify-center pt-4">
+          <span class="text-xs text-slate-500 animate-pulse">Cargando mensajes...</span>
+        </div>
+
+        <!-- Messages -->
+        <div
+          *ngFor="let msg of store.filteredMessages()"
+          class="rounded-lg p-2.5 border text-xs leading-relaxed"
+          [ngClass]="{
+            'bg-blue-950/40 border-blue-800/50 ml-4': msg.author_type === 'user',
+            'bg-slate-800/60 border-slate-700/50': msg.author_type === 'ai'
+          }"
+        >
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="font-bold text-[11px]"
+              [ngClass]="msg.author_type === 'ai' ? 'text-purple-300' : 'text-blue-300'"
+            >{{ msg.author_name }}</span>
+            <span class="text-[9px] text-slate-500 ml-auto">{{ formatRelativeTime(msg.created_at || msg.timestamp) }}</span>
+          </div>
+          <p class="text-slate-300 whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <!-- Proposals count -->
+          <div *ngIf="msg.proposals && msg.proposals.length > 0" class="mt-1.5 text-[10px] text-emerald-400 font-medium">
+            📌 {{ msg.proposals.length }} propuesta(s) de cambio
+          </div>
+          <!-- Status badge -->
+          <div *ngIf="msg.status === 'pending'" class="mt-1 text-[9px] text-amber-400 animate-pulse">⏳ IA procesando...</div>
+          <div *ngIf="msg.status === 'failed' || msg.status === 'error'" class="mt-1 text-[9px] text-rose-400">❌ Error al procesar</div>
+        </div>
+      </div>
+
+      <!-- Error banner -->
+      <div
+        *ngIf="store.errorMessage()"
+        class="mx-3 mb-2 p-2 rounded-lg bg-rose-950/60 border border-rose-700/50 text-rose-300 text-[11px] flex items-start gap-2"
+      >
+        <span class="shrink-0">⚠️</span>
+        <span>{{ store.errorMessage() }}</span>
+        <button (click)="store.clearError()" class="ml-auto shrink-0 text-rose-400 hover:text-rose-200 cursor-pointer">✕</button>
+      </div>
+
+      <!-- Participative hint when disabled -->
+      <div
+        *ngIf="!store.isParticipativeEnabled()"
+        class="mx-3 mb-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-400 text-[10px] flex items-center gap-2"
+      >
+        <span>💡</span>
+        <span>Activa <strong class="text-slate-300">IA participativa</strong> para que el equipo trabaje automáticamente.</span>
       </div>
     </section>
 
-    <!-- History View (Todos los integrantes) -->
-    <section 
-      id="subtab-history" 
-      *ngIf="activeSubTab() === 'history'" 
-      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+    <!-- ── History View ──────────────────────────────────────────────────────── -->
+    <section
+      id="subtab-history"
+      *ngIf="activeSubTab() === 'history'"
+      class="h-full flex flex-col overflow-hidden"
       role="tabpanel"
     >
-      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
-        <span class="text-3xl select-none">📜</span>
-        <h4 class="text-sm font-bold text-slate-200">Historial de Colaboración de Proyecto</h4>
-        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Feed cronológico de todos los hilos, propuestas aplicadas y publicaciones proactivas de los integrantes del equipo.
-        </p>
-        <div class="text-[11px] text-purple-400 font-medium pt-2">
-          (Feed virtual scroll con filtros por integrante y rol: Bloque D)
+      <div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-2 space-y-2">
+
+        <!-- Empty state -->
+        <div
+          *ngIf="store.filteredMessages().length === 0 && !store.isLoading()"
+          class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-4"
+        >
+          <span class="text-3xl select-none">📜</span>
+          <h4 class="text-sm font-bold text-slate-200">Sin actividad aún</h4>
+          <p class="text-xs text-slate-400 mx-auto leading-relaxed">
+            Cuando los roles de IA actúen proactivamente o el equipo publique mensajes, aparecerán aquí.
+          </p>
         </div>
+
+        <!-- Loading -->
+        <div *ngIf="store.isLoading()" class="flex justify-center pt-4">
+          <span class="text-xs text-slate-500 animate-pulse">Cargando historial...</span>
+        </div>
+
+        <!-- History messages (project thread) -->
+        <div
+          *ngFor="let msg of store.filteredMessages()"
+          class="rounded-lg border text-xs overflow-hidden"
+          [ngClass]="{
+            'border-purple-700/40 bg-purple-950/20': msg.trigger === 'proactive_review',
+            'border-emerald-700/40 bg-emerald-950/20': msg.trigger === 'task',
+            'border-slate-700/40 bg-slate-800/40': msg.trigger !== 'proactive_review' && msg.trigger !== 'task'
+          }"
+        >
+          <!-- Header -->
+          <div class="flex items-center gap-2 px-2.5 py-1.5 border-b border-white/5">
+            <span class="text-base select-none">{{ getMessageTypeIcon(msg) }}</span>
+            <span class="font-bold text-[11px] flex-1 truncate"
+              [ngClass]="{
+                'text-purple-300': msg.trigger === 'proactive_review',
+                'text-emerald-300': msg.trigger === 'task',
+                'text-slate-300': msg.trigger !== 'proactive_review' && msg.trigger !== 'task'
+              }"
+            >{{ msg.author_name }}</span>
+            <span class="text-[9px] text-slate-500">{{ formatRelativeTime(msg.created_at || msg.timestamp) }}</span>
+          </div>
+
+          <!-- Body -->
+          <div class="px-2.5 py-2">
+            <p class="text-slate-300 leading-relaxed line-clamp-4 whitespace-pre-wrap">{{ msg.content }}</p>
+          </div>
+
+          <!-- Proposals footer -->
+          <div
+            *ngIf="msg.proposals && msg.proposals.length > 0"
+            class="px-2.5 py-1.5 bg-slate-900/60 border-t border-white/5 flex items-center gap-2"
+          >
+            <span class="text-[10px] text-emerald-400 font-medium">
+              🔧 {{ msg.proposals.length }} propuesta(s)
+            </span>
+            <span
+              *ngFor="let p of msg.proposals.slice(0, 2)"
+              class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 truncate max-w-[80px]"
+              [title]="p.title"
+            >{{ p.title }}</span>
+          </div>
+        </div>
+
+        <!-- Load more -->
+        <button
+          *ngIf="store.hasMoreHistory()"
+          (click)="store.loadMore()"
+          [disabled]="store.isLoadingMore()"
+          class="w-full py-1.5 text-[11px] text-slate-400 hover:text-slate-200 border border-dashed border-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {{ store.isLoadingMore() ? 'Cargando...' : '↑ Cargar mensajes anteriores' }}
+        </button>
       </div>
     </section>
 
-    <!-- Tasks View -->
-    <section 
-      id="subtab-tasks" 
-      *ngIf="activeSubTab() === 'tasks'" 
-      class="h-full flex flex-col p-3 overflow-y-auto custom-scrollbar"
+    <!-- ── Tasks View (Kanban) ───────────────────────────────────────────────── -->
+    <section
+      id="subtab-tasks"
+      *ngIf="activeSubTab() === 'tasks'"
+      class="h-full flex flex-col overflow-hidden"
       role="tabpanel"
     >
-      <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-auto">
-        <span class="text-3xl select-none">📋</span>
-        <h4 class="text-sm font-bold text-slate-200">Tablero de Tareas de IA</h4>
-        <p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Asignación y seguimiento de tareas especializadas delegadas a roles de IA o compañeros de equipo.
-        </p>
-        <div class="text-[11px] text-emerald-400 font-medium pt-2">
-          (Tablero Kanban multi-columna reactivo: Bloque E)
+      <!-- Participative hint -->
+      <div
+        *ngIf="!store.isParticipativeEnabled() && store.tasks().length > 0"
+        class="mx-3 mt-2 p-2 rounded-lg bg-amber-950/40 border border-amber-700/40 text-amber-300 text-[10px] flex items-center gap-2"
+      >
+        <span>⚡</span>
+        <span>Activa <strong>IA participativa</strong> para que las tareas se ejecuten automáticamente.</span>
+      </div>
+
+      <!-- Active task indicator -->
+      <div
+        *ngIf="store.isParticipativeEnabled() && getTasksByStatus('in_progress').length > 0"
+        class="mx-3 mt-2 p-2 rounded-lg bg-blue-950/50 border border-blue-500/40 text-blue-300 text-[10px] flex items-center gap-2 animate-pulse"
+      >
+        <span>⚡</span>
+        <span>IA ejecutando <strong>{{ getTasksByStatus('in_progress').length }}</strong> tarea(s)...</span>
+      </div>
+
+      <!-- Kanban columns scroll -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-2 space-y-3">
+
+        <!-- Empty state -->
+        <div
+          *ngIf="store.tasks().length === 0"
+          class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2 my-4"
+        >
+          <span class="text-3xl select-none">📋</span>
+          <h4 class="text-sm font-bold text-slate-200">Sin tareas asignadas</h4>
+          <p class="text-xs text-slate-400 mx-auto leading-relaxed">
+            Crea una tarea para que un rol de IA la ejecute autónomamente según su especialidad.
+          </p>
         </div>
+
+        <!-- Column for each status -->
+        <div *ngFor="let col of taskColumns">
+          <ng-container *ngIf="getTasksByStatus(col).length > 0">
+            <!-- Column header -->
+            <div
+              class="flex items-center gap-2 mb-1.5 pb-1 border-b text-[11px] font-bold uppercase tracking-wider"
+              [ngClass]="getColumnAccent(col)"
+            >
+              <span>{{ getTaskStatusIcon(col) }}</span>
+              <span>{{ getColumnLabel(col) }}</span>
+              <span class="ml-auto font-mono text-[10px] opacity-70">{{ getTasksByStatus(col).length }}</span>
+            </div>
+
+            <!-- Task cards -->
+            <div class="space-y-2 mb-3">
+              <div
+                *ngFor="let task of getTasksByStatus(col)"
+                class="rounded-lg border p-2.5 text-xs transition-all"
+                [ngClass]="{
+                  'bg-slate-800/60 border-slate-700/60': col === 'pending',
+                  'bg-blue-950/40 border-blue-700/60': col === 'in_progress',
+                  'bg-amber-950/40 border-amber-700/60': col === 'needs_input',
+                  'bg-emerald-950/40 border-emerald-700/60': col === 'completed',
+                  'bg-rose-950/40 border-rose-700/60': col === 'failed'
+                }"
+              >
+                <!-- Task header -->
+                <div class="flex items-start justify-between gap-2 mb-1">
+                  <span class="font-bold text-[11px] text-slate-100 leading-tight flex-1">{{ task.title }}</span>
+                  <span
+                    class="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold border"
+                    [ngClass]="getTaskBadgeClass(task.status)"
+                  >{{ task.ai_role }}</span>
+                </div>
+
+                <!-- Description -->
+                <p class="text-slate-400 leading-snug line-clamp-2 mb-2">{{ task.description }}</p>
+
+                <!-- Result preview (if completed) -->
+                <div
+                  *ngIf="task.result && col === 'completed'"
+                  class="mt-1 mb-2 p-1.5 rounded bg-emerald-950/40 border border-emerald-700/30 text-emerald-300 text-[10px] leading-snug line-clamp-3"
+                >
+                  {{ task.result }}
+                </div>
+
+                <!-- Footer: time + actions -->
+                <div class="flex items-center justify-between gap-2 mt-1">
+                  <span class="text-[9px] text-slate-500">{{ formatRelativeTime(task.created_at) }}</span>
+                  <div class="flex items-center gap-1">
+                    <!-- Execute button (pending or failed) -->
+                    <button
+                      *ngIf="col === 'pending' || col === 'failed'"
+                      (click)="onExecuteTask(task)"
+                      class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-800/60 hover:bg-blue-700 text-blue-300 border border-blue-700/60 transition-colors cursor-pointer"
+                      [title]="col === 'failed' ? i18n.tasks.retry : i18n.tasks.execute"
+                    >
+                      {{ col === 'failed' ? '🔄' : '▶' }} {{ col === 'failed' ? i18n.tasks.retry : i18n.tasks.execute }}
+                    </button>
+                    <!-- Delete button -->
+                    <button
+                      *ngIf="col === 'completed' || col === 'failed' || col === 'pending'"
+                      (click)="onDeleteTask(task)"
+                      class="px-1.5 py-0.5 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-700/40 transition-colors cursor-pointer"
+                      title="Eliminar tarea"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+
       </div>
     </section>
+
   </div>
 </div>
+

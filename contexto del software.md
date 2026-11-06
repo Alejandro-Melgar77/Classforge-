@@ -8,11 +8,11 @@
 
 <!-- METADATOS_DINAMICOS_INICIO -->
 ### 📌 Metadatos de Seguimiento y Estado del Repositorio
-* **Última Actualización Automática:** 2026-11-05 11:37:54
+* **Última Actualización Automática:** 2026-11-06 15:32:45
 * **Rama Activa:** `main`
-* **Último Commit:** `f137f3c` - *fix(mobile): solucionar ClassNotFoundException de MainActivity, deserializacion de team_ids en login, URLs cloud y timeout de Render*
+* **Último Commit:** `d131d32` - *fix(mobile): conectar app al backend cloud en produccion, sincronizar diagramas de alejandro y admin, habilitar ws y visor 60fps con ia voz*
 * **Autor:** Alejandro-Melgar77 <ale.melgararteaga@gmail.com>
-* **Estado del Árbol de Trabajo:** 7 archivo(s) con cambios pendientes
+* **Estado del Árbol de Trabajo:** 6 archivo(s) con cambios pendientes
 * **Batería de Pruebas Backend (Pytest):** 274 pasadas, 0 fallidas (100% éxito en 21.08s)
 * **Archivos de Prueba en Backend:** 81 suites de prueba
 * **Estado Operativo General:** **PRODUCCIÓN / ESTABLE** (Defectos C1–C7, A1–A36, M1–M12 cerrados y verificados)
