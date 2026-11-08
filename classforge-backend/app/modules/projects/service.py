@@ -35,28 +35,71 @@ class ProjectService:
 
     async def list_projects(self, current_user: dict, team_id: str = None, status: str = None, type: str = None, page: int = 1, limit: int = 20, sort_by: str = "created_at", order: str = "desc"):
         user_id = str(current_user["_id"])
-        role = current_user.get("role")
+        role = current_user.get("role", "dev")
         
         query = {}
-        if team_id: query["team_id"] = ObjectId(team_id)
-        if status: query["status"] = status
-        if type: query["type"] = type
+        if team_id and ObjectId.is_valid(team_id):
+            query["team_id"] = ObjectId(team_id)
+        if status:
+            query["status"] = status
+        if type:
+            query["type"] = type
 
-        if role == "dev":
-            # Dev sees personal projects and projects of their teams
-            user_teams = await self.team_repo.get_all("dev", user_id)
-            team_ids = [t["_id"] for t in user_teams]
-            query["$or"] = [
-                {"team_id": {"$in": team_ids}},
-                {"owner_id": ObjectId(user_id)}
+        if role != "admin":
+            user_id_matches = [user_id]
+            if ObjectId.is_valid(user_id):
+                user_id_matches.append(ObjectId(user_id))
+
+            # 1. Equipos donde el usuario es scrum_master o miembro asignado
+            team_cursor = self.team_repo.collection.find({
+                "is_deleted": {"$ne": True},
+                "$or": [
+                    {"scrum_master_id": {"$in": user_id_matches}},
+                    {"member_ids": {"$in": user_id_matches}}
+                ]
+            })
+            user_teams = await team_cursor.to_list(length=200)
+            
+            user_team_ids = set()
+            for t in user_teams:
+                user_team_ids.add(t["_id"])
+                user_team_ids.add(str(t["_id"]))
+            for tid in current_user.get("team_ids", []):
+                user_team_ids.add(tid)
+                if ObjectId.is_valid(str(tid)):
+                    user_team_ids.add(ObjectId(str(tid)))
+
+            # 2. Diagramas donde el usuario es creador o participante asignado
+            diagrams_col = self.repo.collection.database["diagrams"]
+            diag_cursor = diagrams_col.find({
+                "is_deleted": {"$ne": True},
+                "$or": [
+                    {"created_by": {"$in": user_id_matches}},
+                    {"creator_id": {"$in": user_id_matches}},
+                    {"member_ids": {"$in": user_id_matches}}
+                ]
+            }, {"project_id": 1})
+            user_diagrams = await diag_cursor.to_list(length=500)
+            user_project_ids = set()
+            for d in user_diagrams:
+                pid = d.get("project_id")
+                if pid:
+                    user_project_ids.add(pid)
+                    user_project_ids.add(str(pid))
+                    if ObjectId.is_valid(str(pid)):
+                        user_project_ids.add(ObjectId(str(pid)))
+
+            access_conditions = [
+                {"owner_id": {"$in": user_id_matches}},
+                {"created_by": {"$in": user_id_matches}},
+                {"member_ids": {"$in": user_id_matches}}
             ]
-        elif role == "scrum_master":
-            user_teams = await self.team_repo.get_all("scrum_master", user_id)
-            team_ids = [t["_id"] for t in user_teams]
-            query["$or"] = [
-                {"team_id": {"$in": team_ids}},
-                {"owner_id": ObjectId(user_id)}
-            ]
+            if user_team_ids:
+                access_conditions.append({"team_id": {"$in": list(user_team_ids)}})
+            if user_project_ids:
+                access_conditions.append({"_id": {"$in": list(user_project_ids)}})
+
+            query["$or"] = access_conditions
         
         sort_order = -1 if order == "desc" else 1
         items, total = await self.repo.get_list(query, page, limit, sort_by, sort_order)

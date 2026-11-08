@@ -69,14 +69,17 @@
       </button>
       <button 
         (click)="setSection('history')"
-        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
         [ngClass]="activeSection() === 'history' 
           ? 'bg-blue-600 text-white shadow-sm' 
           : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'"
         role="tab"
         [attr.aria-selected]="activeSection() === 'history'"
       >
-        Historial Local
+        <span>Historial Grupal</span>
+        <span *ngIf="getHistoryEntries().length > 0" class="px-1.5 py-0.2 rounded-full text-[9px] bg-slate-900 text-blue-200 font-bold">
+          {{ getHistoryEntries().length }}
+        </span>
       </button>
     </div>
 
@@ -281,11 +284,16 @@
       </div>
     </ng-container>
 
-    <!-- ═══ SECTION: LOCAL HISTORY ═══ -->
+    <!-- ═══ SECTION: TEAM / GROUP HISTORY ═══ -->
     <ng-container *ngIf="activeSection() === 'history'">
       <div class="space-y-2.5">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-slate-300">Historial local de órdenes:</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-200">Historial de órdenes del equipo:</span>
+            <span *ngIf="getHistoryEntries().length > 0" class="text-[10px] text-slate-400 font-medium">
+              ({{ getHistoryEntries().length }})
+            </span>
+          </div>
           <button 
             *ngIf="getHistoryEntries().length > 0"
             (click)="clearHistory()" 
@@ -296,24 +304,29 @@
         </div>
 
         <div *ngIf="getHistoryEntries().length === 0" class="text-center py-8 text-slate-500 text-xs">
-          No hay órdenes registradas en esta sesión para este diagrama.
+          No hay órdenes registradas por el equipo para este diagrama.
         </div>
 
         <div 
           *ngFor="let entry of getHistoryEntries()" 
-          class="p-2.5 bg-slate-950/60 rounded-lg border border-slate-800 text-xs space-y-1.5"
+          class="p-2.5 bg-slate-950/70 rounded-lg border border-slate-800 hover:border-slate-700/80 text-xs space-y-1.5 transition-colors"
         >
           <div class="flex items-center justify-between text-[10px] text-slate-400">
-            <span class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5 truncate max-w-[75%]">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium text-[9px] flex items-center gap-1">
+                <span>👤</span>
+                <span>{{ entry.userName || 'Usuario' }}</span>
+              </span>
+              <span>•</span>
               <span>
                 {{ entry.inputType === 'voice' ? '🎙️ Voz' : (entry.inputType === 'image' ? '🖼️ Imagen' : '⌨️ Texto') }}
               </span>
               <span>•</span>
-              <span>{{ formatTimestamp(entry.timestamp) }}</span>
-            </span>
+              <span class="text-slate-400 font-mono">{{ formatTimestamp(entry.timestamp) }}</span>
+            </div>
             <span 
-              class="px-1.5 py-0.5 rounded text-[9px] font-semibold"
-              [ngClass]="entry.status === 'applied' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-400'"
+              class="px-1.5 py-0.5 rounded text-[9px] font-semibold shrink-0"
+              [ngClass]="entry.status === 'applied' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400'"
             >
               {{ entry.status === 'applied' ? 'Aplicado' : 'Descartado' }}
             </span>
@@ -322,6 +335,10 @@
           <p class="text-slate-200 font-medium text-[11px] leading-snug">
             {{ entry.prompt }}
           </p>
+
+          <div *ngIf="entry.resultSummary" class="text-[10px] text-slate-400 font-mono truncate">
+            {{ entry.resultSummary }}
+          </div>
 
           <div *ngIf="entry.command" class="flex items-center justify-between pt-1 border-t border-slate-800/60">
             <span 

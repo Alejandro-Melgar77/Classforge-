@@ -8,6 +8,7 @@ class ProjectCreate(BaseModel):
     team_id: Optional[str] = None
     type: str = "personal" # team | personal
     tags: List[str] = []
+    color_tag: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None

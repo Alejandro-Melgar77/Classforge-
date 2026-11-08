@@ -16,7 +16,9 @@ export interface CreateProjectDto {
   name: string;
   description: string;
   team_id?: string;
+  type?: 'personal' | 'team';
   color_tag?: string;
+  tags?: string[];
 }
 
 @Injectable({

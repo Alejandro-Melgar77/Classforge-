@@ -1,6 +1,8 @@
 import logging
-from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Response, HTTPException, Request, Header
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
+from bson import ObjectId
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Response, HTTPException, Request, Header, Body
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.database import get_db
@@ -717,4 +719,111 @@ async def apply_diagram_normalization(
         message=f"Normalización aplicada ({len(ops)} operaciones ejecutadas)",
         data=DiagramResponseFull.from_mongo(updated).model_dump()
     )
+
+
+# ── AI Command Shared Team History Endpoints ─────────────────────────────────
+
+@router.get("/{diagram_id}/ai-history", response_model=StandardResponse)
+async def get_diagram_ai_history(
+    diagram_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    current_user = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """Retrieve shared team AI command history for this diagram."""
+    validate_object_id(diagram_id, "diagram_id")
+    diag_oid = ObjectId(diagram_id)
+    cursor = db["diagram_ai_history"].find({
+        "$or": [{"diagram_id": diagram_id}, {"diagram_id": diag_oid}]
+    }).sort("created_at", -1).limit(limit)
+    raw_items = await cursor.to_list(length=limit)
+    items = []
+    for it in raw_items:
+        it["id"] = str(it["_id"])
+        del it["_id"]
+        if "diagram_id" in it:
+            it["diagramId"] = str(it["diagram_id"])
+        if "user_id" in it:
+            it["userId"] = str(it["user_id"])
+        it["userName"] = it.get("user_name") or "Usuario"
+        it["userRole"] = it.get("user_role") or "dev"
+        it["userEmail"] = it.get("user_email") or ""
+        it["inputType"] = it.get("input_type") or "text"
+        it["resultSummary"] = it.get("result_summary") or ""
+        if isinstance(it.get("created_at"), datetime):
+            it["timestamp"] = it["created_at"].isoformat()
+        elif "created_at" in it:
+            it["timestamp"] = str(it["created_at"])
+        items.append(it)
+    return StandardResponse(success=True, message="AI History retrieved", data=items)
+
+
+@router.post("/{diagram_id}/ai-history", response_model=StandardResponse)
+async def record_diagram_ai_history(
+    diagram_id: str,
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """Record an AI command executed by a team member on this diagram."""
+    validate_object_id(diagram_id, "diagram_id")
+    diag_oid = ObjectId(diagram_id)
+    user_id = str(current_user["_id"])
+    now = datetime.now(timezone.utc)
+    
+    doc = {
+        "diagram_id": diag_oid,
+        "user_id": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,
+        "user_name": current_user.get("name") or current_user.get("email") or "Usuario",
+        "user_email": current_user.get("email", ""),
+        "user_role": current_user.get("role", "dev"),
+        "prompt": payload.get("prompt", ""),
+        "input_type": payload.get("inputType") or payload.get("input_type", "text"),
+        "status": payload.get("status", "applied"),
+        "source": payload.get("source", "heuristic"),
+        "result_summary": payload.get("resultSummary") or payload.get("result_summary", ""),
+        "command": payload.get("command", None),
+        "created_at": now
+    }
+    res = await db["diagram_ai_history"].insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    del doc["_id"]
+    doc["diagramId"] = diagram_id
+    doc["userId"] = user_id
+    doc["userName"] = doc["user_name"]
+    doc["userRole"] = doc["user_role"]
+    doc["inputType"] = doc["input_type"]
+    doc["resultSummary"] = doc["result_summary"]
+    doc["timestamp"] = now.isoformat()
+
+    try:
+        from app.modules.collaboration.manager import manager
+        await manager.broadcast_to_diagram(
+            diagram_id=diagram_id,
+            message={
+                "type": "AI_COMMAND_RECORDED",
+                "diagram_id": diagram_id,
+                "entry": doc,
+            }
+        )
+    except Exception:
+        pass
+
+    return StandardResponse(success=True, message="AI history entry recorded", data=doc)
+
+
+@router.delete("/{diagram_id}/ai-history", response_model=StandardResponse)
+async def clear_diagram_ai_history(
+    diagram_id: str,
+    current_user = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """Clear shared AI command history for this diagram."""
+    validate_object_id(diagram_id, "diagram_id")
+    diag_oid = ObjectId(diagram_id)
+    await db["diagram_ai_history"].delete_many({
+        "$or": [{"diagram_id": diagram_id}, {"diagram_id": diag_oid}]
+    })
+    return StandardResponse(success=True, message="AI history cleared", data=None)
+
 

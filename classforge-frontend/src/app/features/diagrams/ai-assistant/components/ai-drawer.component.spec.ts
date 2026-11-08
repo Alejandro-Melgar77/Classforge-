@@ -27,6 +27,7 @@ describe('AiDrawerComponent', () => {
       init: jasmine.createSpy(),
       destroy: jasmine.createSpy(),
       setSocketService: jasmine.createSpy(),
+      setCurrentDiagramId: jasmine.createSpy(),
       unreadCount: signal({ personal: 0, project: 0 }),
       tasks: signal([]),
       roles: signal([]),

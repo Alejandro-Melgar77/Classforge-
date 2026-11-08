@@ -162,6 +162,9 @@ export class CommandConsoleComponent implements OnInit, OnDestroy {
 
   public setSection(section: CommandConsoleSection): void {
     this.activeSection.set(section);
+    if (section === 'history' && this.diagramId) {
+      this.historyService.reloadHistory(this.diagramId);
+    }
     this.cdr.markForCheck();
   }
 
@@ -528,7 +531,9 @@ export class CommandConsoleComponent implements OnInit, OnDestroy {
     try {
       const d = new Date(val as string);
       if (isNaN(d.getTime())) return '';
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const isToday = new Date().toDateString() === d.toDateString();
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return isToday ? timeStr : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${timeStr}`;
     } catch {
       return '';
     }

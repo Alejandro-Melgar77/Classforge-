@@ -52,6 +52,9 @@ export interface UMLCommandResponse {
 export interface AiHistoryEntry {
   id: string;
   userId: string;
+  userName?: string;
+  userRole?: string;
+  userEmail?: string;
   diagramId?: string;
   timestamp: string;
   prompt: string;

@@ -33,7 +33,11 @@ def can_access_project(
     if role == "admin":
         return True
 
-    if str(project.get("owner_id")) == user_id:
+    if str(project.get("owner_id")) == user_id or str(project.get("created_by")) == user_id:
+        return True
+
+    project_members = [str(m) for m in project.get("member_ids", [])]
+    if user_id in project_members:
         return True
 
     proj_team_id = str(project.get("team_id")) if project.get("team_id") else None
@@ -116,7 +120,22 @@ async def require_project_member(
         team = await db["teams"].find_one({"_id": ObjectId(project["team_id"]), "is_deleted": False})
 
     if not can_access_project(current_user, project, team):
-        raise ForbiddenError("No tienes acceso a este proyecto")
+        # Fallback: check if the user is a participant or creator of any diagram within this project
+        user_id = str(current_user.get("_id") or current_user.get("id"))
+        user_matches = [user_id]
+        if ObjectId.is_valid(user_id):
+            user_matches.append(ObjectId(user_id))
+        has_diagram = await db["diagrams"].find_one({
+            "project_id": {"$in": [project_id, oid]},
+            "is_deleted": {"$ne": True},
+            "$or": [
+                {"created_by": {"$in": user_matches}},
+                {"creator_id": {"$in": user_matches}},
+                {"member_ids": {"$in": user_matches}}
+            ]
+        })
+        if not has_diagram:
+            raise ForbiddenError("No tienes acceso a este proyecto")
 
     return project
 
