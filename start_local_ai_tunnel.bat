@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-title ClassForge 2.0 - Local AI Node & Static Tunnel (Liquid AI LFM 1.7B)
+title ClassForge 2.0 - Local AI Node y Tunel Estatico - Liquid AI LFM 1.7B
 
 echo ==============================================================================
-echo   CLASSFORGE 2.0 - NODO DE IA LOCAL Y TUNEL ESTATICO (LIQUID AI LFM 1.7B)
+echo   CLASSFORGE 2.0 - NODO DE IA LOCAL Y TUNEL ESTATICO [LIQUID AI LFM 1.7B]
 echo ==============================================================================
 echo.
 
@@ -63,6 +63,9 @@ if errorlevel 1 (
 echo.
 echo [3/3] Levantando tunel seguro HTTPS permanente hacia http://localhost:11434...
 
+:: Cerrar cualquier proceso previo de ngrok para evitar el error ERR_NGROK_334
+taskkill /f /im ngrok.exe >nul 2>&1
+
 :: Localizar binario de ngrok (PATH, npm global o archivo local)
 set "NGROK_BIN="
 where ngrok >nul 2>&1
@@ -80,16 +83,16 @@ if defined NGROK_BIN (
     if defined NGROK_STATIC_DOMAIN (
         echo.
         echo ==============================================================================
-        echo   TUNEL ESTATICO PERMANENTE ACTIVADO (NGROK)
+        echo   TUNEL ESTATICO PERMANENTE ACTIVADO [NGROK]
         echo   URL Fija: !NGROK_STATIC_DOMAIN!
         echo   Esta URL nunca cambiara aunque reinicies o apagues la PC.
         echo ==============================================================================
         echo.
-        start "ngrok Static Tunnel - Local AI" cmd /k ""!NGROK_BIN!" http 11434 --url !NGROK_STATIC_DOMAIN!"
+        start "ngrok Static Tunnel - Local AI" cmd /k call "!NGROK_BIN!" http 11434 --url !NGROK_STATIC_DOMAIN!
         goto :fin
     ) else (
         echo [*] Iniciando ngrok dinamico...
-        start "ngrok Tunnel - Local AI" cmd /k ""!NGROK_BIN!" http 11434"
+        start "ngrok Tunnel - Local AI" cmd /k call "!NGROK_BIN!" http 11434
         goto :fin
     )
 )
