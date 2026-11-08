@@ -260,3 +260,28 @@ Se ejecutó la suite de evaluación sobre los **30 casos dorados de comandos UML
 - [x] **Seguridad Anti-SSRF:** `OLLAMA_URL` inmutable desde el cliente; validada en servidor.
 - [x] **Respeto a Render:** El servidor no aloja modelos en memoria; cero riesgo de OOM en el plan gratuito de 512 MB.
 - [x] **Modo de Privacidad:** `local_only` verificado con tests automatizados.
+
+---
+
+## 10. Fase de IA Local Interactiva (ClassForge v2.0 - Liquid AI LFM 1.7B)
+
+### A. Modelo Liquid AI LFM 1.7B (`classforge-local-1.7b`)
+- **Arquitectura:** Liquid Foundation Model (LFM) de 1.7B parámetros (`lfm3:latest` GGUF cuantizado a `Q4_K_M`), optimizado para ejecución de baja latencia en CPU local.
+- **Especialización:** Empaquetado vía `ml/export/Modelfile` con ejemplos *Few-Shot* extraídos de `ml/data/reviews_dataset.jsonl` y guías de buenas prácticas UML 2.5+.
+- **Eliminación Total de PDFs:** A diferencia del flujo anterior que requería subir y procesar documentos PDF de hasta 300 páginas, el modelo opera directamente sobre la **topología JSON de los diagramas UML 2.5+** (clases, interfaces, atributos tipados, métodos, relaciones de asociación, agregación, composición, herencia y multiplicidades) persistidos en MongoDB.
+
+### B. Script de Arranque y Túnel Seguro (`start_local_ai_tunnel.bat`)
+- Inicia el daemon de Ollama con `OLLAMA_ORIGINS="*"` y `OLLAMA_HOST="0.0.0.0:11434"`.
+- Compila automáticamente `classforge-local-1.7b` si no se encuentra en el registro local.
+- Levanta un túnel HTTPS seguro utilizando `cloudflared` (`cloudflared tunnel --url http://localhost:11434 --http-host-header="localhost:11434"`) con fallback automático a `ngrok`.
+
+### C. Endpoints del Backend (`classforge-backend`)
+- `GET /api/v1/ai/local-status`: Sondea en tiempo real la disponibilidad y latencia del nodo local mediante la cabecera dinámica `X-Local-AI-Url` o el parámetro de consulta `tunnel_url`.
+- `POST /api/v1/projects/{project_id}/local-ai/evaluate-and-chat`: Extrae la estructura de clases del proyecto, calcula el dictamen según la rúbrica `CF-SE-2026.1`, emite veredicto (`APROBADO` o `RECHAZADO` con puntaje sobre 100), genera las especificaciones técnicas o mejoras requeridas y mantiene una sesión conversacional fluida sin dependencias de archivos PDF.
+
+### D. Consola Web Interactiva (`classforge-frontend`)
+- Implementada en [`project-reviews.component.ts`](file:///c:/Users/Ale/Documents/SW1%202-2026/segundo%20examen%20parcial/classforge-frontend/src/app/features/projects/center/project-reviews.component.ts) con Angular Standalone Components, Signals y Tailwind CSS.
+- **Barra de Conexión en Vivo:** Indicador `🟢 PC Local Conectada` / `🔴 Desconectado` con medición de latencia en milisegundos y campo editable persistido en `localStorage` (`classforge_local_ai_url`).
+- **Selector de Diagramas:** Permite evaluar un diagrama específico o el esquema completo del proyecto con el botón `⚡ Solicitar Evaluación y Visto Bueno`.
+- **Tarjetas de Dictamen y Chat:** Despliega tarjetas de veredicto con desglose por criterios, pliego de arquitectura y base de datos expandible (si aprueba) o lista de mejoras requeridas (si rechaza), junto con un cuadro de texto interactivo con atajos rápidos de auditoría.
+

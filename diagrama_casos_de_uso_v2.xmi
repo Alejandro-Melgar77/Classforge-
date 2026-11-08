@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
+	<xmi:Documentation exporter="Enterprise Architect" exporterVersion="6.5"/>
+	<uml:Model xmi:type="uml:Model" name="EA_Model" xmi:id="MX_EA_Model">
+		<packagedElement xmi:type="uml:Package" xmi:id="EAPK_CLASSFORGE_V2" name="ClassForge v2.0 - Casos de Uso">
+			
+			<!-- ========================================== -->
+			<!-- ACTORES HUMANOS                            -->
+			<!-- ========================================== -->
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_VISITANTE" name="Visitante"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_DESARROLLADOR" name="Desarrollador"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_SCRUM_MASTER" name="Scrum Master">
+				<generalization xmi:type="uml:Generalization" xmi:id="GEN_SM_TO_DEV" general="EAID_ACT_DESARROLLADOR"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_ADMIN" name="Administrador">
+				<generalization xmi:type="uml:Generalization" xmi:id="GEN_ADMIN_TO_SM" general="EAID_ACT_SCRUM_MASTER"/>
+			</packagedElement>
+
+			<!-- ========================================== -->
+			<!-- ACTORES EXTERNOS / DISPOSITIVOS / CRON     -->
+			<!-- ========================================== -->
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_TEMPORIZADOR" name="Temporizador del Sistema"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_GEMINI" name="API Cloud Gemini (Visión / Chat)"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_IA_LOCAL" name="Gestor IA Local GGUF (localhost)"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_IA_PARTICIPANTE" name="Agente IA Participativo"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_ACT_STT_MOVIL" name="Motor Speech-to-Text Móvil"/>
+
+			<!-- ========================================== -->
+			<!-- LOS 13 CASOS DE USO (VERSION 2.0)          -->
+			<!-- ========================================== -->
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_01" name="CU-01: Gestionar Autenticación y Sesión de Usuario"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_02" name="CU-02: Administrar Equipos de Desarrollo y Miembros"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_03" name="CU-03: Gestionar Jerarquía de Proyectos y Diagramas"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_04" name="CU-04: Modelar Diagramas de Clases UML 2.5+ y Persistencia"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_05" name="CU-05: Colaborar en Tiempo Real en el Lienzo"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_06" name="CU-06: Interoperar Modelos y Generar Backend"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_07" name="CU-07: Generar y Modificar Diagramas con IA Multimodal">
+				<include xmi:type="uml:Include" xmi:id="INC_CU07_TO_CU04" addition="EAID_CU_04"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_08" name="CU-08: Ejecutar Asistencia Interactiva (Tutorial Inmersivo)"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_09" name="CU-09: Evaluar Proyectos con IA Local y Generar Reportes PDF"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_10" name="CU-10: Consultar a la IA con Historial Compartido de Equipo"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_11" name="CU-11: Asignar Roles y Tareas a la IA Participativa">
+				<extend xmi:type="uml:Extend" xmi:id="EXT_CU11_TO_CU02" extendedCase="EAID_CU_02"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_12" name="CU-12: Ejecutar Tareas Autónomas en el Lienzo (Layout y Normalización)">
+				<include xmi:type="uml:Include" xmi:id="INC_CU12_TO_CU05" addition="EAID_CU_05"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_CU_13" name="CU-13: Visualizar y Editar Diagramas por Voz desde la App Móvil">
+				<include xmi:type="uml:Include" xmi:id="INC_CU13_TO_CU04" addition="EAID_CU_04"/>
+			</packagedElement>
+
+			<!-- ========================================== -->
+			<!-- ASOCIACIONES ACTOR -> CASO DE USO          -->
+			<!-- ========================================== -->
+			<!-- Visitante -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_VIS_CU01">
+				<memberEnd xmi:idref="END_VIS_CU01_A"/>
+				<memberEnd xmi:idref="END_VIS_CU01_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_VIS_CU01_A" type="EAID_ACT_VISITANTE"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_VIS_CU01_B" type="EAID_CU_01"/>
+			</packagedElement>
+
+			<!-- Desarrollador -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU01">
+				<memberEnd xmi:idref="END_DEV_CU01_A"/><memberEnd xmi:idref="END_DEV_CU01_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU01_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU01_B" type="EAID_CU_01"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU03">
+				<memberEnd xmi:idref="END_DEV_CU03_A"/><memberEnd xmi:idref="END_DEV_CU03_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU03_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU03_B" type="EAID_CU_03"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU04">
+				<memberEnd xmi:idref="END_DEV_CU04_A"/><memberEnd xmi:idref="END_DEV_CU04_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU04_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU04_B" type="EAID_CU_04"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU05">
+				<memberEnd xmi:idref="END_DEV_CU05_A"/><memberEnd xmi:idref="END_DEV_CU05_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU05_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU05_B" type="EAID_CU_05"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU06">
+				<memberEnd xmi:idref="END_DEV_CU06_A"/><memberEnd xmi:idref="END_DEV_CU06_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU06_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU06_B" type="EAID_CU_06"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU07">
+				<memberEnd xmi:idref="END_DEV_CU07_A"/><memberEnd xmi:idref="END_DEV_CU07_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU07_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU07_B" type="EAID_CU_07"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU08">
+				<memberEnd xmi:idref="END_DEV_CU08_A"/><memberEnd xmi:idref="END_DEV_CU08_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU08_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU08_B" type="EAID_CU_08"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU10">
+				<memberEnd xmi:idref="END_DEV_CU10_A"/><memberEnd xmi:idref="END_DEV_CU10_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU10_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU10_B" type="EAID_CU_10"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU12">
+				<memberEnd xmi:idref="END_DEV_CU12_A"/><memberEnd xmi:idref="END_DEV_CU12_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU12_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU12_B" type="EAID_CU_12"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_DEV_CU13">
+				<memberEnd xmi:idref="END_DEV_CU13_A"/><memberEnd xmi:idref="END_DEV_CU13_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU13_A" type="EAID_ACT_DESARROLLADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_DEV_CU13_B" type="EAID_CU_13"/>
+			</packagedElement>
+
+			<!-- Scrum Master -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_SM_CU02">
+				<memberEnd xmi:idref="END_SM_CU02_A"/><memberEnd xmi:idref="END_SM_CU02_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU02_A" type="EAID_ACT_SCRUM_MASTER"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU02_B" type="EAID_CU_02"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_SM_CU09">
+				<memberEnd xmi:idref="END_SM_CU09_A"/><memberEnd xmi:idref="END_SM_CU09_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU09_A" type="EAID_ACT_SCRUM_MASTER"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU09_B" type="EAID_CU_09"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_SM_CU11">
+				<memberEnd xmi:idref="END_SM_CU11_A"/><memberEnd xmi:idref="END_SM_CU11_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU11_A" type="EAID_ACT_SCRUM_MASTER"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_SM_CU11_B" type="EAID_CU_11"/>
+			</packagedElement>
+
+			<!-- Temporizador -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_TIME_CU01">
+				<memberEnd xmi:idref="END_TIME_CU01_A"/><memberEnd xmi:idref="END_TIME_CU01_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_TIME_CU01_A" type="EAID_ACT_TEMPORIZADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_TIME_CU01_B" type="EAID_CU_01"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_TIME_CU04">
+				<memberEnd xmi:idref="END_TIME_CU04_A"/><memberEnd xmi:idref="END_TIME_CU04_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_TIME_CU04_A" type="EAID_ACT_TEMPORIZADOR"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_TIME_CU04_B" type="EAID_CU_04"/>
+			</packagedElement>
+
+			<!-- Gemini -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_GEMINI_CU07">
+				<memberEnd xmi:idref="END_GEMINI_CU07_A"/><memberEnd xmi:idref="END_GEMINI_CU07_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_GEMINI_CU07_A" type="EAID_ACT_GEMINI"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_GEMINI_CU07_B" type="EAID_CU_07"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_GEMINI_CU10">
+				<memberEnd xmi:idref="END_GEMINI_CU10_A"/><memberEnd xmi:idref="END_GEMINI_CU10_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_GEMINI_CU10_A" type="EAID_ACT_GEMINI"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_GEMINI_CU10_B" type="EAID_CU_10"/>
+			</packagedElement>
+
+			<!-- IA Local GGUF -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_IALOCAL_CU09">
+				<memberEnd xmi:idref="END_IALOCAL_CU09_A"/><memberEnd xmi:idref="END_IALOCAL_CU09_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_IALOCAL_CU09_A" type="EAID_ACT_IA_LOCAL"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_IALOCAL_CU09_B" type="EAID_CU_09"/>
+			</packagedElement>
+
+			<!-- Agente IA Participativo -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_IAPART_CU12">
+				<memberEnd xmi:idref="END_IAPART_CU12_A"/><memberEnd xmi:idref="END_IAPART_CU12_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_IAPART_CU12_A" type="EAID_ACT_IA_PARTICIPANTE"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_IAPART_CU12_B" type="EAID_CU_12"/>
+			</packagedElement>
+
+			<!-- STT Móvil -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EA_ASSOC_STT_CU13">
+				<memberEnd xmi:idref="END_STT_CU13_A"/><memberEnd xmi:idref="END_STT_CU13_B"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_STT_CU13_A" type="EAID_ACT_STT_MOVIL"/>
+				<ownedEnd xmi:type="uml:Property" xmi:id="END_STT_CU13_B" type="EAID_CU_13"/>
+			</packagedElement>
+
+		</packagedElement>
+	</uml:Model>
+
+	<!-- ================================================================= -->
+	<!-- EXTENSIONES ESPECIFICAS PARA SPARX SYSTEMS ENTERPRISE ARCHITECT    -->
+	<!-- ================================================================= -->
+	<xmi:Extension extender="Enterprise Architect" extenderID="6.5">
+		<elements>
+			<!-- Actores Humanos -->
+			<element xmi:idref="EAID_ACT_VISITANTE" ea_type="Actor" name="Visitante" scope="public"/>
+			<element xmi:idref="EAID_ACT_DESARROLLADOR" ea_type="Actor" name="Desarrollador" scope="public"/>
+			<element xmi:idref="EAID_ACT_SCRUM_MASTER" ea_type="Actor" name="Scrum Master" scope="public"/>
+			<element xmi:idref="EAID_ACT_ADMIN" ea_type="Actor" name="Administrador" scope="public"/>
+
+			<!-- Actores No Humanos / Estereotipados -->
+			<element xmi:idref="EAID_ACT_TEMPORIZADOR" ea_type="Actor" name="Temporizador del Sistema" scope="public">
+				<modifiers stereotype="temporizador"/>
+			</element>
+			<element xmi:idref="EAID_ACT_GEMINI" ea_type="Actor" name="API Cloud Gemini (Visión / Chat)" scope="public">
+				<modifiers stereotype="sistema externo"/>
+			</element>
+			<element xmi:idref="EAID_ACT_IA_LOCAL" ea_type="Actor" name="Gestor IA Local GGUF (localhost)" scope="public">
+				<modifiers stereotype="sistema externo"/>
+			</element>
+			<element xmi:idref="EAID_ACT_IA_PARTICIPANTE" ea_type="Actor" name="Agente IA Participativo" scope="public">
+				<modifiers stereotype="agente autónomo"/>
+			</element>
+			<element xmi:idref="EAID_ACT_STT_MOVIL" ea_type="Actor" name="Motor Speech-to-Text Móvil" scope="public">
+				<modifiers stereotype="mobile api"/>
+			</element>
+
+			<!-- Casos de Uso -->
+			<element xmi:idref="EAID_CU_01" ea_type="UseCase" name="CU-01: Gestionar Autenticación y Sesión de Usuario" scope="public"/>
+			<element xmi:idref="EAID_CU_02" ea_type="UseCase" name="CU-02: Administrar Equipos de Desarrollo y Miembros" scope="public"/>
+			<element xmi:idref="EAID_CU_03" ea_type="UseCase" name="CU-03: Gestionar Jerarquía de Proyectos y Diagramas" scope="public"/>
+			<element xmi:idref="EAID_CU_04" ea_type="UseCase" name="CU-04: Modelar Diagramas de Clases UML 2.5+ y Persistencia" scope="public"/>
+			<element xmi:idref="EAID_CU_05" ea_type="UseCase" name="CU-05: Colaborar en Tiempo Real en el Lienzo" scope="public"/>
+			<element xmi:idref="EAID_CU_06" ea_type="UseCase" name="CU-06: Interoperar Modelos y Generar Backend" scope="public"/>
+			<element xmi:idref="EAID_CU_07" ea_type="UseCase" name="CU-07: Generar y Modificar Diagramas con IA Multimodal" scope="public"/>
+			<element xmi:idref="EAID_CU_08" ea_type="UseCase" name="CU-08: Ejecutar Asistencia Interactiva (Tutorial Inmersivo)" scope="public"/>
+			<element xmi:idref="EAID_CU_09" ea_type="UseCase" name="CU-09: Evaluar Proyectos con IA Local y Generar Reportes PDF" scope="public"/>
+			<element xmi:idref="EAID_CU_10" ea_type="UseCase" name="CU-10: Consultar a la IA con Historial Compartido de Equipo" scope="public"/>
+			<element xmi:idref="EAID_CU_11" ea_type="UseCase" name="CU-11: Asignar Roles y Tareas a la IA Participativa" scope="public"/>
+			<element xmi:idref="EAID_CU_12" ea_type="UseCase" name="CU-12: Ejecutar Tareas Autónomas en el Lienzo (Layout y Normalización)" scope="public"/>
+			<element xmi:idref="EAID_CU_13" ea_type="UseCase" name="CU-13: Visualizar y Editar Diagramas por Voz desde la App Móvil" scope="public"/>
+
+			<!-- Límite del Sistema (System Boundary) -->
+			<element xmi:idref="EAID_SYS_BOUNDARY" ea_type="Boundary" name="ClassForge v2.0 - Ecosistema de Modelado con IA" scope="public"/>
+		</elements>
+
+		<connectors>
+			<!-- Generalizaciones -->
+			<connector xmi:idref="GEN_SM_TO_DEV">
+				<source xmi:idref="EAID_ACT_SCRUM_MASTER"/>
+				<target xmi:idref="EAID_ACT_DESARROLLADOR"/>
+				<properties ea_type="Generalization" direction="Source -&gt; Destination"/>
+			</connector>
+			<connector xmi:idref="GEN_ADMIN_TO_SM">
+				<source xmi:idref="EAID_ACT_ADMIN"/>
+				<target xmi:idref="EAID_ACT_SCRUM_MASTER"/>
+				<properties ea_type="Generalization" direction="Source -&gt; Destination"/>
+			</connector>
+
+			<!-- Relaciones de Casos de Uso (Include / Extend) -->
+			<connector xmi:idref="INC_CU07_TO_CU04">
+				<source xmi:idref="EAID_CU_07"/>
+				<target xmi:idref="EAID_CU_04"/>
+				<properties ea_type="UseCase" stereotype="include" direction="Source -&gt; Destination"/>
+			</connector>
+			<connector xmi:idref="EXT_CU11_TO_CU02">
+				<source xmi:idref="EAID_CU_11"/>
+				<target xmi:idref="EAID_CU_02"/>
+				<properties ea_type="UseCase" stereotype="extend" direction="Source -&gt; Destination"/>
+			</connector>
+			<connector xmi:idref="INC_CU12_TO_CU05">
+				<source xmi:idref="EAID_CU_12"/>
+				<target xmi:idref="EAID_CU_05"/>
+				<properties ea_type="UseCase" stereotype="include" direction="Source -&gt; Destination"/>
+			</connector>
+			<connector xmi:idref="INC_CU13_TO_CU04">
+				<source xmi:idref="EAID_CU_13"/>
+				<target xmi:idref="EAID_CU_04"/>
+				<properties ea_type="UseCase" stereotype="include" direction="Source -&gt; Destination"/>
+			</connector>
+
+			<!-- Asociaciones a Actores -->
+			<connector xmi:idref="EA_ASSOC_VIS_CU01"><source xmi:idref="EAID_ACT_VISITANTE"/><target xmi:idref="EAID_CU_01"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU01"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_01"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU03"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_03"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU04"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_04"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU05"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_05"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU06"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_06"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU07"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_07"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU08"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_08"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU10"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_10"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU12"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_12"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_DEV_CU13"><source xmi:idref="EAID_ACT_DESARROLLADOR"/><target xmi:idref="EAID_CU_13"/><properties ea_type="Association"/></connector>
+
+			<connector xmi:idref="EA_ASSOC_SM_CU02"><source xmi:idref="EAID_ACT_SCRUM_MASTER"/><target xmi:idref="EAID_CU_02"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_SM_CU09"><source xmi:idref="EAID_ACT_SCRUM_MASTER"/><target xmi:idref="EAID_CU_09"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_SM_CU11"><source xmi:idref="EAID_ACT_SCRUM_MASTER"/><target xmi:idref="EAID_CU_11"/><properties ea_type="Association"/></connector>
+
+			<connector xmi:idref="EA_ASSOC_TIME_CU01"><source xmi:idref="EAID_ACT_TEMPORIZADOR"/><target xmi:idref="EAID_CU_01"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_TIME_CU04"><source xmi:idref="EAID_ACT_TEMPORIZADOR"/><target xmi:idref="EAID_CU_04"/><properties ea_type="Association"/></connector>
+
+			<connector xmi:idref="EA_ASSOC_GEMINI_CU07"><source xmi:idref="EAID_ACT_GEMINI"/><target xmi:idref="EAID_CU_07"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_GEMINI_CU10"><source xmi:idref="EAID_ACT_GEMINI"/><target xmi:idref="EAID_CU_10"/><properties ea_type="Association"/></connector>
+
+			<connector xmi:idref="EA_ASSOC_IALOCAL_CU09"><source xmi:idref="EAID_ACT_IA_LOCAL"/><target xmi:idref="EAID_CU_09"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_IAPART_CU12"><source xmi:idref="EAID_ACT_IA_PARTICIPANTE"/><target xmi:idref="EAID_CU_12"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EA_ASSOC_STT_CU13"><source xmi:idref="EAID_ACT_STT_MOVIL"/><target xmi:idref="EAID_CU_13"/><properties ea_type="Association"/></connector>
+		</connectors>
+
+		<!-- ========================================================= -->
+		<!-- DIAGRAMA VISUAL Y COORDENADAS PARA ENTERPRISE ARCHITECT    -->
+		<!-- ========================================================= -->
+		<diagrams>
+			<diagram xmi:id="EA_DIAG_USECASE_V2">
+				<model package="EAPK_CLASSFORGE_V2" name="Diagrama de Casos de Uso - ClassForge v2.0" type="Use Case"/>
+				<properties documentation="Diagrama General de Casos de Uso UML 2.5+ para ClassForge Versión 2.0"/>
+				<project author="Alejandro Melgar" version="2.0"/>
+				<elements>
+					<!-- Límite del Sistema -->
+					<element geometry="Left=280;Top=30;Right=960;Bottom=1150;" subject="EAID_SYS_BOUNDARY" seq="1"/>
+
+					<!-- Actores Izquierda -->
+					<element geometry="Left=60;Top=60;Right=150;Bottom=150;" subject="EAID_ACT_VISITANTE" seq="2"/>
+					<element geometry="Left=60;Top=280;Right=150;Bottom=370;" subject="EAID_ACT_DESARROLLADOR" seq="3"/>
+					<element geometry="Left=60;Top=520;Right=150;Bottom=610;" subject="EAID_ACT_SCRUM_MASTER" seq="4"/>
+					<element geometry="Left=60;Top=760;Right=150;Bottom=850;" subject="EAID_ACT_ADMIN" seq="5"/>
+
+					<!-- Actores Derecha (Sistemas y Dispositivos) -->
+					<element geometry="Left=1040;Top=60;Right=1190;Bottom=130;" subject="EAID_ACT_TEMPORIZADOR" seq="6"/>
+					<element geometry="Left=1040;Top=280;Right=1210;Bottom=350;" subject="EAID_ACT_GEMINI" seq="7"/>
+					<element geometry="Left=1040;Top=500;Right=1210;Bottom=570;" subject="EAID_ACT_IA_LOCAL" seq="8"/>
+					<element geometry="Left=1040;Top=740;Right=1210;Bottom=810;" subject="EAID_ACT_IA_PARTICIPANTE" seq="9"/>
+					<element geometry="Left=1040;Top=960;Right=1210;Bottom=1030;" subject="EAID_ACT_STT_MOVIL" seq="10"/>
+
+					<!-- Casos de Uso Columna 1 (Lienzo, Gestión y Base) -->
+					<element geometry="Left=320;Top=60;Right=580;Bottom=120;" subject="EAID_CU_01" seq="11"/>
+					<element geometry="Left=320;Top=150;Right=580;Bottom=210;" subject="EAID_CU_02" seq="12"/>
+					<element geometry="Left=320;Top=240;Right=580;Bottom=300;" subject="EAID_CU_03" seq="13"/>
+					<element geometry="Left=320;Top=330;Right=580;Bottom=390;" subject="EAID_CU_04" seq="14"/>
+					<element geometry="Left=320;Top=420;Right=580;Bottom=480;" subject="EAID_CU_05" seq="15"/>
+					<element geometry="Left=320;Top=510;Right=580;Bottom=570;" subject="EAID_CU_06" seq="16"/>
+					<element geometry="Left=320;Top=600;Right=580;Bottom=660;" subject="EAID_CU_08" seq="17"/>
+
+					<!-- Casos de Uso Columna 2 (IA Multimodal, Local, Participativa y Móvil) -->
+					<element geometry="Left=660;Top=240;Right=920;Bottom=300;" subject="EAID_CU_07" seq="18"/>
+					<element geometry="Left=660;Top=420;Right=920;Bottom=480;" subject="EAID_CU_09" seq="19"/>
+					<element geometry="Left=660;Top=550;Right=920;Bottom=610;" subject="EAID_CU_10" seq="20"/>
+					<element geometry="Left=660;Top=680;Right=920;Bottom=740;" subject="EAID_CU_11" seq="21"/>
+					<element geometry="Left=660;Top=810;Right=920;Bottom=870;" subject="EAID_CU_12" seq="22"/>
+					<element geometry="Left=660;Top=940;Right=920;Bottom=1000;" subject="EAID_CU_13" seq="23"/>
+				</elements>
+			</diagram>
+		</diagrams>
+	</xmi:Extension>
+</xmi:XMI>

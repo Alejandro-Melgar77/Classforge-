@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
+	<xmi:Documentation exporter="Enterprise Architect" exporterVersion="6.5"/>
+	<uml:Model xmi:type="uml:Model" name="EA_Model" xmi:id="EAID_{358252C0-9AC1-4C63-A34C-F2849FD85621}">
+		<packagedElement xmi:type="uml:Package" xmi:id="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="Ciclo 1 - Nucleo y Modelado Base">
+
+			<!-- ACTORES HUMANOS -->
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}" name="Visitante"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}" name="Desarrollador"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}" name="Scrum Master">
+				<generalization xmi:type="uml:Generalization" xmi:id="EAID_{533722B6-C1B3-4146-A486-35D133101A34}" general="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+			</packagedElement>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{0BADDBFF-EE44-4E36-8F0E-91C1691F9B0D}" name="Administrador">
+				<generalization xmi:type="uml:Generalization" xmi:id="EAID_{CE6CE3C3-131B-4D8D-8F20-0011F742C429}" general="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/>
+			</packagedElement>
+
+			<!-- ACTORES EXTERNOS -->
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}" name="Temporizador del Sistema"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}" name="Web Speech API"/>
+			<packagedElement xmi:type="uml:Actor" xmi:id="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}" name="API Cloud Gemini (Vision / Multimodal)"/>
+
+			<!-- CASOS DE USO DEL CICLO 1 -->
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}" name="CU-01: Gestionar Autenticacion y Sesion de Usuario"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}" name="CU-02: Administrar Equipos de Desarrollo y Miembros"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}" name="CU-03: Gestionar Jerarquia de Proyectos y Diagramas"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}" name="CU-04: Modelar Diagramas de Clases UML 2.5+ y Persistencia"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}" name="CU-05: Colaborar en Tiempo Real en el Lienzo"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}" name="CU-06: Interoperar Modelos y Generar Backend"/>
+			<packagedElement xmi:type="uml:UseCase" xmi:id="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}" name="CU-07: Generar y Modificar Diagramas con IA Multimodal">
+				<include xmi:type="uml:Include" xmi:id="EAID_{67C492BA-18A1-47BC-BDE2-DEDF3C96AE1E}" addition="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/>
+			</packagedElement>
+
+			<!-- ASOCIACIONES -->
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{695951F3-8F7E-4AA2-839C-F932AAD80711}"><memberEnd xmi:idref="R1"/><memberEnd xmi:idref="R2"/><ownedEnd xmi:type="uml:Property" xmi:id="R1" type="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}"/><ownedEnd xmi:type="uml:Property" xmi:id="R2" type="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{B1F18140-4E42-4F45-8173-DF5BCF427F1D}"><memberEnd xmi:idref="R3"/><memberEnd xmi:idref="R4"/><ownedEnd xmi:type="uml:Property" xmi:id="R3" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R4" type="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{E9ED9D07-05FF-4DE9-8EB2-1C5000B64361}"><memberEnd xmi:idref="R5"/><memberEnd xmi:idref="R6"/><ownedEnd xmi:type="uml:Property" xmi:id="R5" type="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/><ownedEnd xmi:type="uml:Property" xmi:id="R6" type="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{14BC703B-FA7F-4838-8226-2CD1DE8F78D3}"><memberEnd xmi:idref="R7"/><memberEnd xmi:idref="R8"/><ownedEnd xmi:type="uml:Property" xmi:id="R7" type="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/><ownedEnd xmi:type="uml:Property" xmi:id="R8" type="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{568C903B-93B4-4715-B551-C3F97A87AD01}"><memberEnd xmi:idref="R9"/><memberEnd xmi:idref="R10"/><ownedEnd xmi:type="uml:Property" xmi:id="R9" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R10" type="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{1E1D8957-BEB7-4E19-9231-E5D7BCE65D6C}"><memberEnd xmi:idref="R11"/><memberEnd xmi:idref="R12"/><ownedEnd xmi:type="uml:Property" xmi:id="R11" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R12" type="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{CEB2C6A4-ED7C-4F28-98B9-AFA25C11A663}"><memberEnd xmi:idref="R13"/><memberEnd xmi:idref="R14"/><ownedEnd xmi:type="uml:Property" xmi:id="R13" type="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/><ownedEnd xmi:type="uml:Property" xmi:id="R14" type="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{E99D73F6-E6C8-49E2-BDEB-E254EC99D148}"><memberEnd xmi:idref="R15"/><memberEnd xmi:idref="R16"/><ownedEnd xmi:type="uml:Property" xmi:id="R15" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R16" type="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{72D3585D-1AE8-4C6F-8FBD-1ECFDCC5FA28}"><memberEnd xmi:idref="R17"/><memberEnd xmi:idref="R18"/><ownedEnd xmi:type="uml:Property" xmi:id="R17" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R18" type="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{09F24005-FFB8-45A7-8F65-B57ED2DDB21C}"><memberEnd xmi:idref="R19"/><memberEnd xmi:idref="R20"/><ownedEnd xmi:type="uml:Property" xmi:id="R19" type="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><ownedEnd xmi:type="uml:Property" xmi:id="R20" type="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{9561416A-97D3-4520-A80A-534CCBE50BA4}"><memberEnd xmi:idref="R21"/><memberEnd xmi:idref="R22"/><ownedEnd xmi:type="uml:Property" xmi:id="R21" type="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}"/><ownedEnd xmi:type="uml:Property" xmi:id="R22" type="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/></packagedElement>
+			<packagedElement xmi:type="uml:Association" xmi:id="EAID_{DDA38734-37E3-4CF6-B017-BC397715442F}"><memberEnd xmi:idref="R23"/><memberEnd xmi:idref="R24"/><ownedEnd xmi:type="uml:Property" xmi:id="R23" type="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}"/><ownedEnd xmi:type="uml:Property" xmi:id="R24" type="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/></packagedElement>
+		</packagedElement>
+	</uml:Model>
+
+	<xmi:Extension extender="Enterprise Architect" extenderID="6.5">
+		<elements>
+			<element xmi:idref="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}" ea_type="Actor" name="Visitante" scope="public"/>
+			<element xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}" ea_type="Actor" name="Desarrollador" scope="public"/>
+			<element xmi:idref="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}" ea_type="Actor" name="Scrum Master" scope="public"/>
+			<element xmi:idref="EAID_{0BADDBFF-EE44-4E36-8F0E-91C1691F9B0D}" ea_type="Actor" name="Administrador" scope="public"/>
+			<element xmi:idref="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}" ea_type="Actor" name="Temporizador del Sistema" scope="public"><modifiers stereotype="temporizador"/></element>
+			<element xmi:idref="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}" ea_type="Actor" name="Web Speech API" scope="public"><modifiers stereotype="browser api"/></element>
+			<element xmi:idref="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}" ea_type="Actor" name="API Cloud Gemini (Vision / Multimodal)" scope="public"><modifiers stereotype="sistema externo"/></element>
+			<element xmi:idref="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}" ea_type="UseCase" name="CU-01: Gestionar Autenticacion y Sesion de Usuario" scope="public"/>
+			<element xmi:idref="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}" ea_type="UseCase" name="CU-02: Administrar Equipos de Desarrollo y Miembros" scope="public"/>
+			<element xmi:idref="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}" ea_type="UseCase" name="CU-03: Gestionar Jerarquia de Proyectos y Diagramas" scope="public"/>
+			<element xmi:idref="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}" ea_type="UseCase" name="CU-04: Modelar Diagramas de Clases UML 2.5+ y Persistencia" scope="public"/>
+			<element xmi:idref="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}" ea_type="UseCase" name="CU-05: Colaborar en Tiempo Real en el Lienzo" scope="public"/>
+			<element xmi:idref="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}" ea_type="UseCase" name="CU-06: Interoperar Modelos y Generar Backend" scope="public"/>
+			<element xmi:idref="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}" ea_type="UseCase" name="CU-07: Generar y Modificar Diagramas con IA Multimodal" scope="public"/>
+		</elements>
+		<connectors>
+			<connector xmi:idref="EAID_{533722B6-C1B3-4146-A486-35D133101A34}"><source xmi:idref="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/><target xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><properties ea_type="Generalization" direction="Source -> Destination"/></connector>
+			<connector xmi:idref="EAID_{CE6CE3C3-131B-4D8D-8F20-0011F742C429}"><source xmi:idref="EAID_{0BADDBFF-EE44-4E36-8F0E-91C1691F9B0D}"/><target xmi:idref="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/><properties ea_type="Generalization" direction="Source -> Destination"/></connector>
+			<connector xmi:idref="EAID_{67C492BA-18A1-47BC-BDE2-DEDF3C96AE1E}"><source xmi:idref="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/><target xmi:idref="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/><properties ea_type="UseCase" stereotype="include" direction="Source -> Destination"/></connector>
+			<connector xmi:idref="EAID_{695951F3-8F7E-4AA2-839C-F932AAD80711}"><source xmi:idref="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}"/><target xmi:idref="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{B1F18140-4E42-4F45-8173-DF5BCF427F1D}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{E9ED9D07-05FF-4DE9-8EB2-1C5000B64361}"><source xmi:idref="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/><target xmi:idref="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{14BC703B-FA7F-4838-8226-2CD1DE8F78D3}"><source xmi:idref="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/><target xmi:idref="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{568C903B-93B4-4715-B551-C3F97A87AD01}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{1E1D8957-BEB7-4E19-9231-E5D7BCE65D6C}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{CEB2C6A4-ED7C-4F28-98B9-AFA25C11A663}"><source xmi:idref="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/><target xmi:idref="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{E99D73F6-E6C8-49E2-BDEB-E254EC99D148}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{72D3585D-1AE8-4C6F-8FBD-1ECFDCC5FA28}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{09F24005-FFB8-45A7-8F65-B57ED2DDB21C}"><source xmi:idref="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/><target xmi:idref="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{9561416A-97D3-4520-A80A-534CCBE50BA4}"><source xmi:idref="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}"/><target xmi:idref="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/><properties ea_type="Association"/></connector>
+			<connector xmi:idref="EAID_{DDA38734-37E3-4CF6-B017-BC397715442F}"><source xmi:idref="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}"/><target xmi:idref="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/><properties ea_type="Association"/></connector>
+		</connectors>
+		<diagrams>
+
+			<!-- DIAGRAMA COMPLETO DEL CICLO 1 -->
+			<diagram xmi:id="EAID_{B4AA910D-AC35-4C0E-A049-2D89EB7AE516}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="Diagrama General - Ciclo 1" type="Use Case"/>
+				<properties documentation="Diagrama de Casos de Uso del Ciclo #1"/>
+				<project author="Alejandro Melgar" version="2.0"/>
+				<elements>
+					<element geometry="Left=60;Top=60;Right=150;Bottom=150;" subject="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}" seq="1"/>
+					<element geometry="Left=60;Top=240;Right=150;Bottom=330;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}" seq="2"/>
+					<element geometry="Left=60;Top=420;Right=150;Bottom=510;" subject="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}" seq="3"/>
+					<element geometry="Left=60;Top=600;Right=150;Bottom=690;" subject="EAID_{0BADDBFF-EE44-4E36-8F0E-91C1691F9B0D}" seq="4"/>
+					<element geometry="Left=880;Top=60;Right=1040;Bottom=130;" subject="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}" seq="5"/>
+					<element geometry="Left=880;Top=360;Right=1040;Bottom=430;" subject="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}" seq="6"/>
+					<element geometry="Left=880;Top=520;Right=1060;Bottom=590;" subject="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}" seq="7"/>
+					<element geometry="Left=320;Top=60;Right=600;Bottom=120;" subject="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}" seq="8"/>
+					<element geometry="Left=320;Top=160;Right=600;Bottom=220;" subject="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}" seq="9"/>
+					<element geometry="Left=320;Top=260;Right=600;Bottom=320;" subject="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}" seq="10"/>
+					<element geometry="Left=320;Top=360;Right=600;Bottom=420;" subject="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}" seq="11"/>
+					<element geometry="Left=320;Top=460;Right=600;Bottom=520;" subject="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}" seq="12"/>
+					<element geometry="Left=320;Top=560;Right=600;Bottom=620;" subject="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}" seq="13"/>
+					<element geometry="Left=320;Top=660;Right=600;Bottom=720;" subject="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}" seq="14"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-01 -->
+			<diagram xmi:id="EAID_{D838122E-40F3-40CB-9CBE-43A99498D3E8}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-01: Autenticacion y Sesion" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=60;Right=150;Bottom=150;" subject="EAID_{E160F6C0-1AE0-4753-8C5B-9A56BD6AFFFF}"/>
+					<element geometry="Left=60;Top=200;Right=150;Bottom=290;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=120;Right=620;Bottom=180;" subject="EAID_{5F44F7BA-180F-4BF3-BE81-B66E172F8A56}"/>
+					<element geometry="Left=750;Top=120;Right=910;Bottom=190;" subject="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-02 -->
+			<diagram xmi:id="EAID_{826F9357-F905-466D-A035-DC4371907D07}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-02: Equipos y Miembros" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=60;Right=150;Bottom=150;" subject="EAID_{A728C1A6-2C0D-427C-8471-9FD8B7D6E326}"/>
+					<element geometry="Left=60;Top=220;Right=150;Bottom=310;" subject="EAID_{0BADDBFF-EE44-4E36-8F0E-91C1691F9B0D}"/>
+					<element geometry="Left=340;Top=120;Right=620;Bottom=180;" subject="EAID_{B6FA15DD-BAC5-435B-A64C-8A92D923D2D6}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-03 -->
+			<diagram xmi:id="EAID_{28B81564-42E6-4A63-99E8-9EFA77DE56A1}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-03: Jerarquia de Proyectos" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=100;Right=150;Bottom=190;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=110;Right=620;Bottom=170;" subject="EAID_{98FCEEAB-E571-453B-B4FE-68CEFECCACB5}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-04 -->
+			<diagram xmi:id="EAID_{417DDF11-ACD8-43AA-AF4D-A3ECE7EBD798}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-04: Modelado UML y Persistencia" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=100;Right=150;Bottom=190;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=110;Right=620;Bottom=170;" subject="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/>
+					<element geometry="Left=750;Top=110;Right=910;Bottom=180;" subject="EAID_{ADB3127B-211B-4323-AD4B-C644D229B998}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-05 -->
+			<diagram xmi:id="EAID_{E9B481B8-09A7-4F88-A149-48E03D8E86F0}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-05: Colaboracion en Tiempo Real" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=100;Right=150;Bottom=190;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=110;Right=620;Bottom=170;" subject="EAID_{F1E1C77F-3F2F-4ED5-86A5-A6DDD758CA5A}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-06 -->
+			<diagram xmi:id="EAID_{DA7EC330-5AF5-43E8-A694-1E7D7962D818}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-06: Interoperabilidad y Backend" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=100;Right=150;Bottom=190;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=110;Right=620;Bottom=170;" subject="EAID_{8EF318B4-CD8E-4EF0-A283-130CBCF416D7}"/>
+				</elements>
+			</diagram>
+
+			<!-- DIAGRAMA INDIVIDUAL CU-07 -->
+			<diagram xmi:id="EAID_{BC14034E-BFF6-41F8-9025-5AC1CAF78D62}">
+				<model package="EAID_{764FE3D8-260B-41CD-82C8-80D176780307}" name="CU-07: IA Multimodal y Modelado" type="Use Case"/>
+				<elements>
+					<element geometry="Left=60;Top=120;Right=150;Bottom=210;" subject="EAID_{DACDD89A-3901-4BA3-B34F-F98CE4BC88ED}"/>
+					<element geometry="Left=340;Top=130;Right=620;Bottom=190;" subject="EAID_{15223D53-5B66-4C25-BC5D-CB649A9270B3}"/>
+					<element geometry="Left=340;Top=300;Right=620;Bottom=360;" subject="EAID_{7EB741C1-F2D2-489F-8CCC-AC4E6CEA5578}"/>
+					<element geometry="Left=750;Top=80;Right=910;Bottom=150;" subject="EAID_{FA4F10B8-D676-44D0-AD66-30B8B94ADFB9}"/>
+					<element geometry="Left=750;Top=200;Right=930;Bottom=270;" subject="EAID_{4CBAC020-5728-4C61-B585-A75C35EAFAC4}"/>
+				</elements>
+			</diagram>
+
+		</diagrams>
+	</xmi:Extension>
+</xmi:XMI>

@@ -101,6 +101,33 @@ class ProjectReviewCreateRequest(BaseModel):
     evaluation_notes: Optional[str] = None
 
 
+class LocalAiChatMessage(BaseModel):
+    role: str = "user"  # "user" | "assistant" | "system"
+    content: str
+
+
+class LocalAiChatRequest(BaseModel):
+    diagram_id: Optional[str] = None
+    message: str = Field(default="Evaluar diseño y dar visto bueno", max_length=4000)
+    session_history: List[LocalAiChatMessage] = Field(default_factory=list)
+    tunnel_url: Optional[str] = None
+
+
+class LocalAiChatResponse(BaseModel):
+    verdict: VerdictType
+    total_score: float
+    passing_score: float = 70.0
+    summary: str
+    criteria_scores: List[CriterionScore] = Field(default_factory=list)
+    technical_specification: Optional[TechnicalSpecification] = None
+    required_improvements: List[str] = Field(default_factory=list)
+    assistant_message: str
+    evaluated_by_model: str = "classforge-local-1.7b"
+    latency_ms: Optional[float] = None
+    diagram_id: Optional[str] = None
+    diagram_name: Optional[str] = None
+
+
 class ProjectReviewResponse(BaseModel):
     id: str
     project_id: str

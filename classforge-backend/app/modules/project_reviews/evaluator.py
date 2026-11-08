@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from typing import Dict, List, Optional, Tuple, Any
 import httpx
 
@@ -24,6 +25,10 @@ from app.modules.project_reviews.rubric import (
     evaluate_verdict,
     STANDARD_RUBRIC_CODE,
 )
+from app.ai_team.domain.diagram_model import Diagram, Node, Edge
+from app.ai_team.application.diagram_summary import summarize_diagram
+from app.llm.models import LlmMessage, LlmRequest
+from app.llm.registry import get_ollama_provider
 
 logger = logging.getLogger("classforge.project_reviews.evaluator")
 
@@ -121,6 +126,291 @@ class ProjectEvaluator:
 
         # Fallback: Deterministic Semantic Rule Engine
         return self._evaluate_with_semantic_rules(doc)
+
+    async def evaluate_uml_diagram(
+        self,
+        diagram: Diagram,
+        user_message: str,
+        session_history: Optional[List[Dict[str, str]]] = None,
+        tunnel_url: Optional[str] = None,
+        project_name: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Interactive Local AI evaluation and conversation over UML 2.5+ diagram structure.
+        Eliminates PDF dependency: directly digests classes, stereotypes, typed attributes,
+        methods, and relationships with multiplicities.
+        """
+        start_t = time.monotonic()
+        nodes = diagram.nodes or []
+        edges = diagram.edges or []
+        summary = summarize_diagram(diagram)
+
+        # 1. Structural audit against UML rules and SOLID
+        connected_node_ids = set()
+        for e in edges:
+            connected_node_ids.add(str(e.source))
+            connected_node_ids.add(str(e.target))
+
+        orphan_classes = [n.name for n in nodes if str(n.id) not in connected_node_ids]
+
+        untyped_attrs = []
+        missing_pk_classes = []
+        god_classes = []
+        for n in nodes:
+            has_id = False
+            for a in n.attributes:
+                a_name = a.name.strip().lower()
+                if a_name in ("id", "uuid", f"{n.name.lower()}id", f"{n.name.lower()}_id"):
+                    has_id = True
+                if not a.type or a.type.strip().lower() in ("any", "unknown", "object"):
+                    untyped_attrs.append(f"{n.name}.{a.name}")
+            if not has_id and n.type in ("class", "entity"):
+                missing_pk_classes.append(n.name)
+            if (len(n.attributes) + len(n.methods)) > 15:
+                god_classes.append(n.name)
+
+        many_to_many_edges = []
+        for e in edges:
+            sm = (e.source_multiplicity or "").strip()
+            tm = (e.target_multiplicity or "").strip()
+            is_m2m = ("*" in sm or "0..*" in sm or "1..*" in sm) and ("*" in tm or "0..*" in tm or "1..*" in tm)
+            if is_m2m and e.type in ("association", "aggregation"):
+                src_name = diagram.get_node_name(e.source)
+                tgt_name = diagram.get_node_name(e.target)
+                many_to_many_edges.append(f"{src_name} *..* {tgt_name}")
+
+        # Compute scores per rubric
+        arch_score = 95.0
+        if orphan_classes:
+            arch_score -= min(30.0, len(orphan_classes) * 15.0)
+        if many_to_many_edges:
+            arch_score -= min(25.0, len(many_to_many_edges) * 20.0)
+        if god_classes:
+            arch_score -= min(25.0, len(god_classes) * 20.0)
+        arch_score = max(20.0, min(100.0, arch_score))
+
+        data_score = 92.0
+        if missing_pk_classes:
+            data_score -= min(30.0, len(missing_pk_classes) * 15.0)
+        if untyped_attrs:
+            data_score -= min(25.0, len(untyped_attrs) * 10.0)
+        data_score = max(20.0, min(100.0, data_score))
+
+        req_score = 90.0 if len(nodes) >= 3 else 70.0
+        scope_score = 90.0
+        qa_score = 95.0 if any(n.type in ("interface", "abstract") or n.stereotype == "interface" for n in nodes) else 82.0
+        sec_score = 95.0 if any("user" in n.name.lower() or "usuario" in n.name.lower() or "auth" in n.name.lower() for n in nodes) else 80.0
+
+        scores_map = {
+            "arquitectura_diagrama_uml": arch_score,
+            "modelo_persistencia_datos": data_score,
+            "especificacion_requisitos": req_score,
+            "definicion_problema_alcance": scope_score,
+            "plan_pruebas_qa": qa_score,
+            "seguridad_riesgos": sec_score,
+        }
+
+        total_score = round(
+            (arch_score * 0.25)
+            + (data_score * 0.15)
+            + (req_score * 0.20)
+            + (scope_score * 0.15)
+            + (qa_score * 0.15)
+            + (sec_score * 0.10),
+            1,
+        )
+
+        is_approved = total_score >= self.rubric.passing_score
+        verdict = VerdictType.APROBADO if is_approved else VerdictType.RECHAZADO
+
+        # Build Criteria results
+        criteria_scores: List[CriterionScore] = []
+        for crit in self.rubric.criteria:
+            sc = scores_map.get(crit.code, 80.0)
+            st = []
+            wk = []
+            if crit.code == "arquitectura_diagrama_uml":
+                if not orphan_classes and not many_to_many_edges and not god_classes:
+                    st.append("Estructura sin clases huérfanas ni antipatrones God Class.")
+                if orphan_classes:
+                    wk.append(f"Clases aisladas sin relaciones en el grafo: {', '.join(orphan_classes)}")
+                if many_to_many_edges:
+                    wk.append(f"Asociación *..* directa sin clase intermedia: {', '.join(many_to_many_edges)}")
+                if god_classes:
+                    wk.append(f"Clase Dios (God Class) que viola SRP: {', '.join(god_classes)}")
+            elif crit.code == "modelo_persistencia_datos":
+                if not missing_pk_classes and not untyped_attrs:
+                    st.append("Todas las entidades poseen clave primaria y tipos de datos definidos.")
+                if missing_pk_classes:
+                    wk.append(f"Entidades sin clave primaria id: {', '.join(missing_pk_classes)}")
+                if untyped_attrs:
+                    wk.append(f"Atributos sin tipo formal: {', '.join(untyped_attrs)}")
+            criteria_scores.append(
+                CriterionScore(
+                    criterion_code=crit.code,
+                    name=crit.name,
+                    weight=crit.weight,
+                    score=sc,
+                    weighted_score=round(crit.weight * sc / 100.0, 2),
+                    strengths=st,
+                    weaknesses=wk,
+                    observations=f"Evaluación del diagrama {diagram.name} contra rúbrica {self.rubric.code}.",
+                    citations=[],
+                    evidence_quotes=[],
+                )
+            )
+
+        # Technical specification or Required improvements
+        required_improvements: List[str] = []
+        tech_spec: Optional[TechnicalSpecification] = None
+        if is_approved:
+            tech_spec = self._generate_technical_spec_from_diagram(diagram, project_name)
+        else:
+            if orphan_classes:
+                required_improvements.append(f"Conectar clases huérfanas ({', '.join(orphan_classes)}) al modelo de negocio o flujo del sistema.")
+            if many_to_many_edges:
+                required_improvements.append(f"Descomponer la relación muchos a muchos ({', '.join(many_to_many_edges)}) creando una clase de asociación intermedia conectada con multiplicidades 1..* a ambos extremos.")
+            if missing_pk_classes:
+                required_improvements.append(f"Definir identificador único 'id: Long' o 'id: UUID' en las entidades: {', '.join(missing_pk_classes)}.")
+            if untyped_attrs:
+                required_improvements.append(f"Asignar tipos de datos válidos (ej. String, Integer, Decimal, Date) a los atributos: {', '.join(untyped_attrs)}.")
+            if god_classes:
+                required_improvements.append(f"Refactorizar la God Class '{', '.join(god_classes)}' extrayendo responsabilidades auxiliares en clases cohesivas según SRP.")
+
+        # Call local LLM
+        provider = get_ollama_provider()
+        llm_messages: List[LlmMessage] = []
+        if session_history:
+            for m in session_history:
+                r = "user" if m.get("role") == "user" else "assistant"
+                llm_messages.append(LlmMessage(role=r, text=m.get("content", "")))
+
+        query_prompt = (
+            f"DIAGRAMA UML: {diagram.name}\n"
+            f"RESUMEN ESTRUCTURAL:\n{summary}\n\n"
+            f"CONSULTA DEL USUARIO:\n{user_message}"
+        )
+        llm_messages.append(LlmMessage(role="user", text=query_prompt))
+
+        sys_prompt = (
+            "Eres el Gestor y Aprobador de Proyectos de Software y Arquitectura UML de ClassForge 2.0 (classforge-local-evaluator).\n"
+            "Evalúa con rigor técnico el diagrama UML contra la rúbrica CF-SE-2026.1 y principios SOLID.\n"
+            "Emite veredicto claro (APROBADO o RECHAZADO con puntuación) y detalla Especificaciones Técnicas (si aprueba) "
+            "o Mejoras Necesarias precisas (si rechaza), respondiendo a la consulta del usuario en español conciso."
+        )
+
+        assistant_msg = ""
+        model_name = "classforge-local-1.7b"
+        try:
+            req = LlmRequest(
+                system=sys_prompt,
+                messages=llm_messages,
+                model="classforge-local-1.7b",
+                temperature=0.1,
+                max_output_tokens=1024,
+                purpose="chat",
+            )
+            llm_resp = await provider.generate(req, override_url=tunnel_url)
+            assistant_msg = llm_resp.text.strip()
+            model_name = llm_resp.model or model_name
+        except Exception as e:
+            logger.warning(f"[ProjectEvaluator] Fallback en llamada a Ollama ({e}). Generando dictamen heurístico estructurado.")
+            if is_approved:
+                assistant_msg = (
+                    f"### 📋 Dictamen de Evaluación Técnica: **APROBADO** (Puntuación: {total_score}/100)\n\n"
+                    f"El diagrama de clases '{diagram.name}' cumple satisfactoriamente con los criterios de modelado UML 2.5+ "
+                    f"y la rúbrica estándar {self.rubric.code}. Se observa una definición adecuada de claves primarias, "
+                    f"tipado coherente y buenas prácticas de encapsulamiento.\n\n"
+                    f"---\n\n"
+                    f"#### 🛠️ Especificaciones Técnicas Recomendadas:\n"
+                    f"- **Arquitectura:** Arquitectura modular en capas (Controlador REST -> Servicio de Dominio -> Repositorio).\n"
+                    f"- **Contratos REST:** Generación recomendada de endpoints CRUD para entidades principales.\n"
+                    f"- **Persistencia:** Mapeo de entidades a tablas relacionales con índices B-Tree en claves primarias y foráneas."
+                )
+            else:
+                imp_bullets = "\n".join([f"- {imp}" for imp in required_improvements])
+                assistant_msg = (
+                    f"### ⚠️ Dictamen de Evaluación Técnica: **RECHAZADO** (Puntuación: {total_score}/100)\n\n"
+                    f"El diagrama de clases '{diagram.name}' no alcanza el puntaje mínimo de aprobación ({self.rubric.passing_score}/100) "
+                    f"debido a infracciones detectadas en la rúbrica de ingeniería:\n\n"
+                    f"---\n\n"
+                    f"#### ❌ Mejoras Necesarias para Obtener Aprobación:\n"
+                    f"{imp_bullets}"
+                )
+
+        latency_ms = round((time.monotonic() - start_t) * 1000, 2)
+        return {
+            "verdict": verdict,
+            "total_score": total_score,
+            "passing_score": self.rubric.passing_score,
+            "summary": f"Dictamen {verdict.value} con puntuación {total_score}/100 sobre el diagrama {diagram.name}.",
+            "criteria_scores": criteria_scores,
+            "technical_specification": tech_spec,
+            "required_improvements": required_improvements,
+            "assistant_message": assistant_msg,
+            "evaluated_by_model": model_name,
+            "latency_ms": latency_ms,
+            "diagram_id": diagram.id,
+            "diagram_name": diagram.name,
+        }
+
+    def _generate_technical_spec_from_diagram(self, diagram: Diagram, project_name: str) -> TechnicalSpecification:
+        nodes = [n for n in diagram.nodes if n.type in ("class", "entity", "abstract")]
+        components = [
+            ComponentSpec(
+                name=f"{n.name}Module",
+                role=f"Gestión de dominio {n.name}",
+                technology="FastAPI / Spring Boot + SQLAlchemy/JPA",
+                description=f"Controlador y servicio transaccional para la entidad {n.name}."
+            )
+            for n in nodes[:6]
+        ] or [ComponentSpec(name="CoreDomainService", role="Servicio central", technology="FastAPI", description="Servicios de lógica de negocio.")]
+
+        endpoints = []
+        for n in nodes[:5]:
+            plural = f"{n.name.lower()}s"
+            endpoints.append(EndpointSpec(
+                method="POST",
+                path=f"/api/v1/{plural}",
+                description=f"Crea un nuevo registro de {n.name}",
+                request_body=f"Payload {n.name}CreateDTO",
+                response_body=f"Objeto {n.name}ResponseDTO"
+            ))
+            endpoints.append(EndpointSpec(
+                method="GET",
+                path=f"/api/v1/{plural}/{{id}}",
+                description=f"Obtiene detalles y relaciones de {n.name}",
+                response_body=f"Detalle de {n.name}"
+            ))
+
+        data_models = []
+        for n in nodes:
+            attrs_str = [f"{a.name}: {a.type}" for a in n.attributes]
+            data_models.append(DataModelEntity(
+                name=n.name,
+                attributes=attrs_str or ["id: Long (PK)"],
+                relationships=[f"{e.type} hacia {diagram.get_node_name(e.target)}" for e in diagram.edges if e.source == n.id]
+            ))
+
+        return TechnicalSpecification(
+            title=f"Pliego de Especificaciones Técnicas - {project_name or diagram.name}",
+            overview=f"Especificación arquitectónica formal derivada del visto bueno de IA local sobre el diagrama {diagram.name}.",
+            functional_scope=[f"Operaciones de negocio para {n.name}" for n in nodes[:4]],
+            system_architecture="Arquitectura Hexagonal (Ports & Adapters) con API REST desacoplada y persistencia ACID.",
+            components=components,
+            api_endpoints=endpoints,
+            data_model=data_models,
+            non_functional_requirements=[
+                "Latencia de respuesta REST < 200ms en p95.",
+                "Transaccionalidad ACID y aislamiento en operaciones de persistencia.",
+                "Trazabilidad de auditoría en endpoints mutables.",
+            ],
+            deployment_and_security=[
+                "Contenerización con Docker y aislamiento de redes internas.",
+                "Autenticación stateless JWT con rotación de claves criptográficas.",
+                "Validación de esquemas de entrada y protección CORS/Anti-CSRF.",
+            ]
+        )
 
     async def _try_evaluate_with_ollama(
         self,

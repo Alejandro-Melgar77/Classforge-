@@ -1,255 +1,447 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ProjectReviewsService } from '../services/project-reviews.service';
-import { ProjectReview, ReviewDocument, VerdictType } from '../models/review.model';
+import { DiagramService } from '../../diagrams/services/diagram.service';
+import { Diagram } from '../../diagrams/models/diagram.model';
 import { ToastService } from '../../../core/services/toast.service';
+import {
+  ProjectReview,
+  LocalAiStatus,
+  LocalAiChatMessage,
+  LocalAiChatRequest,
+  LocalAiChatResponse,
+  LocalAiUiMessage,
+} from '../models/review.model';
 
 @Component({
   selector: 'app-project-reviews',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
-    <div class="h-full flex flex-col gap-6 text-[var(--text-primary)]">
+    <div class="h-full flex flex-col gap-5 text-[var(--text-primary)]">
       
-      <!-- Top Header & Upload Section -->
-      <div class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl p-6 shadow-sm">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+      <!-- Top Header & Local Node Connection Bar -->
+      <div class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <span>📑</span>
-              <span>Evaluador Inteligente Local de Proyectos</span>
+              <span class="text-xl">🤖</span>
+              <span>Consola Inteligente de Arquitectura UML & IA Local</span>
             </h2>
             <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl">
-              Analiza la documentación PDF de tu proyecto de software mediante IA local y rúbrica técnica formal (CF-SE-2026.1).
-              Emite dictámenes verificables, detección de alucinaciones y pliegos de especificaciones.
+              Motor de evaluación interactivo basado en <strong>Liquid AI LFM 1.7B</strong> sobre Ollama.
+              Audita directamente los diagramas de clases UML 2.5+, valida restricciones formales (rúbrica CF-SE-2026.1) y emite pliegos técnicos sin requerir documentos PDF.
             </p>
           </div>
+
+          <!-- Live Status Badge -->
           <div class="flex items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Motor Local Activo
-            </span>
+            @if (localStatus()?.status === 'connected' || localStatus()?.online) {
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-sm">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>🟢 PC Local Conectada (Liquid LFM 1.7B Activo)</span>
+                @if (localStatus()?.latency_ms !== undefined) {
+                  <span class="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300 font-mono">
+                    {{ localStatus()?.latency_ms }} ms
+                  </span>
+                }
+              </div>
+            } @else {
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/25 shadow-sm">
+                <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                <span>🔴 PC Local Apagada / Túnel Desconectado</span>
+              </div>
+            }
           </div>
         </div>
 
-        <!-- Upload Drag & Drop Area -->
-        <div
-          class="border-2 border-dashed border-[var(--border)] hover:border-primary/60 rounded-xl p-6 text-center transition-colors bg-[var(--surface-3)]/40 flex flex-col items-center justify-center gap-3 cursor-pointer"
-          (click)="fileInput.click()"
-        >
-          <input
-            #fileInput
-            type="file"
-            accept=".pdf,application/pdf"
-            class="hidden"
-            (change)="onFileSelected($event)"
-          />
-          <div class="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xl">
-            📄
-          </div>
-          <div>
-            <p class="text-sm font-semibold text-white">
-              {{ selectedFile() ? selectedFile()!.name : 'Haz clic para seleccionar o arrastra un documento PDF' }}
-            </p>
-            <p class="text-xs text-[var(--text-secondary)] mt-0.5">
-              Tamaño máximo 25 MB • Hasta 300 páginas • Compatible con especificaciones y tesis
-            </p>
+        <!-- Connection Input Bar (Cloudflare / ngrok / localhost) -->
+        <div class="pt-3 border-t border-[var(--border)]/70 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] shrink-0">
+            <span>🌐 URL del Nodo / Túnel:</span>
           </div>
 
-          <div *ngIf="selectedFile()" class="flex items-center gap-3 mt-2" (click)="$event.stopPropagation()">
-            <span class="text-xs text-[var(--text-secondary)]">
-              ({{ (selectedFile()!.size / (1024 * 1024)).toFixed(2) }} MB)
-            </span>
+          <div class="flex-1 flex items-center gap-2">
+            <input
+              type="text"
+              [ngModel]="tunnelUrl()"
+              (ngModelChange)="onTunnelUrlChange($event)"
+              placeholder="http://localhost:11434 o https://tu-tunel.trycloudflare.com"
+              class="flex-1 bg-[var(--surface-3)] border border-[var(--border)] focus:border-primary rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors"
+            />
             <button
               type="button"
-              [disabled]="isEvaluating()"
-              (click)="evaluateSelectedFile()"
-              class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              [disabled]="isCheckingStatus()"
+              (click)="testConnection()"
+              class="px-4 py-2 bg-[var(--surface-4)] hover:bg-primary text-white text-xs font-semibold rounded-xl border border-[var(--border)] hover:border-primary transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+              title="Comprobar conectividad con Ollama y el modelo local"
             >
-              <span *ngIf="isEvaluating()" class="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-              <span>{{ isEvaluating() ? 'Evaluando documento...' : 'Ejecutar Evaluación Técnica' }}</span>
+              @if (isCheckingStatus()) {
+                <span class="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                <span>Probando...</span>
+              } @else {
+                <span>⚡ Probar Conexión</span>
+              }
             </button>
           </div>
         </div>
+
+        @if (localStatus() && !localStatus()?.online) {
+          <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+            <span class="text-sm">⚠️</span>
+            <div class="space-y-0.5">
+              <p class="font-semibold">El nodo local de Ollama no responde en la URL indicada.</p>
+              <p class="text-[11px] text-amber-300/80">
+                Asegúrate de ejecutar <code>start_local_ai_tunnel.bat</code> en la PC de escritorio o iniciar Ollama con <code>ollama serve</code> y el modelo <code>classforge-local-1.7b</code>.
+              </p>
+            </div>
+          </div>
+        }
       </div>
 
-      <!-- Reviews History Section -->
-      <div class="flex-1 flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-white flex items-center gap-2">
-            <span>📋</span>
-            <span>Historial de Evaluaciones Técnicas ({{ reviews().length }})</span>
-          </h3>
+      <!-- Action & Diagram Selector Toolbar -->
+      <div class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+          <label class="text-xs font-semibold text-white flex items-center gap-1.5 shrink-0">
+            <span>📐 Diagrama a Evaluar:</span>
+          </label>
+          <select
+            [ngModel]="selectedDiagramId()"
+            (ngModelChange)="selectedDiagramId.set($event)"
+            class="bg-[var(--surface-3)] border border-[var(--border)] focus:border-primary text-xs text-white rounded-xl px-3 py-2 focus:outline-none max-w-md w-full"
+          >
+            <option value="all">📐 Todos los diagramas del proyecto (Esquema Completo)</option>
+            @for (diag of diagrams(); track diag.id) {
+              <option [value]="diag.id">
+                📐 {{ diag.name }} (v{{ diag.version }} - {{ diag.status }})
+              </option>
+            }
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            (click)="loadReviews()"
-            class="text-xs text-[var(--text-secondary)] hover:text-white px-2.5 py-1 rounded-lg bg-[var(--surface-3)] transition-colors cursor-pointer"
+            [disabled]="isEvaluating()"
+            (click)="requestEvaluation()"
+            class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-900/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            🔄 Actualizar
+            @if (isEvaluating()) {
+              <span class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+              <span>Analizando Arquitectura...</span>
+            } @else {
+              <span>⚡ Solicitar Evaluación y Visto Bueno</span>
+            }
+          </button>
+
+          <button
+            type="button"
+            (click)="resetConversation()"
+            class="px-3 py-2.5 bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-[var(--text-secondary)] hover:text-white rounded-xl text-xs font-medium border border-[var(--border)] transition-colors cursor-pointer"
+            title="Reiniciar historial de la consola interactiva"
+          >
+            🔄 Limpiar Chat
           </button>
         </div>
+      </div>
 
-        <!-- Empty State -->
-        <div
-          *ngIf="reviews().length === 0 && !isLoading()"
-          class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl p-12 text-center"
+      <!-- Quick Action Prompt Suggestions -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+        <span class="text-[var(--text-muted)] text-[11px] uppercase tracking-wider font-bold shrink-0">Atajos rápidos:</span>
+        <button
+          type="button"
+          (click)="sendQuickPrompt('Audita exhaustivamente las relaciones UML (asociación, agregación, composición, herencia) y verifica si existen relaciones muchos-a-muchos sin clase intermedia.')"
+          class="px-3 py-1 rounded-lg bg-[var(--surface-3)] hover:bg-primary/20 hover:border-primary/40 text-[var(--text-secondary)] hover:text-white border border-[var(--border)] transition-all cursor-pointer whitespace-nowrap"
         >
-          <div class="text-4xl mb-3">📂</div>
-          <h4 class="text-sm font-bold text-white">Aún no hay evaluaciones registradas</h4>
-          <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-md mx-auto">
-            Sube el primer documento PDF de especificación técnica o arquitectura de tu proyecto para recibir un dictamen inteligente.
-          </p>
+          🔍 Auditar Relaciones y Multiplicidades
+        </button>
+        <button
+          type="button"
+          (click)="sendQuickPrompt('Genera el pliego de entidades relacionales de PostgreSQL con llaves primarias, foráneas e índices sugeridos según las clases del diagrama.')"
+          class="px-3 py-1 rounded-lg bg-[var(--surface-3)] hover:bg-primary/20 hover:border-primary/40 text-[var(--text-secondary)] hover:text-white border border-[var(--border)] transition-all cursor-pointer whitespace-nowrap"
+        >
+          🗄️ Esquema SQL e Índices
+        </button>
+        <button
+          type="button"
+          (click)="sendQuickPrompt('Revisa los estereotipos de interfaz y métodos en los diagramas. ¿Se cumple el Principio de Segregación de Interfaces (ISP) e Inversión de Dependencias (DIP)?')"
+          class="px-3 py-1 rounded-lg bg-[var(--surface-3)] hover:bg-primary/20 hover:border-primary/40 text-[var(--text-secondary)] hover:text-white border border-[var(--border)] transition-all cursor-pointer whitespace-nowrap"
+        >
+          🛡️ Principios SOLID y Cohesión
+        </button>
+      </div>
+
+      <!-- Interactive Console & Chat Container -->
+      <div class="flex-1 min-h-[460px] bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        
+        <!-- Messages Scroll Area -->
+        <div #scrollArea class="flex-1 p-6 overflow-y-auto space-y-6">
+          
+          @for (msg of messages(); track msg.id) {
+            <!-- User Message -->
+            @if (msg.role === 'user') {
+              <div class="flex justify-end gap-3">
+                <div class="max-w-2xl bg-primary/20 border border-primary/30 rounded-2xl rounded-tr-sm p-4 text-white text-xs leading-relaxed shadow-sm">
+                  <div class="flex items-center justify-between gap-4 mb-1 text-[10px] text-primary-light">
+                    <span class="font-bold">Tú</span>
+                    <span>{{ msg.timestamp | date:'HH:mm:ss' }}</span>
+                  </div>
+                  <div class="whitespace-pre-wrap">{{ msg.content }}</div>
+                </div>
+                <div class="w-8 h-8 rounded-full bg-primary/30 border border-primary/50 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                  U
+                </div>
+              </div>
+            }
+
+            <!-- Assistant / Evaluation Message -->
+            @if (msg.role === 'assistant') {
+              <div class="flex justify-start gap-3">
+                <div class="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 mt-1">
+                  🤖
+                </div>
+                
+                <div class="max-w-3xl flex-1 bg-[var(--surface-3)]/80 border border-[var(--border)] rounded-2xl rounded-tl-sm p-5 space-y-4 text-white text-xs leading-relaxed shadow-sm">
+                  
+                  <div class="flex items-center justify-between text-[11px] border-b border-[var(--border)]/60 pb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-emerald-400">ClassForge Local AI</span>
+                      <span class="text-[10px] text-[var(--text-muted)] bg-[var(--surface-4)] px-2 py-0.5 rounded">Liquid LFM 1.7B</span>
+                      @if (msg.evaluation?.latency_ms) {
+                        <span class="text-[10px] text-[var(--text-muted)] font-mono">{{ msg.evaluation?.latency_ms }}ms</span>
+                      }
+                    </div>
+                    <span class="text-[10px] text-[var(--text-muted)]">{{ msg.timestamp | date:'HH:mm:ss' }}</span>
+                  </div>
+
+                  <!-- Structured Evaluation Verdict Banner (if evaluation present) -->
+                  @if (msg.evaluation) {
+                    <div
+                      class="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner"
+                      [ngClass]="{
+                        'bg-emerald-500/15 border-emerald-500/40 text-emerald-200': msg.evaluation.verdict === 'APROBADO',
+                        'bg-rose-500/15 border-rose-500/40 text-rose-200': msg.evaluation.verdict === 'RECHAZADO',
+                        'bg-amber-500/15 border-amber-500/40 text-amber-200': msg.evaluation.verdict === 'INFORMACION_INSUFICIENTE'
+                      }"
+                    >
+                      <div class="space-y-1">
+                        <div class="flex items-center gap-2">
+                          <span class="text-base">
+                            {{ msg.evaluation.verdict === 'APROBADO' ? '✅' : (msg.evaluation.verdict === 'RECHAZADO' ? '❌' : '⚠️') }}
+                          </span>
+                          <span class="text-sm font-extrabold tracking-wide uppercase">
+                            DICTAMEN: {{ msg.evaluation.verdict }}
+                          </span>
+                        </div>
+                        <p class="text-[11px] opacity-90">
+                          Rúbrica: CF-SE-2026.1 • Umbral de Aprobación: {{ msg.evaluation.passing_score }}/100
+                        </p>
+                      </div>
+
+                      <div class="flex items-center gap-3">
+                        <div class="text-right">
+                          <div class="text-2xl font-black">
+                            {{ msg.evaluation.total_score }} <span class="text-xs font-normal opacity-70">/ 100</span>
+                          </div>
+                          <div class="text-[10px] font-semibold uppercase tracking-wider">
+                            Puntaje Final
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Summary Statement -->
+                    @if (msg.evaluation.summary) {
+                      <div class="p-3.5 bg-[var(--surface-4)]/60 border border-[var(--border)] rounded-xl">
+                        <div class="text-[10px] uppercase font-bold text-[var(--text-secondary)] mb-1">Fundamentación Técnica</div>
+                        <p class="text-xs text-zinc-200 leading-relaxed">{{ msg.evaluation.summary }}</p>
+                      </div>
+                    }
+
+                    <!-- Criteria Breakdown Grid -->
+                    @if (msg.evaluation.criteria_scores && msg.evaluation.criteria_scores.length > 0) {
+                      <div>
+                        <div class="text-[10px] uppercase font-bold text-[var(--text-secondary)] mb-2">Desglose de Rúbrica Formal</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          @for (crit of msg.evaluation.criteria_scores; track crit.criterion_code) {
+                            <div class="p-3 bg-[var(--surface-2)]/80 border border-[var(--border)]/80 rounded-xl space-y-1">
+                              <div class="flex items-center justify-between text-xs font-semibold">
+                                <span class="text-white truncate">{{ crit.name }}</span>
+                                <span
+                                  class="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded"
+                                  [ngClass]="crit.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'"
+                                >
+                                  {{ crit.score }}/100
+                                </span>
+                              </div>
+                              <p class="text-[11px] text-[var(--text-secondary)] line-clamp-2">
+                                {{ crit.observations || 'Evaluado satisfactoriamente sin observaciones críticas.' }}
+                              </p>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    <!-- RECHAZADO: Required Improvements Checklist -->
+                    @if (msg.evaluation.verdict === 'RECHAZADO' && msg.evaluation.required_improvements.length > 0) {
+                      <div class="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl space-y-2">
+                        <div class="flex items-center gap-2 text-rose-400 font-bold text-xs uppercase tracking-wider">
+                          <span>⚠️</span>
+                          <span>Mejoras Necesarias para Obtener Aprobación</span>
+                        </div>
+                        <ul class="space-y-1.5 list-disc list-inside text-xs text-rose-200/90 pl-1">
+                          @for (imp of msg.evaluation.required_improvements; track $index) {
+                            <li class="leading-relaxed">{{ imp }}</li>
+                          }
+                        </ul>
+                      </div>
+                    }
+
+                    <!-- APROBADO: Technical Specifications Accordion -->
+                    @if (msg.evaluation.verdict === 'APROBADO' && msg.evaluation.technical_specification) {
+                      <div class="border border-emerald-500/30 rounded-xl overflow-hidden bg-emerald-500/5">
+                        <button
+                          type="button"
+                          (click)="toggleSpecs(msg.id)"
+                          class="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold text-emerald-300 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                        >
+                          <span class="flex items-center gap-2">
+                            <span>📐</span>
+                            <span>Especificaciones Técnicas Recomendadas (Pliego de Arquitectura & Base de Datos)</span>
+                          </span>
+                          <span class="text-xs">{{ isSpecsExpanded(msg.id) ? '▲ Ocultar' : '▼ Expandir Pliego' }}</span>
+                        </button>
+
+                        @if (isSpecsExpanded(msg.id)) {
+                          <div class="p-4 border-t border-emerald-500/20 space-y-4 text-xs bg-[var(--surface-2)]/90">
+                            
+                            @if (msg.evaluation.technical_specification.system_architecture) {
+                              <div>
+                                <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">Arquitectura Recomendada</span>
+                                <p class="text-zinc-300 leading-relaxed">{{ msg.evaluation.technical_specification.system_architecture }}</p>
+                              </div>
+                            }
+
+                            <!-- REST Endpoints -->
+                            @if (msg.evaluation.technical_specification.api_endpoints && msg.evaluation.technical_specification.api_endpoints.length > 0) {
+                              <div>
+                                <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">Contratos de Endpoints REST</span>
+                                <div class="space-y-2">
+                                  @for (ep of msg.evaluation.technical_specification.api_endpoints; track $index) {
+                                    <div class="p-2.5 bg-[var(--surface-3)] border border-[var(--border)] rounded-lg font-mono text-[11px] flex flex-col gap-1">
+                                      <div class="flex items-center gap-2">
+                                        <span class="px-2 py-0.5 rounded font-bold text-[10px]"
+                                          [ngClass]="{
+                                            'bg-emerald-600/30 text-emerald-400': ep.method === 'GET',
+                                            'bg-blue-600/30 text-blue-400': ep.method === 'POST',
+                                            'bg-amber-600/30 text-amber-400': ep.method === 'PUT',
+                                            'bg-rose-600/30 text-rose-400': ep.method === 'DELETE'
+                                          }"
+                                        >{{ ep.method }}</span>
+                                        <span class="text-white">{{ ep.path }}</span>
+                                      </div>
+                                      <div class="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5">
+                                        {{ ep.description }}
+                                      </div>
+                                    </div>
+                                  }
+                                </div>
+                              </div>
+                            }
+
+                            <!-- Database Entities / Data Model -->
+                            @if (msg.evaluation.technical_specification.data_model && msg.evaluation.technical_specification.data_model.length > 0) {
+                              <div>
+                                <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">Entidades Relacionales e Índices</span>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                  @for (ent of msg.evaluation.technical_specification.data_model; track $index) {
+                                    <div class="p-3 bg-[var(--surface-3)] border border-[var(--border)] rounded-xl space-y-1.5 font-mono text-[11px]">
+                                      <div class="text-xs font-bold text-primary-light flex items-center justify-between">
+                                        <span>📊 {{ ent.name }}</span>
+                                      </div>
+                                      <div class="text-[10px] text-zinc-300 font-sans">
+                                        Atributos: {{ ent.attributes.join(', ') }}
+                                      </div>
+                                      @if (ent.relationships && ent.relationships.length > 0) {
+                                        <div class="text-[10px] text-amber-300/80 font-mono">
+                                          Relaciones: {{ ent.relationships.join(', ') }}
+                                        </div>
+                                      }
+                                    </div>
+                                  }
+                                </div>
+                              </div>
+                            }
+
+                          </div>
+                        }
+                      </div>
+                    }
+
+                  }
+
+                  <!-- Conversational Assistant Message Body -->
+                  @if (msg.content) {
+                    <div class="text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed">
+                      {{ msg.content }}
+                    </div>
+                  }
+
+                </div>
+              </div>
+            }
+          }
+
+          <!-- Thinking Spinner / Loading State -->
+          @if (isEvaluating()) {
+            <div class="flex justify-start gap-3 animate-fade-in">
+              <div class="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                🤖
+              </div>
+              <div class="bg-[var(--surface-3)]/80 border border-[var(--border)] rounded-2xl rounded-tl-sm p-4 text-xs text-zinc-300 flex items-center gap-3">
+                <span class="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></span>
+                <span class="font-medium">
+                  Liquid AI LFM 1.7B está analizando la topología UML y ejecutando la rúbrica CF-SE-2026.1...
+                </span>
+              </div>
+            </div>
+          }
+
         </div>
 
-        <!-- Reviews List -->
-        <div *ngFor="let rev of reviews()" class="bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl overflow-hidden transition-all shadow-sm">
-          
-          <!-- Review Summary Row -->
-          <div class="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[var(--surface-3)]/30">
-            <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-xl bg-[var(--surface-4)] border border-[var(--border)] flex items-center justify-center font-bold text-sm text-white shrink-0">
-                #{{ rev.review_number }}
-              </div>
-              <div class="min-w-0">
-                <div class="flex items-center gap-2.5 flex-wrap">
-                  <h4 class="text-sm font-bold text-white truncate max-w-md">
-                    {{ rev.document_filename }}
-                  </h4>
-                  <span
-                    class="px-2.5 py-0.5 rounded-full text-xs font-bold border"
-                    [ngClass]="{
-                      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20': rev.verdict === 'APROBADO',
-                      'bg-rose-500/10 text-rose-400 border-rose-500/20': rev.verdict === 'RECHAZADO',
-                      'bg-amber-500/10 text-amber-400 border-amber-500/20': rev.verdict === 'INFORMACION_INSUFICIENTE'
-                    }"
-                  >
-                    {{ rev.verdict || rev.status }}
-                  </span>
-                </div>
-                <div class="flex items-center gap-3 text-xs text-[var(--text-secondary)] mt-1">
-                  <span>📅 {{ rev.created_at | date:'yyyy-MM-dd HH:mm' }}</span>
-                  <span>•</span>
-                  <span>🤖 {{ rev.evaluated_by_model || 'Local Heuristic' }}</span>
-                  <span *ngIf="rev.total_score !== null && rev.total_score !== undefined">•</span>
-                  <span *ngIf="rev.total_score !== null && rev.total_score !== undefined" class="font-bold text-white">
-                    Puntaje: {{ rev.total_score }} / 100
-                  </span>
-                </div>
-              </div>
-            </div>
+        <!-- Chat Input Footer -->
+        <div class="p-4 bg-[var(--surface-3)]/40 border-t border-[var(--border)] flex flex-col gap-2">
+          <div class="flex items-end gap-3">
+            <textarea
+              rows="2"
+              [ngModel]="inputMessage()"
+              (ngModelChange)="inputMessage.set($event)"
+              (keydown.enter)="$event.preventDefault(); sendMessage()"
+              placeholder="Haz una consulta a la IA local sobre el diseño UML, pide aclaraciones o solicita cambios de arquitectura (Presiona Enter para enviar)..."
+              class="flex-1 bg-[var(--surface-2)] border border-[var(--border)] focus:border-primary rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:outline-none resize-none transition-colors"
+            ></textarea>
 
-            <!-- Action Buttons -->
-            <div class="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                (click)="toggleExpand(rev.id)"
-                class="px-3 py-1.5 rounded-xl bg-[var(--surface-4)] hover:bg-[var(--surface-4)]/80 text-xs text-white font-semibold transition-colors cursor-pointer"
-              >
-                {{ expandedReviewId() === rev.id ? 'Ocultar Detalle' : 'Ver Detalle' }}
-              </button>
-
-              <button
-                *ngIf="rev.status === 'COMPLETED'"
-                type="button"
-                (click)="downloadReport(rev.id)"
-                class="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Descargar dictamen oficial en PDF"
-              >
-                <span>📥</span>
-                <span>Dictamen PDF</span>
-              </button>
-
-              <button
-                *ngIf="rev.verdict === 'APROBADO'"
-                type="button"
-                (click)="downloadSpecification(rev.id)"
-                class="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Descargar pliego de especificaciones técnicas"
-              >
-                <span>📐</span>
-                <span>Pliego PDF</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Expanded Review Content -->
-          <div *ngIf="expandedReviewId() === rev.id" class="p-6 border-t border-[var(--border)] flex flex-col gap-6 bg-[var(--surface-2)]">
-            
-            <!-- Summary Card -->
-            <div
-              *ngIf="rev.summary"
-              class="p-4 rounded-xl border"
-              [ngClass]="{
-                'bg-emerald-500/5 border-emerald-500/20 text-emerald-200': rev.verdict === 'APROBADO',
-                'bg-rose-500/5 border-rose-500/20 text-rose-200': rev.verdict === 'RECHAZADO',
-                'bg-amber-500/5 border-amber-500/20 text-amber-200': rev.verdict === 'INFORMACION_INSUFICIENTE'
-              }"
+            <button
+              type="button"
+              [disabled]="isEvaluating() || !inputMessage().trim()"
+              (click)="sendMessage()"
+              class="px-5 py-3 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 h-[46px] shrink-0"
             >
-              <h5 class="text-xs font-bold uppercase tracking-wider mb-1">Fundamentación del Dictamen</h5>
-              <p class="text-xs leading-relaxed">{{ rev.summary }}</p>
-            </div>
-
-            <!-- Criteria Scores Grid -->
-            <div>
-              <h5 class="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
-                Desglose por Criterios de la Rúbrica
-              </h5>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div
-                  *ngFor="let crit of rev.criteria_scores"
-                  class="bg-[var(--surface-3)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between"
-                >
-                  <div>
-                    <div class="flex items-center justify-between mb-1.5">
-                      <span class="text-xs font-bold text-white">{{ crit.name }}</span>
-                      <span class="text-xs font-bold text-primary">{{ crit.score }} / 100</span>
-                    </div>
-                    <p class="text-[11px] text-[var(--text-secondary)] line-clamp-2">
-                      {{ crit.observations || 'Sin observaciones adicionales.' }}
-                    </p>
-                  </div>
-                  <div class="mt-3 pt-2 border-t border-[var(--border)]/50 flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
-                    <span>Peso: {{ crit.weight }}%</span>
-                    <span *ngIf="crit.citations.length > 0">Págs: {{ crit.citations.join(', ') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Recommendations Section -->
-            <div *ngIf="rev.recommendations && rev.recommendations.length > 0">
-              <h5 class="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
-                Recomendaciones Priorizadas
-              </h5>
-              <div class="flex flex-col gap-2">
-                <div
-                  *ngFor="let rec of rev.recommendations"
-                  class="p-3.5 rounded-xl border bg-[var(--surface-3)] flex flex-col md:flex-row md:items-start justify-between gap-3"
-                >
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="px-2 py-0.5 rounded text-[10px] font-bold"
-                        [ngClass]="{
-                          'bg-rose-500/20 text-rose-300': rec.priority === 'HIGH',
-                          'bg-amber-500/20 text-amber-300': rec.priority === 'MEDIUM',
-                          'bg-blue-500/20 text-blue-300': rec.priority === 'LOW'
-                        }"
-                      >
-                        {{ rec.priority }}
-                      </span>
-                      <span class="text-xs font-bold text-white">{{ rec.title }}</span>
-                    </div>
-                    <p class="text-xs text-[var(--text-secondary)] mt-1">{{ rec.description }}</p>
-                    <p class="text-xs text-primary/90 mt-1 font-medium">Plan sugerido: {{ rec.action_plan }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+              @if (isEvaluating()) {
+                <span class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+              } @else {
+                <span>Enviar</span>
+                <span>➤</span>
+              }
+            </button>
           </div>
-
+          <div class="flex items-center justify-between text-[10px] text-[var(--text-muted)] px-1">
+            <span>Usa <strong>Shift + Enter</strong> para salto de línea.</span>
+            <span>Nodo: Liquid AI LFM 1.7B GGUF • Ollama Local/Túnel</span>
+          </div>
         </div>
 
       </div>
@@ -260,136 +452,197 @@ import { ToastService } from '../../../core/services/toast.service';
 export class ProjectReviewsComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private reviewService = inject(ProjectReviewsService);
+  private diagramService = inject(DiagramService);
   private toast = inject(ToastService);
 
   projectId = signal<string>('');
-  reviews = signal<ProjectReview[]>([]);
-  isLoading = signal<boolean>(false);
+  diagrams = signal<Diagram[]>([]);
+  selectedDiagramId = signal<string>('all');
+  tunnelUrl = signal<string>(localStorage.getItem('classforge_local_ai_url') || 'https://repackage-remarry-reviving.ngrok-free.dev');
+  
+  localStatus = signal<LocalAiStatus | null>(null);
+  isCheckingStatus = signal<boolean>(false);
   isEvaluating = signal<boolean>(false);
-  selectedFile = signal<File | null>(null);
-  expandedReviewId = signal<string | null>(null);
+  
+  inputMessage = signal<string>('');
+  messages = signal<LocalAiUiMessage[]>([]);
+  expandedSpecs = signal<{ [msgId: string]: boolean }>({});
 
   ngOnInit(): void {
-    // Retrieve projectId from parent route
     this.route.parent?.paramMap.subscribe(params => {
       const pid = params.get('projectId');
       if (pid) {
         this.projectId.set(pid);
-        this.loadReviews();
+        this.loadProjectDiagrams(pid);
+      }
+    });
+
+    // Check status on startup
+    this.testConnection();
+
+    // Initial greeting from Local AI
+    this.messages.set([
+      {
+        id: 'msg-welcome',
+        role: 'assistant',
+        content: '👋 ¡Hola! Soy el Gestor y Aprobador Inteligente de Arquitectura UML impulsado por Liquid AI LFM 1.7B en tu nodo local.\n\nAudito directamente la topología de tus diagramas UML 2.5+ (clases, interfaces, atributos tipados, métodos, relaciones y multiplicidades) contra la rúbrica técnica formal CF-SE-2026.1, emito dictámenes de APROBADO/RECHAZADO con pliegos de arquitectura o mejoras requeridas, y respondo tus preguntas técnicas interactivamente.\n\nSelecciona un diagrama o el esquema completo arriba y haz clic en "⚡ Solicitar Evaluación y Visto Bueno" para iniciar.',
+        timestamp: new Date(),
+      }
+    ]);
+  }
+
+  onTunnelUrlChange(newUrl: string): void {
+    this.tunnelUrl.set(newUrl);
+    localStorage.setItem('classforge_local_ai_url', newUrl);
+  }
+
+  loadProjectDiagrams(pid: string): void {
+    this.diagramService.getDiagrams({ project_id: pid }).subscribe({
+      next: res => {
+        this.diagrams.set(res.data || []);
+      },
+      error: () => {
+        this.toast.error('No se pudieron cargar los diagramas del proyecto');
       }
     });
   }
 
-  loadReviews(): void {
-    const pid = this.projectId();
-    if (!pid) return;
+  testConnection(): void {
+    const url = this.tunnelUrl().trim();
+    this.isCheckingStatus.set(true);
 
-    this.isLoading.set(true);
-    this.reviewService.listReviews(pid).subscribe({
-      next: res => {
-        this.reviews.set(res.data?.items || []);
-        this.isLoading.set(false);
+    this.reviewService.checkLocalStatus(url).subscribe({
+      next: status => {
+        this.localStatus.set(status);
+        this.isCheckingStatus.set(false);
+        if (status.online) {
+          this.toast.success(`Nodo local en línea (${status.model}) • ${status.latency_ms ?? 0} ms`);
+        } else {
+          this.toast.warning('Nodo local desconectado o no accesible en la URL indicada');
+        }
       },
       error: err => {
-        this.isLoading.set(false);
-        this.toast.error('Error al cargar historial de evaluaciones');
+        this.isCheckingStatus.set(false);
+        this.localStatus.set({
+          online: false,
+          model: 'classforge-local-1.7b',
+          installed_models: [],
+          is_classforge_local_active: false,
+          url: url,
+          status: 'disconnected',
+          error: err?.message || 'Error de conexión',
+        });
+        this.toast.error('No se pudo verificar el estado del nodo local');
       }
     });
   }
 
-  onFileSelected(event: any): void {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        this.toast.error('Solo se admiten documentos en formato PDF');
-        return;
-      }
-      if (file.size > 25 * 1024 * 1024) {
-        this.toast.error('El archivo excede el límite máximo de 25 MB');
-        return;
-      }
-      this.selectedFile.set(file);
-    }
+  requestEvaluation(): void {
+    const prompt = 'Por favor evalúa la arquitectura UML 2.5+ del proyecto según la rúbrica técnica formal CF-SE-2026.1 y emite tu veredicto (APROBADO o RECHAZADO) con especificaciones técnicas o mejoras requeridas.';
+    this.executeEvaluationAndChat(prompt);
   }
 
-  evaluateSelectedFile(): void {
-    const file = this.selectedFile();
+  sendQuickPrompt(promptText: string): void {
+    this.executeEvaluationAndChat(promptText);
+  }
+
+  sendMessage(): void {
+    const text = this.inputMessage().trim();
+    if (!text || this.isEvaluating()) return;
+    this.inputMessage.set('');
+    this.executeEvaluationAndChat(text);
+  }
+
+  private executeEvaluationAndChat(userText: string): void {
     const pid = this.projectId();
-    if (!file || !pid) return;
+    if (!pid) {
+      this.toast.error('ID del proyecto no encontrado');
+      return;
+    }
 
+    const userMsg: LocalAiUiMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: userText,
+      timestamp: new Date(),
+    };
+
+    this.messages.update(msgs => [...msgs, userMsg]);
     this.isEvaluating.set(true);
-    this.toast.info('Subiendo y extrayendo estructura del documento...');
 
-    this.reviewService.uploadDocument(pid, file).subscribe({
-      next: docRes => {
-        const docId = docRes.data.id;
-        this.toast.info('Ejecutando evaluación técnica inteligente con rúbrica...');
-        this.reviewService.createReview(pid, docId).subscribe({
-          next: revRes => {
-            this.isEvaluating.set(false);
-            this.selectedFile.set(null);
-            this.toast.success(`Evaluación completada. Dictamen: ${revRes.data.verdict}`);
-            this.loadReviews();
-            this.expandedReviewId.set(revRes.data.id);
-          },
-          error: err => {
-            this.isEvaluating.set(false);
-            this.toast.error('Error durante la evaluación del documento');
-          }
-        });
+    const history: LocalAiChatMessage[] = this.messages()
+      .filter(m => m.id !== 'msg-welcome')
+      .map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+    const diagId = this.selectedDiagramId();
+    const req: LocalAiChatRequest = {
+      diagram_id: diagId !== 'all' ? diagId : undefined,
+      message: userText,
+      session_history: history,
+      tunnel_url: this.tunnelUrl().trim() || undefined,
+    };
+
+    this.reviewService.evaluateAndChat(pid, req, this.tunnelUrl().trim()).subscribe({
+      next: res => {
+        this.isEvaluating.set(false);
+        const evalData = res.data;
+
+        const assistantMsg: LocalAiUiMessage = {
+          id: `asst-${Date.now()}`,
+          role: 'assistant',
+          content: evalData.assistant_message || '',
+          timestamp: new Date(),
+          evaluation: evalData,
+        };
+
+        this.messages.update(msgs => [...msgs, assistantMsg]);
+
+        // Auto-expand specs if approved
+        if (evalData.verdict === 'APROBADO') {
+          this.expandedSpecs.update(s => ({ ...s, [assistantMsg.id]: true }));
+          this.toast.success(`¡Proyecto APROBADO con puntuación ${evalData.total_score}/100!`);
+        } else if (evalData.verdict === 'RECHAZADO') {
+          this.toast.warning(`Proyecto RECHAZADO (${evalData.total_score}/100). Revisa las mejoras requeridas.`);
+        } else {
+          this.toast.info('Evaluación procesada por el modelo local');
+        }
       },
       error: err => {
         this.isEvaluating.set(false);
-        this.toast.error('Error al subir el documento PDF');
+        const errDetail = err?.error?.detail || err?.message || 'Error al comunicarse con la IA local';
+        this.toast.error(`Error: ${errDetail}`);
+
+        const errorMsg: LocalAiUiMessage = {
+          id: `asst-err-${Date.now()}`,
+          role: 'assistant',
+          content: `❌ Hubo un error al procesar la solicitud con el modelo local: ${errDetail}\n\nVerifica que Ollama esté corriendo con \`classforge-local-1.7b\` y que la URL del nodo sea correcta.`,
+          timestamp: new Date(),
+        };
+        this.messages.update(msgs => [...msgs, errorMsg]);
       }
     });
   }
 
-  toggleExpand(reviewId: string): void {
-    if (this.expandedReviewId() === reviewId) {
-      this.expandedReviewId.set(null);
-    } else {
-      this.expandedReviewId.set(reviewId);
-    }
+  toggleSpecs(msgId: string): void {
+    this.expandedSpecs.update(s => ({ ...s, [msgId]: !s[msgId] }));
   }
 
-  downloadReport(reviewId: string): void {
-    const pid = this.projectId();
-    if (!pid) return;
-
-    this.toast.info('Descargando dictamen oficial en PDF...');
-    this.reviewService.downloadReportPdf(pid, reviewId).subscribe({
-      next: blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `dictamen_evaluacion_${reviewId.substring(0, 8)}.pdf`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: err => {
-        this.toast.error('No se pudo descargar el informe PDF');
-      }
-    });
+  isSpecsExpanded(msgId: string): boolean {
+    return !!this.expandedSpecs()[msgId];
   }
 
-  downloadSpecification(reviewId: string): void {
-    const pid = this.projectId();
-    if (!pid) return;
-
-    this.toast.info('Descargando pliego de especificaciones técnicas...');
-    this.reviewService.downloadSpecificationPdf(pid, reviewId).subscribe({
-      next: blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `pliego_especificaciones_${reviewId.substring(0, 8)}.pdf`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: err => {
-        this.toast.error('No se pudo descargar el pliego de especificaciones');
+  resetConversation(): void {
+    this.messages.set([
+      {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: 'Conversación reiniciada. ¿En qué aspecto de los diagramas o la arquitectura te gustaría trabajar ahora?',
+        timestamp: new Date(),
       }
-    });
+    ]);
+    this.toast.info('Historial de conversación reiniciado');
   }
 }

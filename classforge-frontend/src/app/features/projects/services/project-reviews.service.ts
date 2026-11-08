@@ -1,11 +1,14 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { ApiResponse } from '../../../core/models/api-response.model';
 import {
   ProjectReview,
   ReviewDocument,
+  LocalAiStatus,
+  LocalAiChatRequest,
+  LocalAiChatResponse,
 } from '../models/review.model';
 
 export interface ReviewListResponse {
@@ -67,6 +70,38 @@ export class ProjectReviewsService {
     return this.http.post<ApiResponse<ProjectReview>>(
       `${this.baseUrl}/${projectId}/reviews/${reviewId}/cancel`,
       {}
+    );
+  }
+
+  checkLocalStatus(tunnelUrl?: string): Observable<LocalAiStatus> {
+    let headers = new HttpHeaders();
+    let params = new HttpParams();
+    if (tunnelUrl) {
+      headers = headers.set('X-Local-AI-Url', tunnelUrl);
+      params = params.set('tunnel_url', tunnelUrl);
+    }
+    return this.http.get<any>(`${environment.apiUrl}/ai/local-status`, { headers, params }).pipe(
+      map(res => ((res && res.data) ? res.data : res) as LocalAiStatus)
+    );
+  }
+
+  evaluateAndChat(
+    projectId: string,
+    request: LocalAiChatRequest,
+    tunnelUrl?: string
+  ): Observable<ApiResponse<LocalAiChatResponse>> {
+    let headers = new HttpHeaders();
+    const payload: LocalAiChatRequest = {
+      ...request,
+      tunnel_url: tunnelUrl || request.tunnel_url,
+    };
+    if (tunnelUrl) {
+      headers = headers.set('X-Local-AI-Url', tunnelUrl);
+    }
+    return this.http.post<ApiResponse<LocalAiChatResponse>>(
+      `${this.baseUrl}/${projectId}/local-ai/evaluate-and-chat`,
+      payload,
+      { headers }
     );
   }
 

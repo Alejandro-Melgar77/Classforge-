@@ -9,7 +9,10 @@ from app.modules.project_reviews.schemas import (
     ReviewDocumentResponse,
     ProjectReviewCreateRequest,
     ProjectReviewResponse,
+    LocalAiChatRequest,
+    LocalAiChatResponse,
 )
+from app.ai_team.domain.diagram_model import from_graph_data, Diagram
 from app.modules.project_reviews.storage import (
     save_pdf_file,
     compute_sha256,
@@ -233,3 +236,100 @@ class ProjectReviewService:
         return generate_specification_pdf(
             review_resp.technical_specification, project_name, review_resp.review_number
         )
+
+    async def evaluate_and_chat_local_ai(
+        self,
+        project_id: str,
+        request: LocalAiChatRequest,
+        current_user: Dict[str, Any],
+        tunnel_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Runs local AI evaluation and interactive conversation on project UML diagrams.
+        Zero PDF dependency: directly pulls live UML 2.5+ models from MongoDB.
+        """
+        user_id = str(current_user.get("_id") or current_user.get("id"))
+        effective_tunnel_url = request.tunnel_url or tunnel_url
+
+        # 1. Fetch project info
+        pid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+        project = await self.db["projects"].find_one({"_id": pid})
+        project_name = project.get("name", "Proyecto ClassForge") if project else "Proyecto ClassForge"
+
+        # 2. Fetch target diagram(s)
+        diagram_doc = None
+        if request.diagram_id:
+            did = ObjectId(request.diagram_id) if ObjectId.is_valid(request.diagram_id) else request.diagram_id
+            diagram_doc = await self.db["diagrams"].find_one({
+                "_id": did,
+                "project_id": {"$in": [pid, str(project_id)]},
+                "is_deleted": {"$ne": True},
+            })
+
+        if not diagram_doc:
+            # Fallback: get first or all diagrams of project
+            cursor = self.db["diagrams"].find({
+                "project_id": {"$in": [pid, str(project_id)]},
+                "is_deleted": {"$ne": True},
+            }).sort("updated_at", -1)
+            diagrams_list = await cursor.to_list(length=10)
+            if diagrams_list:
+                diagram_doc = diagrams_list[0]
+
+        # 3. Build canonical Diagram
+        if diagram_doc:
+            raw_content = diagram_doc.get("content") or diagram_doc.get("graph_data") or {}
+            canonical_diagram = from_graph_data(raw_content)
+            canonical_diagram.id = str(diagram_doc["_id"])
+            canonical_diagram.name = diagram_doc.get("name", "Diagrama Principal")
+        else:
+            canonical_diagram = Diagram(name=f"Diagrama de {project_name}")
+
+        # 4. Run evaluation with evaluator
+        evaluator = ProjectEvaluator()
+        history_dicts = [{"role": m.role, "content": m.content} for m in request.session_history]
+        result = await evaluator.evaluate_uml_diagram(
+            diagram=canonical_diagram,
+            user_message=request.message,
+            session_history=history_dicts,
+            tunnel_url=effective_tunnel_url,
+            project_name=project_name,
+        )
+
+        # 5. Persist review into database if this is an evaluation request
+        try:
+            review_oid = ObjectId()
+            review_number = await self.repo.get_next_review_number(project_id)
+            review_doc = {
+                "_id": review_oid,
+                "project_id": str(project_id),
+                "review_number": review_number,
+                "document_id": canonical_diagram.id or "uml-live-diagram",
+                "document_filename": f"UML: {canonical_diagram.name}",
+                "rubric_code": evaluator.rubric.code,
+                "rubric_version": evaluator.rubric.version,
+                "status": ReviewStatus.COMPLETED.value,
+                "verdict": result["verdict"].value,
+                "total_score": result["total_score"],
+                "passing_score": evaluator.rubric.passing_score,
+                "summary": result["summary"],
+                "criteria_scores": [c.model_dump() for c in result["criteria_scores"]],
+                "recommendations": [
+                    {
+                        "priority": "HIGH",
+                        "criterion_code": "arquitectura_diagrama_uml",
+                        "title": imp,
+                        "description": imp,
+                        "action_plan": f"Actualizar el lienzo UML para corregir: {imp}",
+                    }
+                    for imp in result["required_improvements"]
+                ],
+                "technical_specification": result["technical_specification"].model_dump() if result["technical_specification"] else None,
+                "evaluated_by_model": result["evaluated_by_model"],
+                "created_by": user_id,
+            }
+            await self.repo.create_review(review_doc)
+        except Exception as e:
+            logger.warning(f"[ProjectReviewService] No se pudo persistir registro en project_reviews ({e})")
+
+        return result

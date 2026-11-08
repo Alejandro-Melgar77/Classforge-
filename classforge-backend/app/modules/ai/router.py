@@ -117,12 +117,44 @@ async def ai_health(
         "models": settings.gemini_models_list,
         "has_server_key": settings.has_gemini_server_key,
         "local_available": local_ok,
-        "local_model": health_info.get("model", getattr(settings, "OLLAMA_MODEL", "qwen2.5:1.5b")),
+        "local_model": health_info.get("model", getattr(settings, "OLLAMA_MODEL", "classforge-local-1.7b")),
         "local_latency_ms": health_info.get("latency_ms"),
         "routing": settings.routing_config,
         # Backward compatibility aliases
         "ollama_available": local_ok,
-        "model": health_info.get("model", getattr(settings, "OLLAMA_MODEL", "qwen2.5:1.5b")),
+        "model": health_info.get("model", getattr(settings, "OLLAMA_MODEL", "classforge-local-1.7b")),
+    }
+
+
+@router.get("/local-status")
+async def local_ai_status(
+    request: Request,
+    tunnel_url: Optional[str] = None,
+    x_local_ai_url: Optional[str] = Header(None, alias="X-Local-AI-Url"),
+    current_user = Depends(get_current_user),
+):
+    """Verifica en tiempo real si el nodo local / túnel Cloudflare/ngrok está encendido
+    y si el modelo classforge-local-1.7b está activo, reportando latencia precisa.
+    """
+    from app.llm.registry import get_ollama_provider
+
+    provider = get_ollama_provider()
+    target_url = x_local_ai_url or tunnel_url
+    health = await provider.check_health(timeout_s=3.0, override_url=target_url)
+    is_online = bool(health.get("online", health.get("available", False)))
+
+    models_list = health.get("installed_models", [])
+    has_target_model = any("classforge-local-1.7b" in (m or "") for m in models_list) or any("lfm3" in (m or "") for m in models_list)
+
+    return {
+        "online": is_online,
+        "model": "classforge-local-1.7b" if has_target_model else health.get("model", "classforge-local-1.7b"),
+        "latency_ms": health.get("latency_ms"),
+        "installed_models": models_list,
+        "is_classforge_local_active": has_target_model,
+        "url": health.get("url", target_url or getattr(settings, "OLLAMA_URL", "http://localhost:11434")),
+        "status": "connected" if is_online else "disconnected",
+        "error": health.get("error"),
     }
 
 

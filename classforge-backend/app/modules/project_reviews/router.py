@@ -5,6 +5,7 @@ from fastapi import (
     File,
     UploadFile,
     Query,
+    Header,
     Response,
     Path as FPath,
 )
@@ -16,6 +17,8 @@ from app.core.errors import ValidationError
 from app.modules.auth.schemas import StandardResponse
 from app.modules.project_reviews.schemas import (
     ProjectReviewCreateRequest,
+    LocalAiChatRequest,
+    LocalAiChatResponse,
 )
 from app.modules.project_reviews.service import ProjectReviewService
 from app.modules.project_reviews.rubric import list_available_rubrics, get_rubric
@@ -25,6 +28,9 @@ router = APIRouter()
 
 # Global project-reviews router: /api/v1/project-reviews
 global_router = APIRouter()
+
+# Project-scoped local-ai router: /api/v1/projects/{project_id}/local-ai
+local_ai_router = APIRouter()
 
 
 def get_review_service(db=Depends(get_db)) -> ProjectReviewService:
@@ -102,6 +108,46 @@ async def create_project_review(
         success=True,
         message="Evaluación técnica completada exitosamente",
         data=review.model_dump(),
+    )
+
+
+@local_ai_router.post("/evaluate-and-chat", response_model=StandardResponse)
+@router.post("/local-ai/evaluate-and-chat", response_model=StandardResponse)
+async def evaluate_and_chat_local_ai(
+    project_id: str = FPath(...),
+    request: LocalAiChatRequest = ...,
+    x_local_ai_url: Optional[str] = Header(None, alias="X-Local-AI-Url"),
+    project=Depends(require_project_member),
+    current_user=Depends(get_current_user),
+    service: ProjectReviewService = Depends(get_review_service),
+):
+    """
+    Evaluates live project UML 2.5+ diagrams and chats with Local AI (classforge-local-1.7b)
+    without requiring or generating any PDF files.
+    """
+    result = await service.evaluate_and_chat_local_ai(
+        project_id=project_id,
+        request=request,
+        current_user=current_user,
+        tunnel_url=x_local_ai_url,
+    )
+    return StandardResponse(
+        success=True,
+        message="Evaluación e interacción completadas exitosamente",
+        data={
+            "verdict": result["verdict"].value if hasattr(result["verdict"], "value") else str(result["verdict"]),
+            "total_score": result["total_score"],
+            "passing_score": result["passing_score"],
+            "summary": result["summary"],
+            "criteria_scores": [c.model_dump() for c in result["criteria_scores"]],
+            "technical_specification": result["technical_specification"].model_dump() if result["technical_specification"] else None,
+            "required_improvements": result["required_improvements"],
+            "assistant_message": result["assistant_message"],
+            "evaluated_by_model": result["evaluated_by_model"],
+            "latency_ms": result["latency_ms"],
+            "diagram_id": result.get("diagram_id"),
+            "diagram_name": result.get("diagram_name"),
+        },
     )
 
 

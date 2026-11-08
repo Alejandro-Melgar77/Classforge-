@@ -91,3 +91,49 @@ export interface ProjectReview {
   completed_at?: string;
   created_by: string;
 }
+
+export interface LocalAiStatus {
+  online: boolean;
+  model: string;
+  latency_ms?: number;
+  installed_models: string[];
+  is_classforge_local_active: boolean;
+  url: string;
+  status: 'connected' | 'disconnected';
+  error?: string;
+}
+
+export interface LocalAiChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface LocalAiChatRequest {
+  diagram_id?: string;
+  message: string;
+  session_history: LocalAiChatMessage[];
+  tunnel_url?: string;
+}
+
+export interface LocalAiChatResponse {
+  verdict: VerdictType;
+  total_score: number;
+  passing_score: number;
+  summary: string;
+  criteria_scores: CriterionScore[];
+  technical_specification?: TechnicalSpecification;
+  required_improvements: string[];
+  assistant_message: string;
+  evaluated_by_model: string;
+  latency_ms?: number;
+  diagram_id?: string;
+  diagram_name?: string;
+}
+
+export interface LocalAiUiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  evaluation?: LocalAiChatResponse;
+}

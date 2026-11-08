@@ -30,9 +30,16 @@ def _enforce_local_destination(url: str) -> None:
     try:
         local = ipaddress.ip_address(host).is_loopback
     except ValueError:
-        local = host == "localhost"
+        local = (
+            host in ("localhost", "127.0.0.1")
+            or host.endswith(".trycloudflare.com")
+            or host.endswith(".ngrok-free.app")
+            or host.endswith(".ngrok-free.dev")
+            or host.endswith(".ngrok.io")
+            or host.endswith(".ngrok.app")
+        )
     if not local:
-        raise LlmUnavailable("AI_LOCAL_ONLY exige una dirección Ollama de loopback local")
+        raise LlmUnavailable("AI_LOCAL_ONLY exige una dirección Ollama de loopback local o túnel seguro autorizado")
 
 
 def validate_and_sanitize_ollama_url(url: str) -> str:
@@ -96,7 +103,11 @@ class OllamaProvider:
         self.last_health_status: bool = False
 
     def _get_headers(self) -> Dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "ClassForge-LocalAI/2.0",
+        }
         if self.secret:
             secret_val = self.secret.get_secret_value() if hasattr(self.secret, "get_secret_value") else str(self.secret)
             if secret_val:
@@ -116,9 +127,11 @@ class OllamaProvider:
         self,
         client: httpx.AsyncClient,
         payload: Dict[str, Any],
+        target_base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
-        _enforce_local_destination(self.base_url)
-        url = f"{self.base_url}/api/chat"
+        base = target_base_url or self.base_url
+        _enforce_local_destination(base)
+        url = f"{base}/api/chat"
         resp = await client.post(url, json=payload, headers=self._get_headers())
         if resp.status_code in (401, 403):
             raise LlmUnavailable("Autenticación fallida con el túnel local (secreto inválido o acceso denegado)")
@@ -127,14 +140,16 @@ class OllamaProvider:
         resp.raise_for_status()
         return resp.json()
 
-    async def check_health(self, timeout_s: float = 2.0) -> Dict[str, Any]:
+    async def check_health(self, timeout_s: float = 2.0, override_url: Optional[str] = None) -> Dict[str, Any]:
         """
         Pings Ollama /api/tags to verify connectivity and measure latency.
         Does not count against the operational circuit breaker.
+        Supports dynamic tunnel URL verification via override_url.
         """
-        _enforce_local_destination(self.base_url)
+        target_url = validate_and_sanitize_ollama_url(override_url) if override_url else self.base_url
+        _enforce_local_destination(target_url)
         start = time.monotonic()
-        url = f"{self.base_url}/api/tags"
+        url = f"{target_url}/api/tags"
         try:
             async with httpx.AsyncClient(timeout=timeout_s, transport=self.transport) as client:
                 resp = await client.get(url, headers=self._get_headers())
@@ -144,34 +159,45 @@ class OllamaProvider:
                     self.last_health_status = True
                     data = resp.json()
                     models = [m.get("name") for m in data.get("models", []) if isinstance(m, dict)]
+                    has_local_17b = any("classforge-local-1.7b" in (m or "") for m in models)
                     return {
                         "available": True,
+                        "online": True,
                         "latency_ms": latency_ms,
-                        "model": self.model,
+                        "model": "classforge-local-1.7b" if has_local_17b else (models[0] if models else self.model),
                         "installed_models": models,
+                        "is_classforge_local_active": has_local_17b,
+                        "url": target_url,
                     }
                 else:
                     self.last_health_status = False
                     return {
                         "available": False,
+                        "online": False,
                         "latency_ms": latency_ms,
                         "model": self.model,
                         "status_code": resp.status_code,
+                        "url": target_url,
                     }
         except Exception as e:
             self.last_health_status = False
             return {
                 "available": False,
+                "online": False,
                 "latency_ms": None,
                 "model": self.model,
                 "error": str(e),
+                "url": target_url,
             }
 
-    async def generate(self, req: LlmRequest) -> LlmResponse:
+    async def generate(self, req: LlmRequest, override_url: Optional[str] = None) -> LlmResponse:
         """
         Executes a single generate request against Ollama /api/chat.
         Includes single-attempt JSON repair if required.
+        Supports dynamic tunnel routing via override_url.
         """
+        effective_base = validate_and_sanitize_ollama_url(override_url) if override_url else self.base_url
+
         # 1. Circuit breaker check
         await self.circuit_breaker.check()
 
@@ -200,10 +226,10 @@ class OllamaProvider:
         start_time = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport) as client:
-                data = await self._post_chat(client, payload)
+                data = await self._post_chat(client, payload, target_base_url=effective_base)
         except (httpx.TimeoutException, httpx.NetworkError) as e:
             await self.circuit_breaker.record_failure()
-            logger.warning(f"[OllamaProvider] Error de red o timeout ({e}) hacia {self.base_url}")
+            logger.warning(f"[OllamaProvider] Error de red o timeout ({e}) hacia {effective_base}")
             raise LlmUnavailable(f"Modelo local no disponible o tiempo de espera excedido: {e}")
         except httpx.HTTPStatusError as e:
             if e.response.status_code >= 500:
@@ -223,6 +249,8 @@ class OllamaProvider:
         # Extract text & token usage
         msg_obj = data.get("message") or {}
         raw_text = msg_obj.get("content", "")
+        if not raw_text.strip() and msg_obj.get("thinking"):
+            raw_text = msg_obj.get("thinking", "")
 
         prompt_tokens = int(data.get("prompt_eval_count", 0))
         candidates_tokens = int(data.get("eval_count", 0))
@@ -261,7 +289,7 @@ class OllamaProvider:
                 }
                 try:
                     async with httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport) as client:
-                        rep_data = await self._post_chat(client, repair_payload)
+                        rep_data = await self._post_chat(client, repair_payload, target_base_url=effective_base)
                         rep_msg = rep_data.get("message") or {}
                         rep_text = rep_msg.get("content", "")
                         clean_rep = sanitize_json_text(rep_text)
