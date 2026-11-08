@@ -47,7 +47,7 @@ class ProjectRepository:
         self, query: Dict[str, Any], page: int, limit: int, sort_by: str, order: int
     ) -> Tuple[List[Dict[str, Any]], int]:
         """Retrieve a paginated list of non-deleted projects matching the query."""
-        query["is_deleted"] = False
+        query["is_deleted"] = {"$ne": True}
         cursor = self.collection.find(query).sort(sort_by, order).skip((page - 1) * limit).limit(limit)
         items = await cursor.to_list(length=limit)
         total = await self.collection.count_documents(query)

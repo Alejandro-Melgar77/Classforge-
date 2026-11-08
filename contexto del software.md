@@ -8,11 +8,11 @@
 
 <!-- METADATOS_DINAMICOS_INICIO -->
 ### 📌 Metadatos de Seguimiento y Estado del Repositorio
-* **Última Actualización Automática:** 2026-11-07 20:51:46
+* **Última Actualización Automática:** 2026-11-07 21:57:35
 * **Rama Activa:** `main`
-* **Último Commit:** `1196e68` - *ngrok ia local v1*
+* **Último Commit:** `8c5c980` - *fix(tunnel): sanitize batch syntax and terminate stale ngrok process before tunnel start*
 * **Autor:** Alejandro-Melgar77 <ale.melgararteaga@gmail.com>
-* **Estado del Árbol de Trabajo:** 1 archivo(s) con cambios pendientes
+* **Estado del Árbol de Trabajo:** 9 archivo(s) con cambios pendientes
 * **Batería de Pruebas Backend (Pytest):** 274 pasadas, 0 fallidas (100% éxito en 21.08s)
 * **Archivos de Prueba en Backend:** 82 suites de prueba
 * **Estado Operativo General:** **PRODUCCIÓN / ESTABLE** (Defectos C1–C7, A1–A36, M1–M12 cerrados y verificados)

@@ -61,8 +61,8 @@ export class RepertoireComponent implements OnInit {
     if (this.statusFilter) filters.status = this.statusFilter;
 
     this.projectsService.getProjects(filters).subscribe({
-      next: (res) => {
-        this.projects = res.data || [];
+      next: (res: any) => {
+        this.projects = res.data?.items || res.data || [];
         this.loadingProjects = false;
       },
       error: (err) => {

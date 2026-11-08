@@ -1,5 +1,8 @@
+import logging
 from fastapi import APIRouter, Depends, Query, Response
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -41,8 +44,18 @@ async def list_projects(
         validate_object_id(team_id, "team_id")
     items, total = await service.list_projects(current_user, team_id, status, type, page, limit, sort_by, order)
     response.headers["X-Total-Count"] = str(total)
+
+    project_items = []
+    for i in items:
+        try:
+            p = ProjectResponse.from_mongo(i)
+            if p:
+                project_items.append(p)
+        except Exception as err:
+            logger.warning(f"[list_projects] Error al serializar proyecto {i.get('_id')}: {err}")
+
     return StandardResponse(success=True, message="Projects retrieved", data={
-        "items": [ProjectResponse.from_mongo(i) for i in items],
+        "items": project_items,
         "total": total,
         "page": page,
         "limit": limit

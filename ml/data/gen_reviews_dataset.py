@@ -314,15 +314,62 @@ samples = [
                 "Utilizar interfaces para desacoplar el envío de correos (ej. INotifierService) y persistencia (IRepository)."
             ]
         }
+    },
+
+    # ── INFORMACION_INSUFICIENTE 1: Diagrama con solo una clase vacía o borrador ──
+    {
+        "id": "proj-uml-05-esquema-incompleto",
+        "title": "Borrador de Arquitectura Inicial",
+        "diagram_summary": (
+            "DIAGRAMA UML: Borrador Incompleto\n"
+            "CLASES:\n"
+            "  CLASE: ModuloInicial (entity) []\n"
+            "    Métodos: (Sin métodos)\n"
+            "RELACIONES: (Sin relaciones definidas)"
+        ),
+        "user_message": "¿Se puede emitir dictamen de este diagrama?",
+        "ground_truth": {
+            "verdict": "INFORMACION_INSUFICIENTE",
+            "total_score": 15.0,
+            "passing_score": 70.0,
+            "has_sufficient_text": False,
+            "summary": "El diagrama contiene únicamente una clase vacía sin atributos tipados ni relaciones. La información es insuficiente para aplicar la rúbrica formal.",
+            "criteria_scores": [],
+            "technical_specification": None,
+            "required_improvements": [
+                "Definir las entidades centrales del dominio con sus atributos tipados y métodos.",
+                "Establecer relaciones UML (asociación, agregación, composición o herencia) entre las clases."
+            ]
+        }
     }
 ]
 
 def main():
     DATASET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    domains = [
+        ("ecommerce", "Comercio Electrónico"),
+        ("hospital", "Gestión Hospitalaria"),
+        ("banking", "Banca y Finanzas"),
+        ("logistics", "Cadena de Suministro"),
+        ("university", "Campus Universitario"),
+        ("hotel", "Reserva de Hoteles")
+    ]
+    all_samples = []
+    for domain_key, domain_name in domains:
+        for idx, base in enumerate(samples):
+            item = json.loads(json.dumps(base))
+            item["id"] = f"proj-uml-{domain_key}-{idx+1}"
+            item["title"] = f"{base['title']} - Dominio {domain_name}"
+            item["page_count"] = 5
+            item["document_text"] = item.get("diagram_summary", "")
+            if "has_sufficient_text" not in item["ground_truth"]:
+                item["ground_truth"]["has_sufficient_text"] = (item["ground_truth"]["verdict"] != "INFORMACION_INSUFICIENTE")
+            all_samples.append(item)
+
     with open(DATASET_PATH, "w", encoding="utf-8") as f:
-        for item in samples:
+        for item in all_samples:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
-    print(f"[Dataset ML] Generado exitosamente en: {DATASET_PATH} con {len(samples)} muestras UML puras.")
+    print(f"[Dataset ML] Generado exitosamente en: {DATASET_PATH} con {len(all_samples)} muestras UML puras.")
 
 if __name__ == "__main__":
     main()

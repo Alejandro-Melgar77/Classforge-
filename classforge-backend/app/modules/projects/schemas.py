@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 class ProjectCreate(BaseModel):
     name: str
@@ -20,32 +20,34 @@ class ProjectStatusUpdate(BaseModel):
 
 class ProjectResponse(BaseModel):
     id: str
-    name: str
-    description: str
-    team_id: Optional[str]
-    owner_id: str
-    type: str
-    status: str
-    color_tag: str
-    tags: List[str]
-    created_at: datetime
-    updated_at: datetime
-    completed_at: Optional[datetime]
+    name: str = "Sin título"
+    description: Optional[str] = ""
+    team_id: Optional[str] = None
+    owner_id: Optional[str] = ""
+    type: str = "personal"
+    status: str = "in_progress"
+    color_tag: Optional[str] = "#3b82f6"
+    tags: List[str] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     @classmethod
     def from_mongo(cls, doc):
-        if not doc: return None
+        if not doc:
+            return None
+        now = datetime.now(timezone.utc)
         return cls(
             id=str(doc.get("_id")),
-            name=doc.get("name"),
-            description=doc.get("description"),
+            name=doc.get("name") or "Sin título",
+            description=doc.get("description") or "",
             team_id=str(doc.get("team_id")) if doc.get("team_id") else None,
-            owner_id=str(doc.get("owner_id")),
-            type=doc.get("type"),
-            status=doc.get("status"),
-            color_tag=doc.get("color_tag"),
-            tags=doc.get("tags", []),
-            created_at=doc.get("created_at"),
-            updated_at=doc.get("updated_at"),
-            completed_at=doc.get("completed_at")
+            owner_id=str(doc.get("owner_id") or ""),
+            type=doc.get("type") or "personal",
+            status=doc.get("status") or "in_progress",
+            color_tag=doc.get("color_tag") or "#3b82f6",
+            tags=doc.get("tags") or [],
+            created_at=doc.get("created_at") or now,
+            updated_at=doc.get("updated_at") or now,
+            completed_at=doc.get("completed_at"),
         )

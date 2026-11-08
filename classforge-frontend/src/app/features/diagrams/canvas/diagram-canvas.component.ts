@@ -945,6 +945,15 @@ export class DiagramCanvasComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
+  openEvaluadorIa() {
+    const pid = this.projectId || (this.diagram as any)?.project_id || (this.diagram as any)?.project;
+    if (pid) {
+      this.router.navigate(['/projects', pid, 'evaluaciones']);
+    } else {
+      this.toastService.info('No se encontró el ID de proyecto para este diagrama');
+    }
+  }
+
   // ─── Cleanup Total Libre de Fugas ─────────────────────────────
   ngOnDestroy() {
     this.subs.unsubscribe();
